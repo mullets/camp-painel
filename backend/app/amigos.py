@@ -19,6 +19,12 @@ de trabalho da equipe:
   vencido) atrás de `amigos.lembretes_auto` = desligado (padrão) | simular | ligado; a chave do lembrete (modelo:amigo:validade:marco)
   é única: o mesmo lembrete nunca sai duas vezes.
 - Dados pessoais: só admin e master; nada de nome/e-mail no log técnico (só contagens e ids). LGPD: apagar pessoa anonimiza.
+- Desativar / Reativar e Apagar (CAMP-AMIGO-APAGAR, 21/11/2026, Rafael: "opção de desativar um amigo, apagar também por favor"; contrato
+  1.28, migração 239), só admin. Desativar: inativo_em (a situação de pagamento não muda); sem cobrança, lembrete nem e-mail automático,
+  fora do "Enviar cobrança" e da lista padrão (filtro Inativos); o site cancela a assinatura mensal do Mercado Pago (sem reembolso) e para
+  o código e os benefícios — o site falhou = nada muda aqui. Apagar: prévia + confirmação digitando o nome ou APAGAR; o site cancela a
+  assinatura e apaga primeiro (falhou = nada é apagado); aqui saem os dados pessoais e o Amigo some do painel; ficam, anônimos, os
+  pagamentos (valor, data, meio, chave/referência) e o número de Amigo Fundador (não volta). Histórico sem dado pessoal.
 """
 from __future__ import annotations
 
@@ -49,6 +55,9 @@ LIMPAR = "__limpar__"
 LIMITE_PAGINA = 200
 TIPOS = ("amigo", "projeto", "arquiteto")
 SITUACOES = ("pago", "pendente", "vencido", "recusado", "isento", "cancelado")
+INATIVOS = "inativos"                # filtro da lista (desativados; não é uma situação de pagamento)
+# CAMP-AMIGO-APAGAR: o que NÃO sai para quem está inativo (cobrança, lembretes TR16–TR19, boas-vindas). Recibo e texto livre a equipe ainda manda.
+MODELOS_BLOQUEADOS_INATIVO = ("cobranca", "cobranca_pendente", "lembrete_renovacao", "aviso_vencido", "boas_vindas")
 STATUS_PEDIDO = ("novo", "em_contato", "proposta", "fechado", "arquivado")
 MEIOS = ("pix", "transferencia", "dinheiro", "cartao", "outro")
 APROVADO = ("approved", "accredited", "authorized")
@@ -246,7 +255,7 @@ def _gravar(con, x: dict, out: dict) -> None:
         travados = {campo for campo, chave in _PEND_CAMPO.items() if chave in pend}
         if "situacao" in travados:
             travados.add("situacao_site")
-        if ja["anonimizado"]:
+        if ja["anonimizado"] or ja["apagado_em"] or x.get("apagado") is True:
             travados |= set(_CAMPOS_PESSOAIS)
         mud = {k: v for k, v in dados.items() if k not in travados and ja[k] != v}
         if mud:
@@ -255,11 +264,15 @@ def _gravar(con, x: dict, out: dict) -> None:
             if "situacao" in mud and ja["situacao"]:
                 _evento(con, ja["id"], "situacao_site", "site", {"de": ja["situacao"], "para": mud["situacao"]})
         aid = ja["id"]
+        if x.get("apagado") is True and not ja["apagado_em"]:      # contrato 1.28: apagado no site (o painel segue igual)
+            _anonimizar_amigo(con, aid)
     else:
         cols = list(dados)
         cur = con.execute(f"INSERT INTO amigo (site_id, {', '.join(cols)}) VALUES (?{',?' * len(cols)})", (sid, *dados.values()))
         aid = cur.lastrowid
         out["novos"] += 1
+        if x.get("apagado") is True:
+            _anonimizar_amigo(con, aid)
         _evento(con, aid, "criado", "site", {"tipo": tipo, "categoria": dados["categoria"], "situacao": dados["situacao"]})
     for p in x.get("pagamentos") or []:
         if not isinstance(p, dict) or not str(p.get("id") or "").strip():
@@ -444,9 +457,9 @@ def vencer(con, ator: str = "painel (automático)") -> int:
     return len(rows)
 
 
-def _um(con, aid: int):
+def _um(con, aid: int, apagado_ok: bool = False):
     r = con.execute("SELECT * FROM amigo WHERE id=?", (aid,)).fetchone()
-    if not r:
+    if not r or (r["apagado_em"] and not apagado_ok):
         raise HTTPException(404, "Registro não existe")
     return r
 
@@ -774,7 +787,7 @@ def _linhas(con, ids: list[int]):
 def enfileirar(con, ids: list[int], modelo: str, assunto: str, texto: str, ator: str, chave: str | None = None) -> int:
     n = 0
     for r in _linhas(con, ids):
-        if not email_envio.ENDERECO.match(r["email"] or ""):
+        if not email_envio.ENDERECO.match(r["email"] or "") or _bloqueado(r, modelo):
             continue
         m = montar(con, r, modelo, assunto, texto)
         ms, vars_ = para_sender(con, r, modelo, assunto, texto)
@@ -800,8 +813,10 @@ def processar_fila(con=None, limite: int = 60, wp=None) -> dict:
             try:
                 if not c:
                     raise SiteErro("não enviado: " + SEM_SITE)
-                if not a:
+                if not a or a["apagado_em"]:
                     raise SiteErro("não enviado: o Amigo não existe mais no painel")
+                if _bloqueado(a, e["modelo"]):
+                    raise SiteErro("não enviado: o Amigo está inativo")
                 try:
                     vars_ = json.loads(e["variaveis"]) if e["variaveis"] else None
                 except ValueError:
@@ -853,7 +868,8 @@ def _cobranca_recente(con, r) -> bool:
 
 
 def previa_cobranca(con, ids: list[int]) -> dict:
-    rows = [r for r in _linhas(con, ids) if r["tipo"] == "amigo"]
+    todas = [r for r in _linhas(con, ids) if r["tipo"] == "amigo"]
+    rows = [r for r in todas if not _bloqueado(r, "cobranca")]
     com = [r for r in rows if email_envio.ENDERECO.match(r["email"] or "")]
     ex = None
     if com:
@@ -864,7 +880,8 @@ def previa_cobranca(con, ids: list[int]) -> dict:
     return {"total": len(rows), "com_email": len(com), "sem_email": [r["nome"] for r in rows if r not in com][:50], "exemplo": ex,
             "repetidas": [{"id": r["id"], "nome": r["nome"], "em": r["cobranca_em"]} for r in com if _cobranca_recente(con, r)],
             "canal": c, "rotulo_canal": ROTULO_CANAL.get(c, ""), "pix": bool(_cfg(con, "amigos.cobranca_pix")), "prazo_dias": prazo_cobranca(con),
-            "intervalo_dias": intervalo_cobranca(con), "site": _conferir_seguro(con, None, com[:1], c, "cobranca")}
+            "intervalo_dias": intervalo_cobranca(con), "site": _conferir_seguro(con, None, com[:1], c, "cobranca"),
+            "inativos": [r["nome"] for r in todas if r not in rows][:50]}
 
 
 def _link_mp(con, wp, r) -> tuple[str | None, str]:
@@ -905,13 +922,15 @@ def _link_mp(con, wp, r) -> tuple[str | None, str]:
 def cobrar(con, ids: list[int], ator: str, forcar: bool = False, wp=None) -> dict:
     """Cobrança: link do Mercado Pago (pelo site) ou, com o pagamento online desligado, as instruções de Pix do painel; vai por
     e-mail (fila). A mesma pessoa não é cobrada de novo antes de `amigos.cobranca_intervalo_dias` sem `forcar`."""
-    out = {"na_fila": 0, "mp": 0, "manual": 0, "repetidas": [], "sem_email": [], "erros": []}
+    out = {"na_fila": 0, "mp": 0, "manual": 0, "repetidas": [], "sem_email": [], "erros": [], "inativos": []}
     if not canal(con) and wp is None:
         raise HTTPException(409, "Os e-mails dos Amigos saem pelo Sender do site: preencha a senha do site (Application Password) em Configurações.")
     pix = _cfg(con, "amigos.cobranca_pix")
     for r in _linhas(con, ids):
         if r["tipo"] != "amigo":
             continue
+        if _bloqueado(r, "cobranca"):                     # desativado ou apagado: nunca cobra (nem com "forcar")
+            out["inativos"].append(r["nome"]); continue
         if not email_envio.ENDERECO.match(r["email"] or ""):
             out["sem_email"].append(r["nome"]); continue
         if _cobranca_recente(con, r) and not forcar:
@@ -951,7 +970,7 @@ def _fila_em_segundo_plano() -> None:
 def lembretes_devidos(con) -> list[dict]:
     """Quem receberia um lembrete automático hoje (e ainda não recebeu aquele lembrete)."""
     h, dias, out = hoje(), lembrete_dias(con), []
-    for r in con.execute("SELECT * FROM amigo WHERE tipo='amigo' AND anonimizado=0 AND situacao IN ('pago','vencido') AND validade IS NOT NULL ORDER BY validade, nome"):
+    for r in con.execute("SELECT * FROM amigo WHERE tipo='amigo' AND anonimizado=0 AND inativo_em IS NULL AND apagado_em IS NULL AND situacao IN ('pago','vencido') AND validade IS NOT NULL ORDER BY validade, nome"):
         v = _data(r["validade"])
         if not v:
             continue
@@ -1030,6 +1049,187 @@ def anonimizar_por_email(con, email: str) -> int:
     return len(ids)
 
 
+# ---------------------------------------------------------------- desativar, reativar e apagar (CAMP-AMIGO-APAGAR, contrato 1.28)
+SITE_ANTIGO_ACAO = "o site ainda não desativa nem apaga Amigos: avise quem cuida do site (plugin da CAMP 1.37.0 ou mais novo)"
+APAGA = ("nome", "e-mail", "telefone", "empresa e cargo", "vínculo", "mensagem", "notas da equipe", "motivo da desativação", "código do Amigo",
+         "acesso à área do Amigo", "inscrição na lista de e-mails da CAMP (Sender)", "endereço e texto dos e-mails enviados")
+FICA = ("pagamentos: valor, data, meio e referência (Mercado Pago ou painel), para a contabilidade", "categoria e modalidade",
+        "número de Amigo Fundador (fica gasto: não volta para a fila)", "histórico sem dados pessoais")
+
+
+def _bloqueado(r, modelo: str) -> bool:
+    """Apagado: nada sai. Inativo: cobrança, lembretes e boas-vindas não saem (recibo e texto livre, sim)."""
+    return bool(r["apagado_em"]) or (bool(r["inativo_em"]) and modelo in MODELOS_BLOQUEADOS_INATIVO)
+
+
+def _chamar_site(con, wp, r, acao: str, corpo: dict) -> tuple[dict | None, str]:
+    """POST /painel/apoios/{site_id}/{acao} (contrato 1.28). → (resposta, "") ou (None, motivo). Nunca levanta."""
+    if wp is None:
+        try:
+            wp = _wp()
+        except Exception:  # noqa: BLE001
+            return None, "o painel não tem a senha do site (Application Password em Configurações)"
+    try:
+        resp = wp.h.post(f"{ROTA}/{int(r['site_id'])}/{acao}", json=corpo)
+    except Exception as e:  # noqa: BLE001
+        return None, f"não consegui falar com o site ({type(e).__name__})"
+    if resp.status_code == 200:
+        try:
+            d = resp.json() or {}
+        except ValueError:
+            d = {}
+        return (d, "") if d.get("ok") else (None, "o site não confirmou")
+    txt = getattr(resp, "text", "") or ""
+    if resp.status_code == 404 and "rest_no_route" in txt:
+        return None, SITE_ANTIGO_ACAO
+    try:
+        msg = str((resp.json() or {}).get("message") or "")[:240]
+    except ValueError:
+        msg = ""
+    return None, msg or f"o site respondeu {resp.status_code}"
+
+
+def _sem_mudar(prefixo: str, erro: str) -> str:
+    """'Não foi desativado: <motivo>.' (o site já diz "Nada foi mudado: …": não repete)."""
+    motivo = re.sub(r"^Nada foi (mudado|apagado):\s*", "", erro.strip()).rstrip(". ")
+    return f"{prefixo}: {motivo}."
+
+
+def _assinatura_ativa_provavel(r) -> bool:
+    """Sem resposta do site: mensal que renova sozinha = provavelmente há assinatura no Mercado Pago."""
+    return r["modalidade"] == "mensal" and bool(r["renova"])
+
+
+def previa_desativar(con, ids: list[int], wp=None) -> dict:
+    """Quem vai ser desativado e de quem a assinatura mensal do Mercado Pago vai ser cancelada (o site simula; nada muda)."""
+    itens = []
+    for r in _linhas(con, ids):
+        if r["tipo"] != "amigo" or r["apagado_em"]:
+            continue
+        x = {"id": r["id"], "nome": r["nome"], "ja_inativo": bool(r["inativo_em"]), "assinatura": False, "confirmado_no_site": False, "erro": ""}
+        if not r["inativo_em"] and r["site_id"]:
+            d, motivo = _chamar_site(con, wp, r, "desativar", {"simular": True})
+            if d:
+                x["assinatura"], x["confirmado_no_site"] = bool((d.get("assinatura") or {}).get("havia")), True
+            else:
+                x["assinatura"], x["erro"] = _assinatura_ativa_provavel(r), motivo
+        itens.append(x)
+    return {"itens": itens, "total": sum(1 for x in itens if not x["ja_inativo"]), "assinaturas": [x["nome"] for x in itens if x["assinatura"] and not x["ja_inativo"]],
+            "ja_inativos": [x["nome"] for x in itens if x["ja_inativo"]]}
+
+
+def desativar(con, ids: list[int], motivo: str, ator: str, wp=None) -> dict:
+    """Desativa (o site cancela a assinatura mensal e para o código; falhou = esta pessoa não muda). Reversível com reativar()."""
+    out = {"desativados": 0, "assinaturas_canceladas": 0, "ja_inativos": 0, "erros": []}
+    motivo = _txt(motivo, 500)
+    for r in _linhas(con, ids):
+        if r["tipo"] != "amigo" or r["apagado_em"]:
+            continue
+        if r["inativo_em"]:
+            out["ja_inativos"] += 1; continue
+        cancelada = False
+        if r["site_id"]:
+            d, erro = _chamar_site(con, wp, r, "desativar", {})
+            if not d:
+                out["erros"].append({"id": r["id"], "nome": r["nome"], "erro": _sem_mudar("Não foi desativado", erro)}); continue
+            cancelada = bool((d.get("assinatura") or {}).get("cancelada"))
+        con.execute("UPDATE amigo SET inativo_em=datetime('now'), inativo_motivo=?, inativo_por=?, atualizado_em=datetime('now') WHERE id=?", (motivo or None, ator, r["id"]))
+        n_fila = con.execute(f"UPDATE amigo_email SET situacao='falhou', erro='não enviado: o Amigo foi desativado' WHERE amigo_id=? AND situacao='na_fila' "
+                             f"AND modelo IN ({','.join('?' * len(MODELOS_BLOQUEADOS_INATIVO))})", (r["id"], *MODELOS_BLOQUEADOS_INATIVO)).rowcount
+        _evento(con, r["id"], "desativado", ator, {"motivo": motivo or None, "assinatura_cancelada": cancelada, "so_no_painel": not r["site_id"], "fila_cancelada": n_fila})
+        con.commit()
+        out["desativados"] += 1
+        out["assinaturas_canceladas"] += int(cancelada)
+    if out["desativados"]:
+        registrar(logging.INFO, "amigos_desativar", "Amigos desativados", n=out["desativados"], assinaturas=out["assinaturas_canceladas"], falhas=len(out["erros"]))
+    return out
+
+
+def reativar(con, ids: list[int], ator: str, wp=None) -> dict:
+    out = {"reativados": 0, "erros": []}
+    for r in _linhas(con, ids):
+        if r["tipo"] != "amigo" or r["apagado_em"] or not r["inativo_em"]:
+            continue
+        if r["site_id"]:
+            d, erro = _chamar_site(con, wp, r, "reativar", {})
+            if not d:
+                out["erros"].append({"id": r["id"], "nome": r["nome"], "erro": _sem_mudar("Não foi reativado", erro)}); continue
+        con.execute("UPDATE amigo SET inativo_em=NULL, inativo_motivo=NULL, inativo_por=NULL, atualizado_em=datetime('now') WHERE id=?", (r["id"],))
+        _evento(con, r["id"], "reativado", ator, {"assinatura_volta": False})
+        con.commit()
+        out["reativados"] += 1
+    return out
+
+
+def _anonimizar_amigo(con, aid: int) -> None:
+    """Tira os dados pessoais deste Amigo (painel). Ficam os pagamentos (sem a observação) e o número de Fundador. Não faz commit."""
+    con.execute("""UPDATE amigo SET nome='(removido)', empresa=NULL, cargo=NULL, email=NULL, telefone=NULL, vinculo=NULL, mensagem=NULL, origem_pagina=NULL,
+                   notas=NULL, inativo_motivo=NULL, codigo=NULL, cobranca_link=NULL, pendente_site=NULL, erro_site=NULL, nome_publico=0, emkt=0,
+                   anonimizado=1, apagado_em=COALESCE(apagado_em, datetime('now')), atualizado_em=datetime('now') WHERE id=?""", (aid,))
+    con.execute("UPDATE amigo_email SET para=NULL, corpo=NULL, assunto=NULL, variaveis=NULL, situacao=CASE WHEN situacao='na_fila' THEN 'falhou' ELSE situacao END WHERE amigo_id=?", (aid,))
+    con.execute("UPDATE amigo_pagamento SET nota=NULL WHERE amigo_id=?", (aid,))
+    for e in con.execute("SELECT id, detalhe FROM evento WHERE entidade='amigo' AND codigo=?", (str(aid),)).fetchall():
+        try:
+            d = json.loads(e["detalhe"] or "{}")
+        except ValueError:
+            d = {}
+        if isinstance(d, dict) and {"motivo", "assunto", "nota", "erro"} & set(d):
+            con.execute("UPDATE evento SET detalhe=? WHERE id=?", (json.dumps({k: v for k, v in d.items() if k not in ("motivo", "assunto", "nota", "erro")}, ensure_ascii=False), e["id"]))
+
+
+def _confere_nome(digitado: str, nome: str) -> bool:
+    n = lambda v: re.sub(r"\s+", " ", str(v or "")).strip().casefold()
+    return bool(n(digitado)) and (n(digitado) == "apagar" or n(digitado) == n(nome))
+
+
+def previa_apagar(con, aid: int, wp=None) -> dict:
+    r = _um(con, aid)
+    if r["tipo"] != "amigo":
+        raise HTTPException(400, "Só Amigos da CAMP são apagados por aqui")
+    pags = con.execute("SELECT COUNT(*) n, COALESCE(SUM(valor),0) v FROM amigo_pagamento WHERE amigo_id=?", (aid,)).fetchone()
+    out = {"id": aid, "nome": r["nome"], "apaga": list(APAGA), "fica": list(FICA), "pagamentos": pags["n"], "pagamentos_valor": float(pags["v"]),
+           "fundador": r["fundador"], "emails": con.execute("SELECT COUNT(*) FROM amigo_email WHERE amigo_id=?", (aid,)).fetchone()[0],
+           "assinatura": False, "confirmado_no_site": not r["site_id"], "no_site": bool(r["site_id"]), "erro_site": ""}
+    if r["site_id"]:
+        d, motivo = _chamar_site(con, wp, r, "apagar", {"simular": True})
+        if d:
+            out["assinatura"], out["confirmado_no_site"] = bool((d.get("assinatura") or {}).get("havia")), True
+        else:
+            out["assinatura"], out["erro_site"] = _assinatura_ativa_provavel(r), motivo
+    return out
+
+
+def apagar(con, aid: int, confirmacao: str, ator: str, wp=None) -> dict:
+    """Irreversível. 1) confere a confirmação (nome ou APAGAR); 2) o site cancela a assinatura mensal e apaga (falhou = NADA é apagado);
+    3) aqui: dados pessoais saem, o Amigo some do painel, pagamentos ficam anônimos; lista de e-mails e E-mails enviados sem a pessoa."""
+    r = _um(con, aid)
+    if r["tipo"] != "amigo":
+        raise HTTPException(400, "Só Amigos da CAMP são apagados por aqui")
+    if not _confere_nome(confirmacao, r["nome"]):
+        raise HTTPException(400, "Para apagar, digite o nome da pessoa ou APAGAR. Nada foi apagado.")
+    site = {"assinatura": {}, "sender": {}}
+    if r["site_id"]:
+        d, erro = _chamar_site(con, wp, r, "apagar", {"simular": False, "confirmar": "APAGAR"})
+        if not d:
+            raise HTTPException(502, _sem_mudar("Nada foi apagado", erro))
+        site = d
+    email = (r["email"] or "").strip().lower()
+    _anonimizar_amigo(con, aid)
+    n_lista = n_env = 0
+    if email and not con.execute("SELECT 1 FROM amigo WHERE lower(email)=? AND id<>?", (email, aid)).fetchone():
+        from . import contatos_emkt, emails_enviados
+        n_lista = contatos_emkt.apagar_por_email(con, email)
+        n_env = emails_enviados.apagar_por_email(con, email)
+    pags = con.execute("SELECT COUNT(*) FROM amigo_pagamento WHERE amigo_id=?", (aid,)).fetchone()[0]
+    cancelada = bool((site.get("assinatura") or {}).get("cancelada"))
+    _evento(con, aid, "apagado", ator, {"pagamentos_mantidos": pags, "fundador": r["fundador"], "assinatura_cancelada": cancelada, "no_site": bool(r["site_id"]),
+                                        "sender": str((site.get("sender") or {}).get("status") or "")[:20] or None, "lista_email": n_lista, "emails_enviados": n_env})
+    con.commit()
+    registrar(logging.INFO, "amigos_apagar", "Amigo apagado (dados pessoais removidos; pagamentos mantidos)", amigo=aid, pagamentos=pags)
+    return {"ok": True, "pagamentos_mantidos": pags, "assinatura_cancelada": cancelada, "sender": (site.get("sender") or {}).get("status"),
+            "sender_erro": (site.get("sender") or {}).get("erro") or ""}
+
+
 # ---------------------------------------------------------------- telas
 def _linha(con, r) -> dict:
     d = dict(r)
@@ -1057,7 +1257,10 @@ def _com_emkt(con, linhas: list[dict], emkt: str | None) -> list[dict]:
 
 def _filtro(aba: str, situacao, categoria, ano, vencendo, q) -> tuple[str, list]:
     onde, vals = (["tipo='amigo'"] if aba == "amigos" else ["tipo IN ('projeto','arquiteto')"]), []
-    if situacao and situacao not in ("todos", "todas"):
+    onde.append("apagado_em IS NULL")                    # apagado (CAMP-AMIGO-APAGAR) some do painel; os pagamentos ficam na receita
+    if aba == "amigos":                                  # inativo só aparece no filtro "Inativos"
+        onde.append("inativo_em IS NOT NULL" if situacao == INATIVOS else "inativo_em IS NULL")
+    if situacao and situacao not in ("todos", "todas", INATIVOS):
         if aba == "amigos":
             if situacao not in SITUACOES:
                 raise HTTPException(400, "Situação inválida")
@@ -1087,9 +1290,9 @@ def numeros(con) -> dict:
     ano = str(h.year)
     receita = con.execute(f"""SELECT COALESCE(SUM(p.valor),0) FROM amigo_pagamento p JOIN amigo a ON a.id=p.amigo_id
                              WHERE substr(p.data,1,4)=? AND p.status IN ({','.join('?' * len(APROVADO))})""", (ano, *APROVADO)).fetchone()[0]
-    ativos = con.execute("SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND (situacao='pago' OR (situacao='isento' AND (validade IS NULL OR validade>=?)))", (h.isoformat(),)).fetchone()[0]
-    pend = con.execute("SELECT * FROM amigo WHERE tipo='amigo' AND situacao='pendente'").fetchall()
-    venc = con.execute("SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND situacao='pago' AND validade BETWEEN ? AND ?",
+    ativos = con.execute("SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND inativo_em IS NULL AND apagado_em IS NULL AND (situacao='pago' OR (situacao='isento' AND (validade IS NULL OR validade>=?)))", (h.isoformat(),)).fetchone()[0]
+    pend = con.execute("SELECT * FROM amigo WHERE tipo='amigo' AND inativo_em IS NULL AND apagado_em IS NULL AND situacao='pendente'").fetchall()
+    venc = con.execute("SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND inativo_em IS NULL AND apagado_em IS NULL AND situacao='pago' AND validade BETWEEN ? AND ?",
                        (h.isoformat(), (h + timedelta(days=30)).isoformat())).fetchone()[0]
     return {"ativos": ativos, "receita_ano": float(receita), "ano": h.year, "pendentes": len(pend),
             "pendente_valor": float(sum(valor_previsto(con, r) or 0 for r in pend)), "vencendo_30": venc}
@@ -1109,12 +1312,15 @@ def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | No
         for r in con.execute(f"SELECT {campo} s, COUNT(*) n FROM amigo WHERE {w} GROUP BY {campo}", vals):
             if r["s"] in resumo:
                 resumo[r["s"]] = r["n"]
+        if aba == "amigos":
+            w_i, vals_i = _filtro(aba, INATIVOS, categoria, ano, vencendo, q)
+            resumo[INATIVOS] = con.execute(f"SELECT COUNT(*) FROM amigo WHERE {w_i}", vals_i).fetchone()[0]
         w2, vals2 = _filtro(aba, situacao, categoria, ano, vencendo, q)
         rows = con.execute(f"SELECT * FROM amigo WHERE {w2} ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC", vals2).fetchall()
         anos = [r[0] for r in con.execute("SELECT DISTINCT substr(COALESCE(pago_em, criado_no_site, importado_em),1,4) a FROM amigo WHERE a<>'' ORDER BY a DESC")]
         ult = con.execute("SELECT quando, lidos, novos, erro FROM amigo_coleta ORDER BY id DESC LIMIT 1").fetchone()
-        tot = {k: con.execute(q_, ()).fetchone()[0] for k, q_ in (("amigos", "SELECT COUNT(*) FROM amigo WHERE tipo='amigo'"),
-                                                                ("adocoes", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo'"),
+        tot = {k: con.execute(q_, ()).fetchone()[0] for k, q_ in (("amigos", "SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND apagado_em IS NULL AND inativo_em IS NULL"),
+                                                                ("adocoes", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo' AND apagado_em IS NULL"),
                                                                 ("adocoes_novas", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo' AND status_pedido='novo'"))}
         cats = _tabela_do_ano(con, hoje().year)
         return {"itens": _com_emkt(con, [_linha(con, r) for r in rows], emkt), "resumo": resumo, "numeros": numeros(con), "anos": anos, "totais": tot,
@@ -1132,7 +1338,7 @@ def exportar(aba: str = "amigos", situacao: str | None = None, categoria: str | 
     try:
         if ids:
             lst = [int(x) for x in re.findall(r"\d+", ids)][:5000]
-            rows = _linhas(con, lst)
+            rows = [r for r in _linhas(con, lst) if not r["apagado_em"]]
         else:
             w, vals = _filtro(aba, situacao, categoria, ano, vencendo, q)
             rows = con.execute(f"SELECT * FROM amigo WHERE {w} ORDER BY nome", vals).fetchall()
@@ -1380,6 +1586,60 @@ def criar(d: NovoAmigo, u: dict = Depends(auth.exige("admin"))) -> dict:
         _evento(con, cur.lastrowid, "criado", u["email"], {"origem": "painel", "categoria": d.categoria})
         con.commit()
         return {"ok": True, "id": cur.lastrowid}
+    finally:
+        con.close()
+
+
+class IdsPedido(BaseModel):
+    ids: list[int]
+    motivo: str | None = None
+
+
+@router.post("/desativar/previa")
+def desativar_previa(d: IdsPedido, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return previa_desativar(con, d.ids)
+    finally:
+        con.close()
+
+
+@router.post("/desativar")
+def desativar_rota(d: IdsPedido, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return desativar(con, d.ids, d.motivo or "", u["email"])
+    finally:
+        con.close()
+
+
+@router.post("/reativar")
+def reativar_rota(d: IdsPedido, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return reativar(con, d.ids, u["email"])
+    finally:
+        con.close()
+
+
+@router.get("/{aid}/apagar/previa")
+def apagar_previa(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return previa_apagar(con, aid)
+    finally:
+        con.close()
+
+
+class Apagar(BaseModel):
+    confirmacao: str = ""
+
+
+@router.post("/{aid}/apagar")
+def apagar_rota(aid: int, d: Apagar, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return apagar(con, aid, d.confirmacao, u["email"])
     finally:
         con.close()
 

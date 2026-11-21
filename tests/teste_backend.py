@@ -52,6 +52,7 @@ MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha an
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
 MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e assinada) fica em Pedem ação até o acervo chegar; Autentique com a doação já paga (linha própria)
 MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
+MODOS_RAPIDOS |= {"amigo_desativar_apagar"}   # CAMP-AMIGO-APAGAR 21/11/2026: desativar/reativar e apagar Amigo (assinatura do Mercado Pago cancelada pelo site falso; contrato 1.28; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 
 
@@ -18035,6 +18036,136 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem nome nem e-mail de Amigo", not any(t in log_ for t in ("ana@x.com", "beto@x.com", "Beto Reis", "Ana Lima", "carla@x.com")))
         for l in res: print(l)
+    elif modo == "amigo_desativar_apagar":
+        # CAMP-AMIGO-APAGAR (21/11/2026, Rafael: "opção de desativar um amigo, apagar também por favor"; contrato 1.28, migração 239).
+        # Site FALSO: nenhuma chamada real ao site nem ao Mercado Pago. Desativar para cobranças/lembretes e cancela a assinatura (pelo site);
+        # reativar volta; apagar exige a confirmação, aborta se o site/Mercado Pago falha, tira os dados pessoais e mantém os pagamentos.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, datetime as _dt
+        from fastapi.testclient import TestClient
+        from app import auth, amigos as am
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 239: colunas inativo_em, inativo_motivo, inativo_por e apagado_em", {"inativo_em", "inativo_motivo", "inativo_por", "apagado_em"} <= {r[1] for r in c.execute("PRAGMA table_info(amigo)")})
+        am._HOJE = _dt.date(2026, 11, 21)
+        posts = []
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.text = code, dados, _j.dumps(dados)
+            def json(s): return s._d
+        FALHA_MP = Resp(502, {"code": "camp_mp_cancelar", "message": "Nada foi mudado: não deu para cancelar a assinatura mensal no Mercado Pago (o Mercado Pago não cancelou a assinatura (HTTP 500)). Tente de novo em instantes."})
+        def site(path, corpo):
+            posts.append((path, corpo))
+            sid, acao = path.split("/")[-2], path.split("/")[-1]
+            if sid == "904" and acao in ("desativar", "apagar") and not corpo.get("simular"):
+                return FALHA_MP
+            if acao == "desativar":
+                return Resp(200, {"ok": True, "modo": "simular" if corpo.get("simular") else "aplicar", "assinatura": {"havia": sid in ("901", "904"), "cancelada": sid == "901" and not corpo.get("simular")}})
+            if acao == "apagar":
+                return Resp(200, {"ok": True, "modo": "simular" if corpo.get("simular") else "aplicar", "assinatura": {"havia": False, "cancelada": False}, "sender": {"status": "apagado", "erro": ""}})
+            if acao == "cobranca":
+                return Resp(200, {"ok": True, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1"})
+            return Resp(200, {"ok": True})
+        class H:
+            def post(s, path, json=None): return site(path, json or {})
+            def get(s, path, params=None): return Resp(200, {"itens": [], "mais": False})
+        class WPF:
+            h = H()
+        am._wp = lambda: WPF()
+        c.execute("INSERT INTO configuracao (chave, valor) VALUES ('wp.app_password','x') ON CONFLICT(chave) DO UPDATE SET valor='x'")
+        def novo(sid, nome, email, mod, sit, validade="2026-12-01", fundador=None):
+            return c.execute("""INSERT INTO amigo (site_id, tipo, categoria, modalidade, nome, email, telefone, situacao, validade, codigo, fundador, renova, notas)
+                                VALUES (?,'amigo','amigo',?,?,?,'11 9999',?,?,'COD'||?,?,?,'nota interna')""", (sid, mod, nome, email, sit, validade, sid or 0, fundador, 1 if mod == "mensal" else 0)).lastrowid
+        A1 = novo(901, "Ana Lima", "ana@x.com", "mensal", "pago", fundador=5)
+        A2 = novo(902, "Beto Reis", "beto@x.com", "anual", "pago")
+        A3 = novo(None, "Caio Paz", "caio@x.com", "anual", "pendente")
+        A4 = novo(904, "Dora Luz", "dora@x.com", "mensal", "pago")
+        c.execute("INSERT INTO amigo_pagamento (amigo_id, chave, data, valor, meio, nota, origem, status) VALUES (?,'mp-111','2026-10-01',45,'credit_card',NULL,'mp','approved')", (A1,))
+        c.execute("INSERT INTO amigo_pagamento (amigo_id, chave, data, valor, meio, nota, origem, status) VALUES (?,'painel-abc123','2026-11-01',45,'pix','Ana pagou no balcão','manual','approved')", (A1,))
+        c.execute("INSERT INTO amigo_email (amigo_id, modelo, assunto, corpo, para, situacao) VALUES (?,'cobranca','Cobrança','Olá, Ana','ana@x.com','na_fila')", (A1,))
+        c.execute("INSERT INTO amigo_email (amigo_id, modelo, assunto, corpo, para, situacao) VALUES (?,'recibo','Recibo','Olá, Ana','ana@x.com','enviado')", (A1,))
+        c.execute("INSERT INTO emkt_site (site_id, email, nome, origem, situacao) VALUES ('post-901','ana@x.com','Ana Lima','apoio','inscrito')")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        cods = [op.post("/api/amigos/desativar/previa", json={"ids": [A1]}).status_code, op.post("/api/amigos/desativar", json={"ids": [A1]}).status_code,
+                op.post("/api/amigos/reativar", json={"ids": [A1]}).status_code, op.get(f"/api/amigos/{A1}/apagar/previa").status_code,
+                op.post(f"/api/amigos/{A1}/apagar", json={"confirmacao": "APAGAR"}).status_code]
+        um = lambda i: c.execute("SELECT * FROM amigo WHERE id=?", (i,)).fetchone()
+        ver("não admin (operador): 403 em desativar, prévia, reativar e apagar; nada muda nem vai ao site", cods == [403] * 5 and not posts and not um(A1)["inativo_em"] and not um(A1)["apagado_em"], cods)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        # ---------- desativar ----------
+        pv = x.post("/api/amigos/desativar/previa", json={"ids": [A1, A2, A3]}).json()
+        ver("prévia de desativar: diz de quem a assinatura mensal será cancelada (o site simula) e nada muda",
+            pv.get("assinaturas") == ["Ana Lima"] and pv.get("total") == 3 and all(p_[1] == {"simular": True} for p_ in posts) and not any(um(i)["inativo_em"] for i in (A1, A2, A3)), (pv, posts))
+        posts.clear()
+        r = x.post("/api/amigos/desativar", json={"ids": [A1, A2, A3], "motivo": "pediu para sair"}).json()
+        ver("desativar: os três inativos; o site desativa (e cancela a assinatura de quem tem); registrado só no painel não chama o site",
+            r.get("desativados") == 3 and r.get("assinaturas_canceladas") == 1 and sorted(p_[0] for p_ in posts) == ["/wp-json/camp/v1/painel/apoios/901/desativar", "/wp-json/camp/v1/painel/apoios/902/desativar"]
+            and all(um(i)["inativo_em"] and um(i)["inativo_por"] == "adm@camp.arq.br" for i in (A1, A2, A3)), (r, posts))
+        ver("desativar: a situação de pagamento não muda (reativar volta ao que era)", um(A1)["situacao"] == "pago" and um(A3)["situacao"] == "pendente")
+        ev = c.execute("SELECT detalhe FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='desativado'", (str(A1),)).fetchone()
+        ver("desativar: no histórico, com o motivo e a assinatura cancelada", ev and _j.loads(ev[0]).get("motivo") == "pediu para sair" and _j.loads(ev[0]).get("assinatura_cancelada") is True, ev and ev[0])
+        ver("desativar: a cobrança que estava na fila não sai", c.execute("SELECT situacao FROM amigo_email WHERE amigo_id=? AND modelo='cobranca'", (A1,)).fetchone()[0] == "falhou")
+        posts.clear()
+        cb = x.post("/api/amigos/cobranca/enviar", json={"ids": [A1, A2], "forcar": True}).json()
+        ver("inativo fora do Enviar cobrança (nem com forçar): nada na fila e nenhum link pedido ao site",
+            cb.get("na_fila") == 0 and sorted(cb.get("inativos") or []) == ["Ana Lima", "Beto Reis"] and not posts, (cb, posts))
+        pc = am.previa_cobranca(c, [A1, A2])
+        ver("prévia da cobrança: inativos fora e listados", pc["total"] == 0 and sorted(pc["inativos"]) == ["Ana Lima", "Beto Reis"], pc)
+        c.execute("UPDATE amigo SET validade='2026-12-01', situacao='pago' WHERE id IN (?,?)", (A1, A2)); c.commit()
+        ver("inativo sem lembretes automáticos (TR17–TR19)", not [l_ for l_ in am.lembretes_devidos(c) if l_["id"] in (A1, A2)], am.lembretes_devidos(c))
+        ver("inativo sem boas-vindas nem aviso de vencimento; recibo ainda sai à mão",
+            am.enfileirar(c, [A1], "boas_vindas", "", "", "t") == 0 and am.enfileirar(c, [A1], "aviso_vencido", "", "", "t") == 0 and am.enfileirar(c, [A1], "recibo", "", "", "t") == 1)
+        lst = x.get("/api/amigos").json(); lsi = x.get("/api/amigos?situacao=inativos").json()
+        ver("lista padrão sem os inativos; filtro Inativos mostra só eles; resumo conta",
+            not {A1, A2, A3} & {i_["id"] for i_ in lst["itens"]} and {i_["id"] for i_ in lsi["itens"]} == {A1, A2, A3} and lst["resumo"].get("inativos") == 3 and lst["numeros"]["ativos"] == 1, (lst["resumo"], [i_["id"] for i_ in lsi["itens"]]))
+        r4 = x.post("/api/amigos/desativar", json={"ids": [A4]}).json()
+        ver("Mercado Pago falhou ao cancelar: não desativa e diz o motivo", r4.get("desativados") == 0 and "Mercado Pago" in (r4.get("erros") or [{}])[0].get("erro", "") and not um(A4)["inativo_em"], r4)
+        # ---------- reativar ----------
+        posts.clear()
+        rr = x.post("/api/amigos/reativar", json={"ids": [A2]}).json()
+        ver("reativar: volta à lista, à cobrança e aos lembretes; o site reativa; fica no histórico",
+            rr.get("reativados") == 1 and not um(A2)["inativo_em"] and um(A2)["situacao"] == "pago" and posts == [("/wp-json/camp/v1/painel/apoios/902/reativar", {})]
+            and am.previa_cobranca(c, [A2])["total"] == 1 and A2 in [l_["id"] for l_ in am.lembretes_devidos(c)]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='reativado'", (str(A2),)).fetchone()[0] == 1, (rr, posts))
+        # ---------- apagar ----------
+        posts.clear()
+        pa = x.get(f"/api/amigos/{A1}/apagar/previa").json()
+        ver("prévia de apagar: o que sai, o que fica (pagamentos, Fundador) e nada muda",
+            pa.get("pagamentos") == 2 and pa.get("fundador") == 5 and "e-mail" in pa.get("apaga", []) and any("pagamentos" in f_ for f_ in pa.get("fica", [])) and posts == [("/wp-json/camp/v1/painel/apoios/901/apagar", {"simular": True})] and um(A1)["nome"] == "Ana Lima", (pa, posts))
+        posts.clear()
+        cods = [x.post(f"/api/amigos/{A1}/apagar", json={}).status_code, x.post(f"/api/amigos/{A1}/apagar", json={"confirmacao": "Ana"}).status_code]
+        ver("apagar sem a confirmação (nome ou APAGAR): 400, nada apagado, site não chamado", cods == [400, 400] and not posts and um(A1)["email"] == "ana@x.com", cods)
+        ra = x.post(f"/api/amigos/{A4}/apagar", json={"confirmacao": "APAGAR"})
+        ver("cancelar a assinatura falhou: apagar aborta (502), diz o motivo e nada é apagado",
+            ra.status_code == 502 and (ra.json().get("erro") or "").startswith("Nada foi apagado: não deu para cancelar a assinatura mensal no Mercado Pago") and um(A4)["nome"] == "Dora Luz" and not um(A4)["apagado_em"], ra.text)
+        posts.clear()
+        ok_ = x.post(f"/api/amigos/{A1}/apagar", json={"confirmacao": "  ana   LIMA "})
+        a1 = um(A1)
+        ver("apagar (digitando o nome): o site apaga primeiro, com a confirmação", ok_.status_code == 200 and posts == [("/wp-json/camp/v1/painel/apoios/901/apagar", {"simular": False, "confirmar": "APAGAR"})], (ok_.text, posts))
+        ver("apagar: nome, e-mail, telefone, notas, motivo e código saem; Fundador fica",
+            a1["nome"] == "(removido)" and a1["email"] is None and a1["telefone"] is None and a1["notas"] is None and a1["inativo_motivo"] is None and a1["codigo"] is None and a1["anonimizado"] == 1 and a1["apagado_em"] and a1["fundador"] == 5, dict(a1))
+        pg = [tuple(p_) for p_ in c.execute("SELECT chave, data, valor, meio, nota FROM amigo_pagamento WHERE amigo_id=? ORDER BY data", (A1,))]
+        ver("apagar: pagamentos ficam (valor, data, meio, referência) sem a observação",
+            pg == [("mp-111", "2026-10-01", 45.0, "credit_card", None), ("painel-abc123", "2026-11-01", 45.0, "pix", None)], pg)
+        ver("apagar: e-mails do Amigo sem endereço nem texto; lista de e-mails da CAMP sem a pessoa",
+            c.execute("SELECT COUNT(*) FROM amigo_email WHERE amigo_id=? AND (para IS NOT NULL OR corpo IS NOT NULL)", (A1,)).fetchone()[0] == 0 and c.execute("SELECT COUNT(*) FROM emkt_site WHERE email='ana@x.com'").fetchone()[0] == 0)
+        hist = " ".join(r_[0] or "" for r_ in c.execute("SELECT detalhe FROM evento WHERE entidade='amigo' AND codigo=?", (str(A1),)))
+        eva = c.execute("SELECT detalhe FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='apagado'", (str(A1),)).fetchone()
+        ver("apagar: no histórico, sem dado pessoal (nem o motivo da desativação)", eva and _j.loads(eva[0]).get("pagamentos_mantidos") == 2 and "Ana" not in hist and "ana@" not in hist and "pediu para sair" not in hist, hist[:300])
+        lt = x.get("/api/amigos").json(); li = x.get("/api/amigos?situacao=inativos").json()
+        ver("apagar: some do painel (lista, Inativos e detalhe); a receita do ano continua com os pagamentos",
+            A1 not in [i_["id"] for i_ in lt["itens"] + li["itens"]] and x.get(f"/api/amigos/{A1}").status_code == 404 and lt["numeros"]["receita_ano"] == 90.0, lt["numeros"])
+        ver("apagar de novo: 404 (já não existe)", x.post(f"/api/amigos/{A1}/apagar", json={"confirmacao": "APAGAR"}).status_code == 404)
+        posts.clear()
+        r3 = x.post(f"/api/amigos/{A3}/apagar", json={"confirmacao": "apagar"})
+        ver("registrado só no painel: apaga com APAGAR sem chamar o site", r3.status_code == 200 and not posts and um(A3)["apagado_em"] and um(A3)["email"] is None, r3.text)
+        o = am.coletar(c, type("W", (), {"h": type("G", (), {"get": lambda s_, p_, params=None: Resp(200, {"itens": [{"id": 901, "tipo": "amigo", "nome": "Ana Lima", "email": "ana@x.com", "apagado": True}], "mais": False})})()})())
+        ver("coleta depois de apagar: o nome não volta", um(A1)["nome"] == "(removido)" and um(A1)["email"] is None and not o["erro"], (o, dict(um(A1))))
+        for l in res: print(l)
     elif modo == "ingressos_painel":
         # CAMP-INGRESSOS 19/11/2026 · Ingressos da visita guiada à Residência João Marino: busca no site (GET /painel/ingressos, contrato
         # 1.18; cliente FALSO), incremental, turmas e vagas, contas do mês por turma, filtros, CSV para o Excel, reenviar, papéis e LGPD.
@@ -22022,6 +22153,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos da CAMP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 45, "Amigos da CAMP: todas as verificações rodaram")
+
+print("Amigos da CAMP · desativar/reativar e apagar (contrato 1.28): sem cobrança nem lembrete, assinatura cancelada pelo site falso, confirmação, falha aborta, pagamentos ficam, papéis")
+rc, out = rodar("amigo_desativar_apagar", f"{tmp}/amigo_desativar_apagar.db")
+if rc != 0: ok(False, f"teste amigo_desativar_apagar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos (desativar/apagar): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Amigos (desativar/apagar): todas as verificações rodaram")
 
 print("E-mails enviados: todas as fontes do painel e do site (site falso), busca incremental, filtros, CSV, papéis e LGPD")
 rc, out = rodar("emails_enviados", f"{tmp}/emails_enviados.db")
