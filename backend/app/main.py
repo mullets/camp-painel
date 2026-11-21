@@ -495,8 +495,9 @@ def listar_fundos(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
 
 @app.get("/api/fundos/proximo")
 def proximo_fundo(u: dict = Depends(auth.exige("admin"))) -> dict:
+    from .rotas_fundos import proximo_codigo   # a mesma regra do cadastro (e do fundo criado pela doação recebida)
     con = connect()
-    codigo = con.execute("SELECT codigo FROM v_proximo_fundo").fetchone()[0]
+    codigo = proximo_codigo(con)
     con.close()
     return {"codigo": codigo}
 

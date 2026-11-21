@@ -51,6 +51,7 @@ MODOS_RAPIDOS |= {"doacoes_cpf"}   # CAMP-DOA-CPF 20/11/2026: CPF/CNPJ, endereç
 MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha antiga do Google Forms (CSV) → simular, importar sem e-mail, idempotente (linha própria)
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
 MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e assinada) fica em Pedem ação até o acervo chegar; Autentique com a doação já paga (linha própria)
+MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18556,6 +18557,141 @@ def filho(modo):
             r8.get("situacao") == "assinado" and sit8 == "assinado" and len(posts) == 2 and posts[0][1].get("etapa") == "contrato_assinado" and "etapa" not in posts[1][1]
             and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=708").fetchone()[0] == "paga" and 708 in {x["id"] for x in da.filtrar(c, "abertas")}, (r8, sit8, posts))
         ver("nenhuma intenção perdida (8 no painel)", c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == 8)
+        for l in res: print(l)
+    elif modo == "doacoes_fundo_auto":
+        # CAMP-DOA-FUNDO 21/11/2026 (site FALSO). Rafael: "e precisa criar quando terminar o fundo e arquiteto automaticamente." Ao passar a
+        # doação a "Acervo recebido pela CAMP": prévia com o próximo código (o mesmo cadastro de fundo de sempre, numa transação desfeita),
+        # confirmar cria UM fundo e UM arquiteto, guarda o vínculo e manda etapa=recebido + fundo ao site; site falhou → o fundo fica e tentar
+        # de novo usa o mesmo; arquiteto de mesmo nome (sem acento/caixa) é oferecido e o vínculo funciona; caminho manual igual; só admin;
+        # código nunca reusado (nem buraco preenchido); nada pessoal (CPF, endereço) no fundo ou no arquiteto.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da
+        from app.rotas_fundos import proximo_codigo, criar_fundo
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 237: tabela doacao_fundo", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='doacao_fundo'").fetchone()[0] == 1)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.content, s.headers = code, dados, b"", {}
+            def json(s): return s._d
+        posts, falhar = [], {"n": 0}
+        base = {"recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Pessoa Que Doa", "email": "doa@x.com", "telefone": "11 9999-0000", "valor": 1500, "notas": [], "historico": [],
+                "documento": "52998224725", "documento_tipo": "cpf", "endereco": {"cep": "01310100", "logradouro": "Avenida Paulista", "numero": "1000", "cidade": "São Paulo", "uf": "SP"},
+                "local": "Campinas/SP", "etapa": "paga"}
+        REG = {}
+        class H:
+            def get(s, path, params=None): return Resp(200, {"itens": []})
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                if falhar["n"] > 0:
+                    falhar["n"] -= 1
+                    return Resp(500, {})
+                sid = int(path.rsplit("/", 1)[1])
+                reg = dict(REG[sid], **{k: json[k] for k in ("etapa", "fundo", "quantidade_catalogada") if k in (json or {})})
+                REG[sid] = reg
+                return Resp(200, {"ok": True, "registro": reg})
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF()
+        for sid, autor, extra in ((801, "Ana Maria Gonçalves", {"periodo": "1960–1990", "caixas": 6, "rolos": 40, "volume": "2 m lineares"}), (802, "Bruno Lima", {"periodo": "anos 70"}),
+                                  (803, "JOSE DA SILVA", {}), (804, "josé da silva", {}), (805, "Carla Souza", {}), (806, "", {})):
+            REG[sid] = dict(base, id=sid, protocolo=f"CAMP-2026-000{sid}", autor=autor, **extra)
+            da._gravar(c, REG[sid])
+        # um arquiteto que já existe, com fundo (como o cadastro de sempre faz)
+        criar_fundo(c, "José da Silva", "JDS", None, None, "pessoa", "teste")
+        c.commit()
+        jose = c.execute("SELECT id FROM agente WHERE forma_autorizada='José da Silva'").fetchone()[0]
+        f_jose = c.execute("SELECT fundo_codigo FROM fundo_agente WHERE agente_id=?", (jose,)).fetchone()[0]
+        conta = lambda: tuple(c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("fundo", "agente", "doacao_fundo", "evento"))   # noqa: E731
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador: 403 na prévia e na confirmação (só admin)", op.post("/api/doacoes-acervo/801/receber", json={}).status_code == 403
+            and op.post("/api/doacoes-acervo/801/receber", json={"aplicar": True}).status_code == 403)
+        # ---- prévia
+        prox = proximo_codigo(c); antes = conta()
+        p1 = x.post("/api/doacoes-acervo/801/receber", json={})
+        j1 = p1.json() if p1.status_code == 200 else {}
+        ver("prévia: mostra o PRÓXIMO código e os nomes (fundo = arquiteto, como no cadastro)", p1.status_code == 200 and j1.get("simulado") and (j1.get("fundo") or {}).get("codigo") == prox
+            and j1.get("frase") == f"Vai criar o fundo {prox} · Ana Maria Gonçalves e o arquiteto Ana Maria Gonçalves" and j1.get("arquiteto", {}).get("acao") == "criar", p1.text[:300])
+        ver("prévia: período dos documentos vira datas extremas; volume vira dimensão; sigla pelas iniciais", (j1.get("fundo") or {}).get("data_inicio") == 1960 and j1.get("fundo", {}).get("data_fim") == 1990
+            and j1.get("fundo", {}).get("dimensao_suporte") == "6 caixas, 40 rolos; 2 m lineares" and j1.get("fundo", {}).get("sigla") == "AMG", j1.get("fundo"))
+        ver("prévia não grava nada (transação desfeita) e repetir dá o mesmo código", conta() == antes and x.post("/api/doacoes-acervo/801/receber", json={}).json().get("fundo", {}).get("codigo") == prox, (conta(), antes))
+        # ---- confirmar sem a senha do site: nada é criado
+        r0 = x.post("/api/doacoes-acervo/801/receber", json={"aplicar": True})
+        ver("confirmar sem a senha do site: 409 e nada criado", r0.status_code == 409 and conta() == antes, r0.text[:200])
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        # ---- confirmar: um fundo, um arquiteto, vínculo, eventos, site
+        posts.clear()
+        r1 = x.post("/api/doacoes-acervo/801/receber", json={"aplicar": True, "mudanca": {"quantidade_catalogada": 120, "nota": "chegou bem"}})
+        f_ = c.execute("SELECT * FROM fundo WHERE codigo=?", (prox,)).fetchone()
+        ag = c.execute("SELECT * FROM agente WHERE forma_autorizada='Ana Maria Gonçalves'").fetchall()
+        dpois = conta()
+        ver("confirmar: exatamente 1 fundo (o código da prévia) e 1 arquiteto, produtor do fundo, e o vínculo guardado", r1.status_code == 200 and (dpois[0] - antes[0], dpois[1] - antes[1], dpois[2] - antes[2]) == (1, 1, 1)
+            and f_ is not None and f_["titulo"] == "Ana Maria Gonçalves" and len(ag) == 1
+            and c.execute("SELECT 1 FROM fundo_agente WHERE fundo_codigo=? AND agente_id=? AND papel='produtor'", (prox, ag[0]["id"] if ag else 0)).fetchone() is not None
+            and tuple(c.execute("SELECT fundo_codigo, fundo_criado, agente_criado, criado_por FROM doacao_fundo WHERE site_id=801").fetchone() or ()) == (prox, 1, 1, "adm@camp.arq.br"), (r1.text[:300], dpois, antes))
+        ver("site: etapa=recebido + fundo + quantidade catalogada, nota diz quem foi criado (o POST de sempre)", posts and posts[-1][0] == "/wp-json/camp/v1/painel/doacoes-acervo/801"
+            and posts[-1][1].get("etapa") == "recebido" and posts[-1][1].get("fundo") == prox and posts[-1][1].get("quantidade_catalogada") == "120"
+            and posts[-1][1].get("nota", "").startswith(f"Criados no painel: o fundo {prox} · Ana Maria Gonçalves e o arquiteto Ana Maria Gonçalves.") and posts[-1][1]["nota"].endswith("chegou bem"), posts[-1] if posts else None)
+        ver("dados copiados só onde há campo: datas extremas, dimensão, procedência; nada pessoal nem biografia", f_ is not None and (f_["data_inicio"], f_["data_fim"], f_["dimensao_suporte"], f_["procedencia"]) == (1960, 1990, "6 caixas, 40 rolos; 2 m lineares", "Doação à CAMP.")
+            and ag and (ag[0]["historia"], ag[0]["fonte_historia"], ag[0]["existencia_inicio"], ag[0]["lugares"]) == (None, None, None, None)
+            and not any(t_ in _j.dumps([dict(f_), dict(ag[0])], ensure_ascii=False) for t_ in ("52998224725", "529.982", "Avenida Paulista", "01310100", "Pessoa Que Doa", "doa@x.com", "Campinas")), dict(f_) if f_ else None)
+        evs = {(e["entidade"], e["tipo"], e["ator"]) for e in c.execute("SELECT entidade, tipo, ator FROM evento WHERE (entidade='fundo' AND codigo=?) OR (entidade='agente' AND codigo=?) OR (entidade='doacao_acervo' AND codigo='801')", (prox, str(ag[0]["id"]) if ag else ""))}
+        ver("eventos: quem criou o fundo, o arquiteto e o vínculo da doação", {("fundo", "criado", "adm@camp.arq.br"), ("agente", "criado", "adm@camp.arq.br"), ("doacao_acervo", "fundo_vinculado", "adm@camp.arq.br")} <= evs, evs)
+        d1 = x.get("/api/doacoes-acervo/801").json()
+        fd = x.get(f"/api/fundos/{prox}/detalhe").json()
+        ver("vínculo dos dois lados: a doação mostra o fundo; o fundo mostra a doação (só para admin)", (d1.get("fundo_vinculo") or {}).get("codigo") == prox and d1.get("etapa") == "recebido"
+            and (fd.get("doacao") or {}).get("protocolo") == "CAMP-2026-000801" and op.get(f"/api/fundos/{prox}/detalhe").json().get("doacao") is None, (d1.get("fundo_vinculo"), fd.get("doacao")))
+        n_ = conta()
+        r1b = x.post("/api/doacoes-acervo/801/receber", json={"aplicar": True})
+        ver("confirmar de novo a mesma doação: usa o mesmo fundo, não cria outro", r1b.status_code == 200 and conta()[:3] == n_[:3] and posts[-1][1].get("fundo") == prox, r1b.text[:200])
+        # ---- site falhou depois de criar: o fundo fica; tentar de novo usa o mesmo
+        prox2 = proximo_codigo(c); falhar["n"] = 1; n0 = conta()
+        r2 = x.post("/api/doacoes-acervo/802/receber", json={"aplicar": True})
+        ver("site falhou: erro na tela dizendo que o fundo ficou; fundo e vínculo guardados; período vago não vira data", r2.status_code == 502 and prox2 in r2.text and "mesmo fundo" in r2.text
+            and conta()[0] == n0[0] + 1 and tuple(c.execute("SELECT fundo_codigo, site_erro IS NOT NULL FROM doacao_fundo WHERE site_id=802").fetchone() or ()) == (prox2, 1)
+            and (c.execute("SELECT data_inicio FROM fundo WHERE codigo=?", (prox2,)).fetchone() or ["x"])[0] is None, r2.text[:300])
+        pv2 = x.post("/api/doacoes-acervo/802/receber", json={}).json()
+        r2b = x.post("/api/doacoes-acervo/802/receber", json={"aplicar": True})
+        ver("tentar de novo: prévia avisa que usa o mesmo, a confirmação reusa o fundo (nenhum fundo ou arquiteto a mais)", (pv2.get("vinculado") or {}).get("codigo") == prox2 and r2b.status_code == 200
+            and conta()[:3] == (n0[0] + 1, n0[1] + 1, n0[2] + 1) and posts[-1][1].get("fundo") == prox2 and REG[802]["etapa"] == "recebido"
+            and tuple(c.execute("SELECT site_ok_em IS NOT NULL, site_erro FROM doacao_fundo WHERE site_id=802").fetchone() or ()) == (1, None), (r2b.text[:200], conta(), n0))
+        # ---- arquiteto que já existe (mesmo nome sem acento e sem caixa): oferecido; vincular funciona
+        p3 = x.post("/api/doacoes-acervo/803/receber", json={}).json()
+        ver("arquiteto de mesmo nome (JOSE DA SILVA × José da Silva): a prévia propõe usar o existente e o fundo dele", p3.get("arquiteto", {}).get("acao") == "usar" and p3.get("arquiteto", {}).get("id") == jose
+            and [a_["id"] for a_ in p3.get("arquitetos_existentes", [])] == [jose] and p3.get("fundo", {}).get("acao") == "usar" and p3.get("fundo", {}).get("codigo") == f_jose
+            and p3.get("frase") == f"Vai usar o fundo {f_jose} · José da Silva com o arquiteto José da Silva (já cadastrado)", p3)
+        n3 = conta()
+        r3 = x.post("/api/doacoes-acervo/803/receber", json={"aplicar": True, "arquiteto": "existente", "arquiteto_id": jose, "fundo": "existente", "fundo_codigo": f_jose})
+        ver("vincular ao existente: nenhum fundo nem arquiteto novo; vínculo e site com o fundo dele", r3.status_code == 200 and conta()[:2] == n3[:2]
+            and tuple(c.execute("SELECT fundo_codigo, agente_id, fundo_criado, agente_criado FROM doacao_fundo WHERE site_id=803").fetchone() or ()) == (f_jose, jose, 0, 0)
+            and posts[-1][1].get("fundo") == f_jose and posts[-1][1].get("nota", "").startswith("Vinculado no painel"), r3.text[:200])
+        p4 = x.post("/api/doacoes-acervo/804/receber", json={"arquiteto": "novo", "fundo": "novo"})
+        p4b = x.post("/api/doacoes-acervo/804/receber", json={"arquiteto": "novo", "arquiteto_nome": "José da Silva Filho", "fundo": "novo", "fundo_nome": "José da Silva Filho"}).json()
+        ver("criar novo com o MESMO nome é recusado (sem duplicata); com outro nome, a prévia mostra o próximo código", p4.status_code == 409 and "usar o existente" in p4.text
+            and p4b.get("fundo", {}).get("codigo") == proximo_codigo(c) and p4b.get("arquiteto", {}).get("acao") == "criar", (p4.text[:200], p4b.get("frase")))
+        # ---- desmarcado: o caminho manual (código digitado) é o de sempre
+        n5 = conta(); posts.clear(); falhar["n"] = 0
+        r5 = x.post("/api/doacoes-acervo/805", json={"etapa": "recebido", "fundo": f_jose})
+        ver("desmarcado: o Salvar de sempre manda só etapa e código digitado; nada criado no painel", r5.status_code == 200
+            and posts == [("/wp-json/camp/v1/painel/doacoes-acervo/805", {"etapa": "recebido", "fundo": f_jose, "autor_painel": "Adm", "avisar_pagamento": "1"})] and conta()[:3] == n5[:3], (posts, r5.text[:200]))
+        ver("caminho manual: a doação mostra o fundo digitado (se existe no painel)", (x.get("/api/doacoes-acervo/805").json().get("fundo_vinculo") or {}).get("codigo") == f_jose)
+        # ---- sem o nome de quem o acervo pertenceu (ex.: dados apagados)
+        p6 = x.post("/api/doacoes-acervo/806/receber", json={})
+        p6b = x.post("/api/doacoes-acervo/806/receber", json={"arquiteto_nome": "Escritório Exemplo", "tipo_agente": "entidade_coletiva"})
+        ver("sem nome: a prévia pede o nome; com o nome digitado, funciona", p6.status_code == 400 and "nome do arquiteto" in p6.text and p6b.status_code == 200
+            and p6b.json().get("arquiteto", {}).get("tipo") == "entidade_coletiva", (p6.text[:200], p6b.text[:200]))
+        # ---- códigos nunca reusados: sempre o maior + 1 (buraco não é preenchido)
+        c.execute("INSERT INTO fundo (codigo, titulo) VALUES ('F090', 'Fundo Alto')"); c.commit()
+        pv7 = x.post("/api/doacoes-acervo/806/receber", json={"arquiteto_nome": "Outro Nome"}).json()
+        cods = [r_[0] for r_ in c.execute("SELECT fundo_codigo FROM doacao_fundo WHERE fundo_criado=1 ORDER BY criado_em, site_id")]
+        ver("códigos nunca reusados: cada criação pegou um código novo, crescente; depois de F090 vem F091 (não um buraco)", len(cods) == len(set(cods)) == 2 and cods == sorted(cods)
+            and pv7.get("fundo", {}).get("codigo") == "F091", (cods, pv7.get("fundo")))
         for l in res: print(l)
     elif modo == "doacoes_texto":
         # CAMP-DOA-TEXTO 20/11/2026. Rafael: "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas,

@@ -40,6 +40,8 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
 - CAMP-DOA-LISTA (21/11/2026, Rafael: "ele sumiu da lista de doações", sem mudar o contrato com o site). "Pedem ação" (o filtro padrão) vai
   até o acervo chegar: só recebido, nao_aprovada e arquivada saem (antes "paga" saía, e com a cobrança junto do contrato a doação costuma
   ser paga antes da assinatura). Na conferência da Autentique, se o site recusar voltar a etapa (cópia daqui atrasada: já paga), vai só a data.
+- CAMP-DOA-FUNDO (21/11/2026, Rafael: "e precisa criar quando terminar o fundo e arquiteto automaticamente."; sem mudar o contrato com o site):
+  ao passar a "Acervo recebido pela CAMP", POST …/{id}/receber (prévia simulada; com aplicar, cria) — ver a seção no fim deste arquivo.
 """
 from __future__ import annotations
 
@@ -513,6 +515,7 @@ def _completo(con, sid: int) -> dict:
     x = _detalhe(_um(con, sid))
     x["emails"] = _historico_emails(con, sid)
     x["autentique"] = _aut_info(con, sid)
+    x["fundo_vinculo"] = vinculo_fundo(con, sid)     # CAMP-DOA-FUNDO (campo novo, opcional)
     return x
 
 
@@ -1559,3 +1562,273 @@ def foto(sid: int, n: int, u: dict = Depends(auth.exige("admin"))):
         raise HTTPException(404, "Foto não encontrada")
     return Response(r.content, media_type=tipo, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
                                                         "Content-Disposition": f'inline; filename="doacao-{int(sid)}-foto-{int(n) + 1}"'})
+
+
+# ---------------------------------------------------------------- CAMP-DOA-FUNDO: acervo recebido → fundo e arquiteto no painel
+# Rafael (21/11/2026): "e precisa criar quando terminar o fundo e arquiteto automaticamente." Ao passar a doação a "Acervo recebido pela CAMP",
+# a tela mostra a prévia ("Vai criar o fundo F0xx · <nome> e o arquiteto <nome>") e, ao confirmar, o painel cria os dois numa transação só,
+# com o cadastro de sempre (rotas_fundos.criar_fundo: código de proximo_codigo / v_proximo_fundo; o arquiteto por inserir_agente), guarda o
+# vínculo em `doacao_fundo` e só então manda etapa=recebido + fundo ao site (POST de sempre; contrato igual). Site falhou: o fundo fica
+# (código não se reusa) e tentar de novo usa o mesmo. Arquiteto ou fundo de mesmo nome (sem acento e sem caixa): a prévia propõe usar o
+# existente. Nada pessoal (CPF, endereço, nome de quem doa) vai ao fundo ou ao arquiteto; nada de biografia: só o período dos documentos
+# (datas extremas do fundo, se for um intervalo de anos claro), o volume combinado (dimensão e suporte) e a procedência ("Doação à CAMP").
+TIPOS_AGENTE = {"pessoa": "pessoa (um arquiteto)", "entidade_coletiva": "escritório ou entidade (vários arquitetos)", "familia": "família (acervo de família)"}   # as da tela de Fundos
+
+
+def _norm_nome(t) -> str:
+    from .similaridade import normalizar
+    return normalizar(t)
+
+
+def sigla_sugerida(con, nome: str) -> str:
+    """As iniciais do nome, a mesma regra da tela de Fundos (nfIniciais): "Carlos Henrique Heck" → CHH. Já é de outro fundo → ""."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(nome or "")).encode("ascii", "ignore").decode().upper()
+    w = [x for x in re.sub(r"[^A-Z ]", " ", t).split() if x not in ("DE", "DA", "DO", "DOS", "DAS", "E")]
+    if not w:
+        return ""
+    s_ = w[0][0] + w[1][0] + w[-1][0] if len(w) >= 3 else ((w[0][0] + w[1][:2]).ljust(3, "X") if len(w) == 2 else w[0][:3].ljust(3, "X"))
+    return "" if con.execute("SELECT 1 FROM fundo WHERE sigla=?", (s_,)).fetchone() else s_
+
+
+def periodo_anos(txt) -> tuple[int | None, int | None]:
+    """"1960–1990", "1960 a 1990", "de 1960 até 1990", "1975" → anos (datas extremas). Qualquer outra coisa ("anos 60", "década de 1970",
+    "1960, 1985 e 1990") → nada: não se adivinha data."""
+    m = re.fullmatch(r"(?:de )?(\d{4})(?:(?: a| ate)? (\d{4}))?", _norm(re.sub(r"[\u2010-\u2015/-]", " ", str(txt or ""))))
+    if not m:
+        return None, None
+    ini, fim = int(m.group(1)), int(m.group(2) or m.group(1))
+    return (ini, fim) if 1800 <= ini <= fim <= 2100 else (None, None)
+
+
+def _dimensao(d: dict) -> str:
+    """O volume combinado pela equipe ("6 caixas, 40 rolos; 2 m lineares") → dimensão e suporte do fundo. Sem nada → ""."""
+    def n(k):
+        try:
+            return int(float(d.get(k) or 0))
+        except (TypeError, ValueError):
+            return 0
+    partes = [f"{n('caixas')} caixa{'s' if n('caixas') != 1 else ''}" if n("caixas") else "", f"{n('rolos')} rolo{'s' if n('rolos') != 1 else ''}" if n("rolos") else ""]
+    t = ", ".join(p for p in partes if p)
+    v = _txt(d.get("volume"), 120)
+    return "; ".join(x for x in (t, v) if x)
+
+
+def vinculo_fundo(con, sid: int) -> dict | None:
+    """O fundo desta doação: o criado/escolhido aqui (doacao_fundo) ou, no caminho manual, o código que o site guardou, se existir no painel."""
+    try:
+        v = con.execute("""SELECT v.*, f.titulo AS fundo_titulo, a.forma_autorizada AS agente_nome FROM doacao_fundo v JOIN fundo f ON f.codigo=v.fundo_codigo
+                           LEFT JOIN agente a ON a.id=v.agente_id WHERE v.site_id=?""", (int(sid),)).fetchone()
+    except Exception:  # noqa: BLE001  (banco sem a migração 237)
+        v = None
+    if v:
+        return {"codigo": v["fundo_codigo"], "titulo": v["fundo_titulo"], "agente_id": v["agente_id"], "agente_nome": v["agente_nome"] or "",
+                "fundo_criado": bool(v["fundo_criado"]), "agente_criado": bool(v["agente_criado"]), "criado_em": v["criado_em"], "criado_por": v["criado_por"] or "",
+                "site_ok": bool(v["site_ok_em"]), "site_erro": v["site_erro"] or "", "pelo_painel": True}
+    r = con.execute("SELECT dados FROM doacao_acervo WHERE site_id=?", (int(sid),)).fetchone()
+    cod = str((json.loads(r[0]) if r and r[0] else {}).get("fundo") or "").upper()
+    f = con.execute("SELECT codigo, titulo FROM fundo WHERE codigo=?", (cod,)).fetchone() if re.fullmatch(r"F\d{3}", cod) else None
+    return {"codigo": f["codigo"], "titulo": f["titulo"], "pelo_painel": False} if f else None
+
+
+def origem_fundo(con, codigo: str) -> dict | None:
+    """Para a página do fundo: "Origem: doação de acervo CAMP-2026-…" (a doação que criou/escolheu este fundo; senão a que guardou o código)."""
+    try:
+        r = con.execute("SELECT d.site_id, d.protocolo FROM doacao_fundo v JOIN doacao_acervo d ON d.site_id=v.site_id WHERE v.fundo_codigo=? ORDER BY v.criado_em LIMIT 1",
+                        (codigo,)).fetchone()
+        r = r or con.execute("SELECT site_id, protocolo FROM doacao_acervo WHERE upper(json_extract(dados,'$.fundo'))=? ORDER BY site_id LIMIT 1", (codigo,)).fetchone()
+    except Exception:  # noqa: BLE001  (banco sem as migrações 232/237)
+        return None
+    return {"site_id": r["site_id"], "protocolo": r["protocolo"] or ""} if r else None
+
+
+def _arquitetos_parecidos(con, nome: str) -> list[dict]:
+    """Arquitetos com o MESMO nome sem acento e sem caixa (forma autorizada ou grafia do carimbo), com os fundos de que são produtores."""
+    alvo = _norm_nome(nome)
+    if not alvo:
+        return []
+    out = []
+    for a in con.execute("""SELECT a.id, a.tipo, a.forma_autorizada, (SELECT GROUP_CONCAT(forma, '|') FROM agente_forma_variante v WHERE v.agente_id=a.id) AS formas
+                            FROM agente a ORDER BY a.id"""):
+        if alvo in {_norm_nome(a["forma_autorizada"]), *(_norm_nome(f) for f in (a["formas"] or "").split("|") if f)}:
+            fundos = [dict(f) for f in con.execute("""SELECT f.codigo, f.titulo FROM fundo_agente fa JOIN fundo f ON f.codigo=fa.fundo_codigo
+                                                      WHERE fa.agente_id=? AND fa.papel='produtor' ORDER BY f.codigo""", (a["id"],))]
+            out.append({"id": a["id"], "nome": a["forma_autorizada"], "tipo": a["tipo"], "fundos": fundos})
+    return out
+
+
+def _fundos_parecidos(con, nome: str, arquiteto: dict | None) -> list[dict]:
+    """Fundos do arquiteto escolhido (produtor) e fundos de MESMO nome sem acento e sem caixa."""
+    alvo = _norm_nome(nome)
+    out = {f["codigo"]: f for f in (arquiteto or {}).get("fundos", [])}
+    for f in con.execute("SELECT codigo, titulo FROM fundo ORDER BY codigo"):
+        if alvo and _norm_nome(f["titulo"]) == alvo:
+            out.setdefault(f["codigo"], dict(f))
+    return [out[k] for k in sorted(out)]
+
+
+class Receber(BaseModel):
+    aplicar: bool = False                # padrão: só a prévia (simulada numa transação desfeita)
+    fundo: str = "auto"                  # auto (o existente proposto, senão novo) | novo | existente
+    fundo_codigo: str | None = None      # com fundo=existente
+    fundo_nome: str | None = None
+    sigla: str | None = None             # vazio = sem sigla por enquanto (definir depois na página do fundo)
+    arquiteto: str = "auto"              # auto | novo | existente
+    arquiteto_id: int | None = None      # com arquiteto=existente
+    arquiteto_nome: str | None = None
+    tipo_agente: str = "pessoa"
+    mudanca: Mudanca | None = None       # o resto do Salvar (nota, quantidade catalogada, aviso…); etapa e fundo o painel põe
+
+
+def _plano(con, r, b: Receber) -> dict:
+    """O que vai acontecer (sem gravar nada). Erro de escolha → HTTPException 400/409."""
+    d = json.loads(r["dados"]) if r["dados"] else {}
+    nome_arq = _txt(b.arquiteto_nome if b.arquiteto_nome is not None else (r["autor"] or d.get("autor")), 200)
+    arqs = _arquitetos_parecidos(con, nome_arq)
+    modo_a = b.arquiteto if b.arquiteto in ("novo", "existente") else ("existente" if arqs else "novo")
+    arq = None
+    if modo_a == "existente":
+        aid = b.arquiteto_id or (arqs[0]["id"] if arqs else None)
+        a = con.execute("SELECT id, tipo, forma_autorizada FROM agente WHERE id=?", (aid,)).fetchone() if aid else None
+        if not a:
+            raise HTTPException(400, "Escolha o arquiteto que já existe, ou marque criar novo.")
+        arq = next((x for x in arqs if x["id"] == a["id"]), None) or {"id": a["id"], "nome": a["forma_autorizada"], "tipo": a["tipo"], "fundos": [
+            dict(f) for f in con.execute("SELECT f.codigo, f.titulo FROM fundo_agente fa JOIN fundo f ON f.codigo=fa.fundo_codigo WHERE fa.agente_id=? AND fa.papel='produtor' ORDER BY f.codigo", (a["id"],))]}
+    else:
+        if not nome_arq:
+            raise HTTPException(400, "Informe o nome do arquiteto (o formulário não trouxe a quem o acervo pertenceu).")
+        if con.execute("SELECT 1 FROM agente WHERE lower(forma_autorizada)=lower(?)", (nome_arq,)).fetchone():
+            raise HTTPException(409, f"Já existe o arquiteto “{nome_arq}”: escolha usar o existente ou mude o nome.")
+        if b.tipo_agente not in TIPOS_AGENTE:
+            raise HTTPException(400, "Tipo do arquiteto inválido")
+    nome_f = _txt(b.fundo_nome if b.fundo_nome is not None else (arq["nome"] if arq else nome_arq), 200)
+    fundos = _fundos_parecidos(con, nome_f, arq)
+    modo_f = b.fundo if b.fundo in ("novo", "existente") else ("existente" if fundos else "novo")
+    plano = {"arquiteto": {"acao": "usar" if arq else "criar", "id": (arq or {}).get("id"), "nome": arq["nome"] if arq else nome_arq,
+                           "tipo": (arq or {}).get("tipo") or b.tipo_agente},
+             "arquitetos_existentes": arqs, "fundos_existentes": fundos}
+    if modo_f == "existente":
+        cod = (b.fundo_codigo or (fundos[0]["codigo"] if fundos else "")).strip().upper()
+        f = con.execute("SELECT codigo, titulo FROM fundo WHERE codigo=?", (cod,)).fetchone() if cod else None
+        if not f:
+            raise HTTPException(400, "Escolha o fundo que já existe, ou marque criar novo.")
+        plano["fundo"] = {"acao": "usar", "codigo": f["codigo"], "nome": f["titulo"]}
+        return plano
+    if not nome_f:
+        raise HTTPException(400, "Informe o nome do fundo.")
+    if con.execute("SELECT 1 FROM fundo WHERE lower(titulo)=lower(?)", (nome_f,)).fetchone():
+        raise HTTPException(409, f"Já existe fundo com o nome “{nome_f}”: escolha usar o existente ou mude o nome.")
+    sig = (b.sigla if b.sigla is not None else sigla_sugerida(con, nome_f)).strip().upper()
+    if sig:
+        from .rotas_fundos import _validar_sigla
+        sig = _validar_sigla(con, sig)
+    ini, fim = periodo_anos(d.get("periodo"))
+    plano["fundo"] = {"acao": "criar", "codigo": None, "nome": nome_f, "sigla": sig or None, "data_inicio": ini, "data_fim": fim, "dimensao_suporte": _dimensao(d) or None,
+                      "procedencia": "Doação à CAMP."}
+    return plano
+
+
+def _executar(con, sid: int, r, plano: dict, ator: str) -> dict:
+    """Grava o plano (fundo, arquiteto, vínculo, eventos). Não faz commit: a prévia desfaz, a confirmação grava tudo de uma vez."""
+    from .rotas_fundos import _evento as ev_fundo, criar_fundo, inserir_agente
+    a, f = plano["arquiteto"], plano["fundo"]
+    prot = r["protocolo"] or str(sid)
+    if a["acao"] == "criar":
+        aid = inserir_agente(con, a["tipo"], a["nome"])
+        ev_fundo(con, "agente", str(aid), "criado", ator, {"nome": a["nome"], "origem": "doacao_acervo", "doacao": prot})
+    else:
+        aid = a["id"]
+    if f["acao"] == "criar":
+        cod = criar_fundo(con, f["nome"], f["sigla"], f["data_inicio"], f["data_fim"], a["tipo"], ator, agente_id=aid,
+                          detalhe={"titulo": f["nome"], "origem": "doacao_acervo", "doacao": prot, "site_id": int(sid)})["codigo"]
+        con.execute("UPDATE fundo SET dimensao_suporte=?, procedencia=? WHERE codigo=?", (f["dimensao_suporte"], f["procedencia"], cod))
+    else:
+        cod = f["codigo"]
+        con.execute("INSERT OR IGNORE INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES (?,?,'produtor')", (cod, aid))
+    con.execute("INSERT INTO doacao_fundo (site_id, fundo_codigo, agente_id, fundo_criado, agente_criado, criado_por) VALUES (?,?,?,?,?,?)",
+                (int(sid), cod, aid, int(f["acao"] == "criar"), int(a["acao"] == "criar"), ator))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'fundo_vinculado',?,?)",
+                (str(int(sid)), ator, json.dumps({"fundo": cod, "fundo_criado": f["acao"] == "criar", "agente_id": aid, "agente_criado": a["acao"] == "criar"}, ensure_ascii=False)))
+    return {"codigo": cod, "agente_id": aid}
+
+
+def _frase(plano: dict, codigo: str) -> str:
+    f, a = plano["fundo"], plano["arquiteto"]
+    p1 = f"Vai criar o fundo {codigo} · {f['nome']}" if f["acao"] == "criar" else f"Vai usar o fundo {codigo} · {f['nome']}"
+    p2 = f"e o arquiteto {a['nome']}" if a["acao"] == "criar" else f"com o arquiteto {a['nome']} (já cadastrado)"
+    return f"{p1} {p2}"
+
+
+@router.post("/{sid}/receber")
+def receber(sid: int, b: Receber, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-DOA-FUNDO: "Acervo recebido pela CAMP" criando fundo e arquiteto. Sem `aplicar`: só a prévia (o plano é executado numa transação
+    DESFEITA, para o código mostrado ser o que a criação daria). Com `aplicar`: cria tudo de uma vez, guarda o vínculo e manda ao site
+    etapa=recebido + fundo (+ o resto do Salvar). Doação que já tem fundo: usa o mesmo (nunca cria um segundo)."""
+    con = connect()
+    try:
+        r = _um(con, sid)
+        ator = (u or {}).get("email") or "painel"
+        vinc = vinculo_fundo(con, sid)
+        if vinc and not vinc.get("pelo_painel"):
+            vinc = None                                   # o código manual não impede criar (a equipe escolhe)
+        if not b.aplicar:
+            if vinc:
+                return {"simulado": True, "vinculado": vinc, "frase": f"Esta doação já tem o fundo {vinc['codigo']} · {vinc['titulo']}: vai usar o mesmo."}
+            plano = _plano(con, r, b)
+            try:
+                cod = _executar(con, sid, r, plano, ator)["codigo"]
+            finally:
+                con.rollback()                            # prévia: nada fica
+            plano["fundo"]["codigo"] = cod
+            return {"simulado": True, "vinculado": None, **plano, "frase": _frase(plano, cod), "tipos_agente": TIPOS_AGENTE}
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações: nada foi criado.")
+        criado = None
+        if not vinc:
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                vinc = vinculo_fundo(con, sid)            # outra aba confirmou ao mesmo tempo: usa o dela
+                vinc = vinc if vinc and vinc.get("pelo_painel") else None
+                if not vinc:
+                    plano = _plano(con, r, b)
+                    res_ = _executar(con, sid, r, plano, ator)
+                    criado = {"frase": _frase(plano, res_["codigo"]).replace("Vai criar", "Criado").replace("Vai usar", "Usado"), **res_,
+                              "fundo_criado": plano["fundo"]["acao"] == "criar", "agente_criado": plano["arquiteto"]["acao"] == "criar"}
+                con.commit()
+            except Exception:
+                con.rollback()
+                raise
+            vinc = vinc or vinculo_fundo(con, sid)
+            registrar(logging.INFO, "doacoes_acervo_fundo", "Fundo da doação de acervo criado/vinculado no painel", site_id=int(sid), fundo=vinc["codigo"],
+                      fundo_criado=bool(criado and criado["fundo_criado"]), agente_criado=bool(criado and criado["agente_criado"]))
+        cod = vinc["codigo"]
+        mud = (b.mudanca or Mudanca()).model_copy()
+        mud.etapa, mud.fundo = "recebido", cod
+        quem = "o fundo " + f"{cod} · {vinc['titulo']}" + (f" e o arquiteto {vinc['agente_nome']}" if vinc.get("agente_nome") else "")
+        nota_aut = ("Criados no painel: " if vinc["fundo_criado"] else "Vinculado no painel: ") + quem + "."
+        mud.nota = (nota_aut + (" " + mud.nota.strip() if (mud.nota or "").strip() else ""))[:2000]
+        con.close()
+        con = None
+        try:
+            x = mudar(sid, mud, u)
+        except HTTPException as e:
+            c2 = connect()
+            try:
+                c2.execute("UPDATE doacao_fundo SET site_erro=? WHERE site_id=?", (str(e.detail)[:300], int(sid)))
+                c2.commit()
+            finally:
+                c2.close()
+            raise HTTPException(e.status_code, f"O fundo {cod} ficou criado no painel, mas o site não recebeu a etapa: {e.detail} "
+                                               "Tente de novo: o mesmo fundo será usado.") from e
+        c2 = connect()
+        try:
+            c2.execute("UPDATE doacao_fundo SET site_ok_em=datetime('now'), site_erro=NULL WHERE site_id=?", (int(sid),))
+            c2.commit()
+            x["fundo_vinculo"] = vinculo_fundo(c2, sid)
+        finally:
+            c2.close()
+        x["receber"] = {"criado": criado, "mensagem": (criado["frase"] if criado else f"Usado o fundo {cod} desta doação") + ". Acervo recebido: etapa enviada ao site."}
+        return x
+    finally:
+        if con is not None:
+            con.close()
