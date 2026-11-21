@@ -21892,6 +21892,24 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (texto para o contrato): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Doações (texto para o contrato): todas as verificações rodaram")
 
+print("Doações de acervo · Pedem ação até o acervo chegar: paga e assinada ficam, recebido/arquivada/não aprovada saem; Autentique com a doação já paga (CAMP-DOA-LISTA)")
+rc, out = rodar("doacoes_pedem_acao", f"{tmp}/doacoes_pedem_acao.db")
+if rc != 0: ok(False, f"teste doacoes_pedem_acao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (pedem ação): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Doações (pedem ação): todas as verificações rodaram")
+
+print("Doações de acervo · acervo recebido cria fundo e arquiteto: prévia com o próximo código, um só, site falhou reusa, arquiteto existente, manual igual, só admin (CAMP-DOA-FUNDO)")
+rc, out = rodar("doacoes_fundo_auto", f"{tmp}/doacoes_fundo_auto.db")
+if rc != 0: ok(False, f"teste doacoes_fundo_auto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (fundo e arquiteto): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 21, "Doações (fundo e arquiteto): todas as verificações rodaram")
+
 print("Doações de acervo · Autentique: configuração (token sensível), Testar conexão, PDF → contrato na Autentique e link no TR30, erro = nada sai, assinado por todos → etapa (Autentique e site falsos)")
 rc, out = rodar("autentique_doacao", f"{tmp}/autentique_doacao.db")
 if rc != 0: ok(False, f"teste autentique_doacao não rodou -> {out[-1500:]}")
