@@ -44,7 +44,7 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
       '"Mais" aberto: Visão geral · Acervo · Público e processos · Administração (com Histórico e Qualidade do CAMP Vision, só admin) · Ajuda: ' + v1.join(','));
   await page.click('#nav-mais-pc');
 
-  // 3) nome do menu = título da página (h1, topo e trilha)
+  // 3) nome do menu = título da página (h1 e trilha); o topo fica vazio nas páginas do menu (Rafael 21/11: "repetindo")
   const nomeMenu = v => page.$eval(`#nav button[data-v="${v}"]`, e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim());
   const pares = [];
   for (const v of Object.keys(TECLAS)) {
@@ -52,7 +52,7 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
     const menu = await nomeMenu(v);
     const h1 = v === 'painel' ? null : await page.$eval(`#v-${v} .hdr h1`, e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()).catch(() => '(sem h1)');
     const topo = (await page.textContent('#where')).trim(), trilha = await page.$eval('#gcrumb b:last-of-type', e => e.textContent.trim()).catch(() => '');
-    const ok = (h1 === null || h1 === menu) && topo === menu && trilha === menu;
+    const ok = (h1 === null || h1 === menu) && topo === '' && trilha === menu;   // 21/11: o topo não repete o nome da página (só a trilha e o h1)
     pares.push(`${v}: menu "${menu}" · h1 "${h1}" · topo "${topo}" · trilha "${trilha}"`);
     chk(ok, `nome do menu = título da página em "${v}" (menu "${menu}", h1 "${h1}", topo "${topo}", trilha "${trilha}")`);
   }
