@@ -69,7 +69,8 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .nav button.on .n{background:var(--surface);color:var(--blue)}
 .nav .grp{margin:12px 10px 4px;font-size:var(--fs-xs);color:var(--ink3)}
 .side .foot{margin-top:auto;padding:10px;font-size:var(--fs-sm);color:var(--ink3);border-top:1px solid var(--line2)}
-.main{display:flex;flex-direction:column;min-width:0;overflow:auto}
+.main{display:flex;flex-direction:column;min-width:0;overflow:auto;position:relative}   /* CAMP-VIEW: o .main é o rolador da tela e também o bloco que contém o que é absoluto dentro dele. Sem isso, um .sr (texto só para leitor de tela, position:absolute) no fim de uma lista longa ficava preso à janela, fora do .main: a JANELA passava a rolar (roda no fim da lista, foco, scrollIntoView), o .app de 100% de altura subia e o fundo cinza-claro do body aparecia como um retângulo em branco por cima do menu, da imagem e da lista */
+@media screen{html,body{overflow:hidden}}   /* CAMP-VIEW: a janela nunca rola (quem rola é o .main); a impressão continua com a página inteira */
 .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:12px;padding:14px 26px 10px;flex-wrap:wrap}
 .machine-status{display:flex;align-items:center;gap:5px;margin-left:auto}
 .ms-resumo{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.ms-resumo .ms-txt b{font-weight:600}
