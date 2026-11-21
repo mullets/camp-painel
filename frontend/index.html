@@ -1782,14 +1782,14 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 .doa-passos li.pulado{opacity:.6;text-decoration:line-through;text-decoration-color:var(--ink3)}.doa-passos li.pulado small{text-decoration:none}
 .doa-prox-det{margin:4px 0 8px}.doa-sec{margin:14px 0;padding-top:10px;border-top:1px solid var(--line)}.doa-sec h3{margin:0 0 6px}
 .doa-aviso-roteiro{padding:10px 12px;margin:6px 0;border-color:var(--blue);background:var(--blue-soft)}
-.doa-tfs,.doa-arqs,.doa-tl{list-style:none;margin:6px 0;padding:0;display:grid;gap:6px}.doa-tf{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.doa-tfs,.doa-arqs,.doa-tl{list-style:none;margin:6px 0;padding:0;display:grid;gap:6px}.doa-tf{display:grid;grid-template-columns:1fr;gap:6px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
 .doa-tf-l{display:grid;gap:2px;min-width:0;word-break:break-word}.doa-tf-l small{color:var(--ink2)}.doa-tf-nota{white-space:pre-wrap}.doa-tf.feita .doa-tf-l b{text-decoration:line-through;color:var(--ink3)}.doa-tf.atrasada{border-color:var(--red,#c62828)}
-.doa-tf-a{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}.doa-tf-form{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px 10px;padding-top:6px}.doa-tf-form .act,.doa-tf-form label:has(textarea){grid-column:1/-1}
+.doa-tf-a{display:flex;flex-wrap:wrap;gap:6px}.doa-tf-form{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px 10px;padding-top:6px}.doa-tf-form .act,.doa-tf-form label:has(textarea){grid-column:1/-1}
 .doa-sec>.doa-tf-form{padding:8px 10px;border:1px dashed var(--line);border-radius:var(--r-md)}
 .doa-arqs li{word-break:break-word}.doa-arqs .doa-mini{min-height:32px;padding:2px 8px;margin-left:4px}.doa-contrato-ok{margin:4px 0 8px}
 .doa-anexar{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px 10px;align-items:end}.doa-anexar .act{grid-column:1/-1}
-.doa-tl{max-height:420px;overflow:auto}.doa-tl li{padding:6px 8px;border-left:3px solid var(--line);word-break:break-word}.doa-tl li[data-cat="nota"]{border-left-color:var(--blue)}.doa-tl li[data-cat="email"]{border-left-color:var(--amber,#b26a00)}.doa-tl li[data-cat="tarefa"]{border-left-color:var(--green,#2e7d32)}
-@media (max-width:600px){.doa-passos{flex-direction:column;flex-wrap:nowrap;gap:3px}.doa-passos li{grid-template-columns:auto 1fr auto;padding:3px 8px}.doa-passos li small{grid-column:3;grid-row:1}.doa-passos .pt{grid-row:auto}.doa-tf{grid-template-columns:1fr}.doa-tf-a{justify-content:flex-start}}
+.doa-tl{max-height:420px;overflow:auto}.doa-tl li{display:grid;gap:2px;padding:6px 8px;border-left:3px solid var(--line);word-break:break-word}.doa-tl li[hidden]{display:none}.doa-tl li small .tag{font-size:var(--fs-sm2);padding:0 6px}.doa-tl li[data-cat="nota"]{border-left-color:var(--blue)}.doa-tl li[data-cat="email"]{border-left-color:var(--amber,#b26a00)}.doa-tl li[data-cat="tarefa"]{border-left-color:var(--green,#2e7d32)}
+@media (max-width:600px){.doa-passos{flex-direction:column;flex-wrap:nowrap;gap:3px}.doa-passos li{grid-template-columns:auto 1fr auto;padding:3px 8px}.doa-passos li small{grid-column:3;grid-row:1}.doa-passos .pt{grid-row:auto}}
 
 /* CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais) */
 #em-p-enviados .filterbar select{max-width:200px}#em-p-enviados #em-q{flex:1 1 260px;min-width:170px}
@@ -9062,7 +9062,7 @@ const DOA_HIST_CAT={nota:'nota',etapa:'etapa',email:'e-mail',autentique:'Autenti
 function doaHistoricoHTML(x){const it=x.linha_do_tempo||[];
   return `<section class="doa-sec doa-hist" aria-labelledby="doa-h-hist"><h3 id="doa-h-hist">Histórico</h3>
   <div class="tabs doa-hist-f" role="tablist" aria-label="Filtrar o histórico">${[['tudo','Tudo'],['nota','Notas'],['email','E-mails'],['tarefa','Tarefas']].map(([k,l],i)=>`<button type="button" role="tab" class="${i?'':'on'}" aria-selected="${i?'false':'true'}" data-doa-hist="${k}">${l}</button>`).join('')}</div>
-  ${it.length?`<ul class="doa-tl">${it.map(i=>`<li data-cat="${escHtml(i.categoria==='anexo'?'tarefa':i.categoria)}"><small>${escHtml(i.quando?fmtDataHora(i.quando):'')}${i.quem?' · '+escHtml(i.quem):''} · <span class="tag">${escHtml(DOA_HIST_CAT[i.categoria]||i.categoria)}</span></small><br>${escHtml(i.texto)}</li>`).join('')}</ul>`:'<p class="help">Nada ainda.</p>'}</section>`}
+  ${it.length?`<ul class="doa-tl">${it.map(i=>`<li data-cat="${escHtml(i.categoria==='anexo'?'tarefa':i.categoria)}"><small>${escHtml(i.quando?fmtDataHora(i.quando):'')}${i.quem?' · '+escHtml(i.quem):''} · <span class="tag">${escHtml(DOA_HIST_CAT[i.categoria]||i.categoria)}</span></small><span>${escHtml(i.texto)}</span></li>`).join('')}</ul>`:'<p class="help">Nada ainda.</p>'}</section>`}
 async function doacApi(id,url,opt,ok){try{const r=await API(url,opt);limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r);toast(typeof ok==='function'?ok(r):ok);carregarDoacoes();return r}catch(err){toast(err.message)}}
 function doacForm(id){const f=document.querySelector(`[data-tf-form="${id}"]`);if(!f)return null;const o={};f.querySelectorAll('[data-tf]').forEach(el=>{o[el.dataset.tf]=el.value.trim()});if(!o.valor&&id!=='nova')o.valor='__limpar__';return o}
 document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)return;
