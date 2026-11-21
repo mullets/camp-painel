@@ -45,6 +45,9 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
 - CAMP-DOA-CENTRAL (21/11/2026, sem mudar o contrato com o site): a tela vira a central de cada doação — abas (Em andamento, Recebidos,
   Não aprovadas e arquivadas, Todas), linha de etapas, próximos passos (tarefas), arquivos, contrato assinado baixado da Autentique e
   histórico único. Ver doacoes_central.py.
+- CAMP-DOA-AMIGO (contrato 1.30, site 1.39.0; Rafael: "Não vi na lista também a Raquel, que doou acervo e virou amiga.."): "Conferir Amigos das
+  doações pagas" (só admin) pede ao site a lista das doações pagas sem cadastro de Amigo (simula) e, no "Criar", o site cria/estende o Amigo
+  (sem boas-vindas) e o painel busca os Amigos e as doações; o detalhe liga a doação ao Amigo (amigo_painel) e diz quando vira Amigo.
 """
 from __future__ import annotations
 
@@ -529,7 +532,74 @@ def _completo(con, sid: int) -> dict:
     x["fundo_vinculo"] = vinculo_fundo(con, sid)     # CAMP-DOA-FUNDO (campo novo, opcional)
     from . import doacoes_central                   # CAMP-DOA-CENTRAL: linha de etapas, tarefas, arquivos, histórico único (campos novos)
     x.update(doacoes_central.extras(con, x))
+    # CAMP-DOA-AMIGO (contrato 1.30): o Amigo que a doação deu, no painel (para o link), e a situação (ativo · aguarda_pagamento · falta)
+    am = x.get("amigo") if isinstance(x.get("amigo"), dict) else None
+    ra = con.execute("SELECT id, nome, protocolo, situacao FROM amigo WHERE site_id=? AND apagado_em IS NULL", (int(am.get("id") or 0),)).fetchone() if am else None
+    x["amigo_painel"] = {"id": ra["id"], "protocolo": ra["protocolo"] or am.get("protocolo") or "", "situacao": ra["situacao"]} if ra else None
+    if not x.get("amigo_situacao"):                 # site antigo (sem o campo): o mesmo cálculo com o que veio
+        x["amigo_situacao"] = "ativo" if am else ("falta" if x.get("etapa") in ("paga",) or (x.get("cobranca") or {}).get("situacao") == "paga" else "aguarda_pagamento")
     return x
+
+
+# ---------------------------------------------------------------- CAMP-DOA-AMIGO: "Conferir Amigos das doações pagas" (contrato 1.30)
+ROTA_AMIGOS = "/wp-json/camp/v1/painel/doacoes-acervo/amigos"
+SITE_ANTIGO_AMIGOS = "O site ainda não confere os Amigos das doações pagas: avise quem cuida do site (plugin da CAMP 1.39.0 ou mais novo)."
+
+
+def _site_amigos(corpo: dict, wp=None) -> dict:
+    """POST da conferência no site. Simula por padrão (o site também). Erro → HTTPException com a mensagem para a tela; nada muda."""
+    try:
+        wp = wp or _wp()
+        r = wp.h.post(ROTA_AMIGOS, json=corpo)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Não consegui falar com o site ({type(e).__name__}). Nada foi criado.")
+    if r.status_code == 404:
+        raise HTTPException(409, SITE_ANTIGO_AMIGOS)
+    if r.status_code >= 400:
+        try:
+            msg = str((r.json() or {}).get("message") or "")[:240]
+        except ValueError:
+            msg = ""
+        raise HTTPException(502, (msg or f"O site respondeu {r.status_code}") + " Nada foi criado.")
+    d = r.json() or {}
+    if not isinstance(d, dict) or not d.get("ok"):
+        raise HTTPException(502, "O site não confirmou. Nada foi criado.")
+    return d
+
+
+def previa_amigos(wp=None) -> dict:
+    """Quais doações pagas estão sem cadastro de Amigo (o site simula; nada muda)."""
+    d = _site_amigos({"simular": True}, wp)
+    return {"itens": d.get("itens") or [], "total": int(d.get("total") or 0)}
+
+
+def criar_amigos(con, ids: list[int], ator: str, wp=None) -> dict:
+    """Cria (ou estende) no site os Amigos das doações escolhidas, sem e-mail de boas-vindas, e já busca os Amigos e as doações de novo."""
+    if not ids:
+        raise HTTPException(400, "Escolha pelo menos uma doação. Nada foi criado.")
+    d = _site_amigos({"simular": False, "ids": [int(i) for i in ids]}, wp)
+    itens = d.get("itens") or []
+    for it in itens:
+        try:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'amigo_conferido',?,?)",
+                        (str(int(it.get("id") or 0)), ator, json.dumps({"amigo_site": it.get("amigo_id"), "motivo": it.get("motivo"), "vai": it.get("vai")}, ensure_ascii=False)))
+        except Exception:  # noqa: BLE001
+            pass
+    con.commit()
+    from . import amigos
+    try:
+        amigos.coletar(con, wp)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        coletar(con, wp)
+    except Exception:  # noqa: BLE001
+        pass
+    criados = sum(1 for it in itens if it.get("amigo_id"))
+    registrar(logging.INFO, "doacoes_amigos", "Amigos das doações pagas conferidos", criados=criados, pedidos=len(ids))
+    return {"ok": True, "criados": criados, "itens": itens}
 
 
 def _um(con, sid: int):
@@ -835,6 +905,24 @@ def importar_ficha(b: ImportarFicha, u: dict = Depends(auth.exige("admin"))) -> 
         res = {k: sum(1 for p in plano if p["acao"] == k) for k in ACAO_NOME}
         return {"simulado": not b.aplicar, "aplicado": bool(b.aplicar), "feitos": feitos, "linhas": plano, "resumo": res,
                 "avisos": sum(len(p["avisos"]) for p in plano), "etapas": {k: ETAPAS[k] for k in ETAPAS_IMPORTAR}}
+    finally:
+        con.close()
+
+
+@router.post("/amigos/previa")
+def amigos_previa(u: dict = Depends(auth.exige("admin"))) -> dict:
+    return previa_amigos()
+
+
+class CriarAmigos(BaseModel):
+    ids: list[int]
+
+
+@router.post("/amigos")
+def amigos_criar(b: CriarAmigos, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return criar_amigos(con, b.ids, u["email"])
     finally:
         con.close()
 

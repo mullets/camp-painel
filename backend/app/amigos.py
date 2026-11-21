@@ -25,6 +25,14 @@ de trabalho da equipe:
   o código e os benefícios — o site falhou = nada muda aqui. Apagar: prévia + confirmação digitando o nome ou APAGAR; o site cancela a
   assinatura e apaga primeiro (falhou = nada é apagado); aqui saem os dados pessoais e o Amigo some do painel; ficam, anônimos, os
   pagamentos (valor, data, meio, chave/referência) e o número de Amigo Fundador (não volta). Histórico sem dado pessoal.
+- Um Amigo por e-mail (CAMP-AMIGO-DUP, 21/11/2026, Rafael: "por que ele conseguiu fazer 2 cadastros como amigo?"; contrato 1.29, sem migração):
+  o site passou a reaproveitar o cadastro não pago e a bloquear quem já é Amigo; aqui, o mesmo e-mail normalizado (normaliza_email, igual ao
+  do site) em dois cadastros ganha "e-mail repetido" e o filtro Repetidos. "Juntar cadastros" (só admin): prévia (o site simula), escolha de
+  qual fica, confirmação JUNTAR; o site junta primeiro (POST /painel/apoios/{id}/juntar) e só então pagamentos, e-mails, histórico e notas
+  passam para o que fica e o que sai é apagado aqui (sem tirar a pessoa da lista de e-mails).
+- Amigo pela doação de acervo (CAMP-DOA-AMIGO, 21/11/2026, Rafael: "Não vi na lista também a Raquel, que doou acervo e virou amiga.."; contrato
+  1.30, migração 240): a coleta guarda fonte, doacao_site_id e doacao_protocolo; a lista mostra a origem "doação de acervo" e o detalhe
+  "Origem: doação de acervo CAMP-…" com o link da doação.
 """
 from __future__ import annotations
 
@@ -56,6 +64,7 @@ LIMITE_PAGINA = 200
 TIPOS = ("amigo", "projeto", "arquiteto")
 SITUACOES = ("pago", "pendente", "vencido", "recusado", "isento", "cancelado")
 INATIVOS = "inativos"                # filtro da lista (desativados; não é uma situação de pagamento)
+REPETIDOS = "repetidos"              # CAMP-AMIGO-DUP: filtro da lista (o mesmo e-mail em mais de um cadastro de Amigo)
 # CAMP-AMIGO-APAGAR: o que NÃO sai para quem está inativo (cobrança, lembretes TR16–TR19, boas-vindas). Recibo e texto livre a equipe ainda manda.
 MODELOS_BLOQUEADOS_INATIVO = ("cobranca", "cobranca_pendente", "lembrete_renovacao", "aviso_vencido", "boas_vindas")
 STATUS_PEDIDO = ("novo", "em_contato", "proposta", "fechado", "arquivado")
@@ -217,10 +226,18 @@ def _situacao_de(sit_site: str, validade: str | None) -> str:
 
 _FONTE = {"situacao": ("situacao_pagamento",), "situacao_site": ("situacao_pagamento",), "status_pedido": ("status",), "faixa": ("faixa", "faixa_nome"),
           "area": ("area", "area_nome"), "origem_pagina": ("origem",), "valor_cobrado": ("valor_cobrado", "valor"), "criado_no_site": ("criado_em",),
-          "alterado_no_site": ("alterado_em",), "tipo": ("tipo",)}
+          "alterado_no_site": ("alterado_em",), "tipo": ("tipo",), "doacao_site_id": ("doacao_id",)}
 _CAMPOS_PESSOAIS = ("nome", "empresa", "cargo", "email", "telefone", "vinculo", "mensagem", "origem_pagina")
 # campo do painel → chave do POST ao site (para saber o que a coleta NÃO deve sobrescrever enquanto está pendente)
 _PEND_CAMPO = {"situacao": "situacao", "validade": "validade", "notas": "notas", "status_pedido": "status", "categoria": "categoria", "modalidade": "modalidade"}
+
+
+def _int_pos(v) -> int | None:
+    try:
+        n = int(v or 0)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def _gravar(con, x: dict, out: dict) -> None:
@@ -244,6 +261,8 @@ def _gravar(con, x: dict, out: dict) -> None:
         "valor_cobrado": float(x.get("valor_cobrado") or x.get("valor") or 0) or None, "inicio": _dia_sp(x.get("inicio")), "validade": validade,
         "codigo": _txt(x.get("codigo"), 40) or None, "fundador": int(x.get("fundador") or 0) or None, "renova": 1 if x.get("renova") is True else 0,
         "criado_no_site": _txt(x.get("criado_em"), 40) or None, "alterado_no_site": _txt(x.get("alterado_em"), 40) or None,
+        # CAMP-DOA-AMIGO (contrato 1.30, opcionais): de onde o cadastro nasceu e a doação de acervo que deu o Amigo
+        "fonte": _txt(x.get("fonte"), 40) or None, "doacao_site_id": _int_pos(x.get("doacao_id")), "doacao_protocolo": _txt(x.get("doacao_protocolo"), 40) or None,
     }
     ja = con.execute("SELECT * FROM amigo WHERE site_id=?", (sid,)).fetchone()
     if ja:                                 # campo que não veio (site mais antigo, resposta parcial) não muda o que já está aqui
@@ -1051,6 +1070,7 @@ def anonimizar_por_email(con, email: str) -> int:
 
 # ---------------------------------------------------------------- desativar, reativar e apagar (CAMP-AMIGO-APAGAR, contrato 1.28)
 SITE_ANTIGO_ACAO = "o site ainda não desativa nem apaga Amigos: avise quem cuida do site (plugin da CAMP 1.37.0 ou mais novo)"
+SITE_ANTIGO_JUNTAR = "o site ainda não junta cadastros de Amigo: avise quem cuida do site (plugin da CAMP 1.38.0 ou mais novo)"
 APAGA = ("nome", "e-mail", "telefone", "empresa e cargo", "vínculo", "mensagem", "notas da equipe", "motivo da desativação", "código do Amigo",
          "acesso à área do Amigo", "inscrição na lista de e-mails da CAMP (Sender)", "endereço e texto dos e-mails enviados")
 FICA = ("pagamentos: valor, data, meio e referência (Mercado Pago ou painel), para a contabilidade", "categoria e modalidade",
@@ -1081,7 +1101,7 @@ def _chamar_site(con, wp, r, acao: str, corpo: dict) -> tuple[dict | None, str]:
         return (d, "") if d.get("ok") else (None, "o site não confirmou")
     txt = getattr(resp, "text", "") or ""
     if resp.status_code == 404 and "rest_no_route" in txt:
-        return None, SITE_ANTIGO_ACAO
+        return None, SITE_ANTIGO_JUNTAR if acao == "juntar" else SITE_ANTIGO_ACAO
     try:
         msg = str((resp.json() or {}).get("message") or "")[:240]
     except ValueError:
@@ -1230,8 +1250,110 @@ def apagar(con, aid: int, confirmacao: str, ator: str, wp=None) -> dict:
             "sender_erro": (site.get("sender") or {}).get("erro") or ""}
 
 
+# ---------------------------------------------------------------- CAMP-AMIGO-DUP: e-mail repetido e "Juntar cadastros"
+def normaliza_email(e) -> str:
+    """O mesmo do site (Camp_AAP_Amigo::normaliza_email): minúsculas, sem espaços; no Gmail sem pontos e sem o "+sufixo"."""
+    e = str(e or "").strip().lower()
+    if "@" not in e:
+        return e
+    u, dom = e.split("@", 1)
+    if dom in ("gmail.com", "googlemail.com"):
+        u, dom = u.split("+", 1)[0].replace(".", ""), "gmail.com"
+    return f"{u}@{dom}"
+
+
+def repetidos(con) -> dict[int, list[int]]:
+    """id do Amigo → ids dos OUTROS cadastros de Amigo (não apagados, inativos inclusive) com o mesmo e-mail normalizado."""
+    grupos: dict[str, list[int]] = {}
+    for r in con.execute("SELECT id, email FROM amigo WHERE tipo='amigo' AND apagado_em IS NULL AND email IS NOT NULL AND trim(email)<>'' ORDER BY id"):
+        grupos.setdefault(normaliza_email(r["email"]), []).append(r["id"])
+    return {i: [j for j in ids if j != i] for ids in grupos.values() if len(ids) > 1 for i in ids}
+
+
+def _ativo(r) -> bool:
+    return r["situacao"] in ("pago", "isento") and not r["inativo_em"]
+
+
+def _quem_fica(a, b):
+    """Padrão: o ativo; senão o do pagamento mais recente; senão o da adesão mais recente. → (fica, sai)."""
+    nota = lambda r: (1 if _ativo(r) else 0, r["pago_em"] or "", r["criado_no_site"] or r["importado_em"] or "", r["id"])
+    return (a, b) if nota(a) >= nota(b) else (b, a)
+
+
+def _par_juntar(con, aid: int, outro: int, fica: int | None = None):
+    a, b = _um(con, aid), _um(con, outro)
+    if a["id"] == b["id"] or a["tipo"] != "amigo" or b["tipo"] != "amigo":
+        raise HTTPException(400, "Escolha dois cadastros diferentes de Amigo da CAMP. Nada foi mudado.")
+    if not normaliza_email(a["email"]) or normaliza_email(a["email"]) != normaliza_email(b["email"]):
+        raise HTTPException(400, "Só dá para juntar cadastros com o mesmo e-mail. Nada foi mudado.")
+    if not a["site_id"] or not b["site_id"]:
+        raise HTTPException(400, "Só dá para juntar cadastros que existem no site (o Amigo registrado só no painel ainda não foi ao site). Nada foi mudado.")
+    rec, _ = _quem_fica(a, b)
+    if fica in (a["id"], b["id"]):
+        f, s = (a, b) if fica == a["id"] else (b, a)
+    else:
+        f, s = _quem_fica(a, b)
+    return f, s, rec["id"]
+
+
+def _resumo_juntar(con, r) -> dict:
+    n = lambda q: con.execute(q, (r["id"],) if "amigo_id" in q else (str(r["id"]),)).fetchone()[0]
+    return {"id": r["id"], "nome": r["nome"], "email": r["email"], "protocolo": r["protocolo"], "situacao": r["situacao"], "inativo": bool(r["inativo_em"]),
+            "categoria_nome": nome_categoria(con, r["categoria"]), "modalidade": r["modalidade"], "validade": r["validade"], "pago_em": r["pago_em"],
+            "criado_no_site": r["criado_no_site"], "pagamentos": n("SELECT COUNT(*) FROM amigo_pagamento WHERE amigo_id=?"),
+            "emails": n("SELECT COUNT(*) FROM amigo_email WHERE amigo_id=?"), "historico": n("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=?"),
+            "notas": bool((r["notas"] or "").strip()), "fundador": r["fundador"]}
+
+
+def previa_juntar(con, aid: int, outro: int, fica: int | None = None, wp=None) -> dict:
+    """Prévia (nada muda): qual fica (padrão: o ativo, ou o do pagamento/adesão mais recente), qual sai (é apagado), o que passa para o que fica
+    e se o site vai cancelar uma assinatura mensal do que sai (o site simula)."""
+    f, s, rec = _par_juntar(con, aid, outro, fica)
+    rs = _resumo_juntar(con, s)
+    out = {"fica": _resumo_juntar(con, f), "sai": rs, "recomendado": rec,
+           "move": {"pagamentos": rs["pagamentos"], "emails": rs["emails"], "historico": rs["historico"], "notas": rs["notas"], "fundador": rs["fundador"] if not f["fundador"] else None},
+           "assinatura": False, "confirmado_no_site": False, "erro_site": "", "site": {}}
+    d, motivo = _chamar_site(con, wp, f, "juntar", {"outro_id": int(s["site_id"]), "simular": True})
+    if d:
+        out["assinatura"], out["confirmado_no_site"], out["site"] = bool((d.get("assinatura") or {}).get("havia")), True, d.get("move") or {}
+    else:
+        out["assinatura"], out["erro_site"] = _assinatura_ativa_provavel(s), motivo
+    return out
+
+
+def juntar(con, aid: int, outro: int, fica: int | None, confirmacao: str, ator: str, wp=None) -> dict:
+    """Junta dois cadastros do mesmo e-mail. 1) confirmação JUNTAR; 2) o SITE junta primeiro (fonte dos Amigos: cancela a assinatura mensal do que sai,
+    passa pagamentos e histórico e apaga o que sai; falhou = NADA muda aqui); 3) aqui: pagamentos, e-mails e histórico passam para o que fica,
+    as notas vão juntas e o que sai é apagado (dados pessoais), sem tirar a pessoa da lista de e-mails (ela continua no que fica)."""
+    if re.sub(r"\s+", "", str(confirmacao or "")).casefold() != "juntar":
+        raise HTTPException(400, "Para juntar, digite JUNTAR. Nada foi mudado.")
+    f, s, _ = _par_juntar(con, aid, outro, fica)
+    d, erro = _chamar_site(con, wp, f, "juntar", {"outro_id": int(s["site_id"]), "simular": False, "confirmar": "JUNTAR"})
+    if not d:
+        raise HTTPException(502, _sem_mudar("Nada foi juntado", erro))
+    fid, sid = f["id"], s["id"]
+    n_pg = con.execute("UPDATE amigo_pagamento SET amigo_id=? WHERE amigo_id=?", (fid, sid)).rowcount
+    n_em = con.execute("UPDATE amigo_email SET amigo_id=? WHERE amigo_id=?", (fid, sid)).rowcount
+    n_ev = con.execute("UPDATE evento SET codigo=? WHERE entidade='amigo' AND codigo=?", (str(fid), str(sid))).rowcount
+    if (s["notas"] or "").strip():
+        notas = ((f["notas"] or "").strip() + "\n" if (f["notas"] or "").strip() else "") + f"— do cadastro {s['protocolo'] or '#' + str(sid)}: {s['notas'].strip()}"
+        con.execute("UPDATE amigo SET notas=? WHERE id=?", (notas[:4000], fid))
+    if not f["fundador"] and s["fundador"]:
+        con.execute("UPDATE amigo SET fundador=? WHERE id=?", (s["fundador"], fid))
+    if isinstance(d.get("fica"), dict):                  # a situação e a validade do que fica, como o site deixou
+        _gravar(con, d["fica"], {"lidos": 0, "novos": 0, "atualizados": 0})
+    _anonimizar_amigo(con, sid)
+    _recalcular_pagamento(con, fid)
+    cancelada = bool((d.get("assinatura") or {}).get("cancelada"))
+    _evento(con, fid, "juntado", ator, {"de": sid, "protocolo_saiu": s["protocolo"], "pagamentos": n_pg, "emails": n_em, "historico": n_ev, "assinatura_cancelada": cancelada})
+    _evento(con, sid, "juntado_a", ator, {"ficou": fid, "protocolo_ficou": f["protocolo"]})
+    con.commit()
+    registrar(logging.INFO, "amigos_juntar", "Cadastros de Amigo juntados", ficou=fid, saiu=sid, pagamentos=n_pg)
+    return {"ok": True, "ficou": fid, "saiu": sid, "pagamentos": n_pg, "emails": n_em, "historico": n_ev, "assinatura_cancelada": cancelada}
+
+
 # ---------------------------------------------------------------- telas
-def _linha(con, r) -> dict:
+def _linha(con, r, rep: dict | None = None) -> dict:
     d = dict(r)
     d.pop("pendente_site", None)
     d["pendente_site"] = bool(r["pendente_site"])
@@ -1241,6 +1363,10 @@ def _linha(con, r) -> dict:
     v = _data(r["validade"])
     d["vence_em_dias"] = (v - hoje()).days if v else None
     d["origem_txt"] = "manual" if r["origem_pagamento"] == "manual" else ("site" if r["origem"] == "site" else "painel")
+    if r["doacao_site_id"] or r["fonte"] == "doacao_acervo":   # CAMP-DOA-AMIGO: Amigo pela doação de acervo
+        d["origem_txt"] = "doacao"
+    if rep is not None:                                   # CAMP-AMIGO-DUP: etiqueta "e-mail repetido"
+        d["email_repetido"], d["repetidos"] = r["id"] in rep, rep.get(r["id"], [])
     return d
 
 
@@ -1258,9 +1384,9 @@ def _com_emkt(con, linhas: list[dict], emkt: str | None) -> list[dict]:
 def _filtro(aba: str, situacao, categoria, ano, vencendo, q) -> tuple[str, list]:
     onde, vals = (["tipo='amigo'"] if aba == "amigos" else ["tipo IN ('projeto','arquiteto')"]), []
     onde.append("apagado_em IS NULL")                    # apagado (CAMP-AMIGO-APAGAR) some do painel; os pagamentos ficam na receita
-    if aba == "amigos":                                  # inativo só aparece no filtro "Inativos"
+    if aba == "amigos" and situacao != REPETIDOS:        # inativo só aparece no filtro "Inativos" (e em "Repetidos": o mesmo e-mail num cadastro inativo)
         onde.append("inativo_em IS NOT NULL" if situacao == INATIVOS else "inativo_em IS NULL")
-    if situacao and situacao not in ("todos", "todas", INATIVOS):
+    if situacao and situacao not in ("todos", "todas", INATIVOS, REPETIDOS):
         if aba == "amigos":
             if situacao not in SITUACOES:
                 raise HTTPException(400, "Situação inválida")
@@ -1312,18 +1438,23 @@ def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | No
         for r in con.execute(f"SELECT {campo} s, COUNT(*) n FROM amigo WHERE {w} GROUP BY {campo}", vals):
             if r["s"] in resumo:
                 resumo[r["s"]] = r["n"]
+        rep = repetidos(con) if aba == "amigos" else {}
         if aba == "amigos":
             w_i, vals_i = _filtro(aba, INATIVOS, categoria, ano, vencendo, q)
             resumo[INATIVOS] = con.execute(f"SELECT COUNT(*) FROM amigo WHERE {w_i}", vals_i).fetchone()[0]
+            resumo[REPETIDOS] = len(rep)
         w2, vals2 = _filtro(aba, situacao, categoria, ano, vencendo, q)
-        rows = con.execute(f"SELECT * FROM amigo WHERE {w2} ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC", vals2).fetchall()
+        if aba == "amigos" and situacao == REPETIDOS:
+            w2 += f" AND id IN ({','.join('?' * len(rep))})" if rep else " AND 0"
+            vals2 = [*vals2, *rep]
+        rows = con.execute(f"SELECT * FROM amigo WHERE {w2} ORDER BY {'lower(email), ' if situacao == REPETIDOS else ''}COALESCE(criado_no_site, importado_em) DESC, id DESC", vals2).fetchall()
         anos = [r[0] for r in con.execute("SELECT DISTINCT substr(COALESCE(pago_em, criado_no_site, importado_em),1,4) a FROM amigo WHERE a<>'' ORDER BY a DESC")]
         ult = con.execute("SELECT quando, lidos, novos, erro FROM amigo_coleta ORDER BY id DESC LIMIT 1").fetchone()
         tot = {k: con.execute(q_, ()).fetchone()[0] for k, q_ in (("amigos", "SELECT COUNT(*) FROM amigo WHERE tipo='amigo' AND apagado_em IS NULL AND inativo_em IS NULL"),
                                                                 ("adocoes", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo' AND apagado_em IS NULL"),
                                                                 ("adocoes_novas", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo' AND status_pedido='novo'"))}
         cats = _tabela_do_ano(con, hoje().year)
-        return {"itens": _com_emkt(con, [_linha(con, r) for r in rows], emkt), "resumo": resumo, "numeros": numeros(con), "anos": anos, "totais": tot,
+        return {"itens": _com_emkt(con, [_linha(con, r, rep) for r in rows], emkt), "resumo": resumo, "numeros": numeros(con), "anos": anos, "totais": tot,
                 "categorias": [{"categoria": k, "nome": v["nome"]} for k, v in cats.items()],
                 "ultima_busca": dict(ult) if ult else None, "minutos": coleta_min(con), "lembretes": modo_lembretes(con)}
     finally:
@@ -1644,13 +1775,43 @@ def apagar_rota(aid: int, d: Apagar, u: dict = Depends(auth.exige("admin"))) -> 
         con.close()
 
 
+@router.get("/{aid}/juntar/previa")
+def juntar_previa(aid: int, outro: int, fica: int | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return previa_juntar(con, aid, outro, fica)
+    finally:
+        con.close()
+
+
+class Juntar(BaseModel):
+    outro_id: int
+    fica_id: int | None = None
+    confirmacao: str = ""
+
+
+@router.post("/{aid}/juntar")
+def juntar_rota(aid: int, d: Juntar, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return juntar(con, aid, d.outro_id, d.fica_id, d.confirmacao, u["email"])
+    finally:
+        con.close()
+
+
 @router.get("/{aid}")
 def detalhe(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         r = _um(con, aid)
-        d = _linha(con, r)
+        rep = repetidos(con)
+        d = _linha(con, r, rep)
+        d["repetidos"] = [{"id": o["id"], "nome": o["nome"], "protocolo": o["protocolo"], "situacao": o["situacao"], "inativo": bool(o["inativo_em"]), "pago_em": o["pago_em"],
+                           "criado_no_site": o["criado_no_site"]} for o in _linhas(con, rep.get(aid, []))]
         d["erro_site"] = r["erro_site"]
+        if r["doacao_site_id"]:                              # CAMP-DOA-AMIGO: "Origem: doação de acervo CAMP-…" com o link da doação
+            dz = con.execute("SELECT site_id, protocolo, etapa FROM doacao_acervo WHERE site_id=?", (r["doacao_site_id"],)).fetchone()
+            d["doacao"] = {"id": r["doacao_site_id"], "protocolo": r["doacao_protocolo"] or (dz["protocolo"] if dz else ""), "no_painel": bool(dz)}
         d["pagamentos"] = [dict(p) for p in con.execute("SELECT id, chave, data, valor, meio, nota, origem, status, criado_por FROM amigo_pagamento WHERE amigo_id=? ORDER BY data DESC, id DESC", (aid,))]
         d["emails"] = [dict(e) for e in con.execute("SELECT id, modelo, assunto, situacao, canal, erro, criado_por, criado_em, enviado_em, modelo_site, sender_id FROM amigo_email WHERE amigo_id=? ORDER BY id DESC LIMIT 50", (aid,))]
         for e in d["emails"]:
