@@ -52,6 +52,7 @@ MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha an
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
 MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e assinada) fica em Pedem ação até o acervo chegar; Autentique com a doação já paga (linha própria)
 MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
+MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18558,6 +18559,200 @@ def filho(modo):
             and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=708").fetchone()[0] == "paga" and 708 in {x["id"] for x in da.filtrar(c, "abertas")}, (r8, sit8, posts))
         ver("nenhuma intenção perdida (8 no painel)", c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == 8)
         for l in res: print(l)
+    elif modo == "doacoes_central":
+        # CAMP-DOA-CENTRAL 21/11/2026 (site e Autentique FALSOS). Rafael: "seria o ideal lá no doações de acervo ter controle total sobre o
+        # acervo … Status, o que já aconteceu, o que não aconteceu, informações internas … cotar frete, comprar insumo para embalar e etc."
+        # Prova: abas (nada some em Todas), linha de etapas a partir do registro, tarefas (criar/mudar/apagar, atrasada, totais), roteiro de
+        # logística sem repetir, sugestão do roteiro com o contrato assinado, arquivos (tipo pela extensão E pelos bytes, 15 MB, baixar/apagar só
+        # admin), histórico único em ordem, PDF assinado baixado da Autentique (uma vez; token só para a Autentique; nunca no log/resposta), LGPD.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import base64 as _b64, io as _io, json as _j, os as _os, zipfile as _zf
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da, doacoes_central as dc, autentique as au
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        _os.environ["CAMP_DOACOES_ANEXOS_DIR"] = str(pathlib.Path(_os.environ["CAMP_DB_PATH"]).resolve().parent / "anexos_teste")
+        c = connect()
+        ver("migração 238: tabelas doacao_tarefa e doacao_anexo",
+            {r_[0] for r_ in c.execute("SELECT name FROM sqlite_master WHERE name IN ('doacao_tarefa','doacao_anexo')")} == {"doacao_tarefa", "doacao_anexo"})
+        base = {"recebida_em": "2026-11-01T12:00:00+00:00", "nome": "Pessoa Teste", "email": "p@x.com", "autor": "Arq Teste", "valor": 2500, "notas": [], "historico": []}
+        etapas = {801: "em_analise", 802: "contrato_enviado", 803: "paga", 804: "recebido", 805: "arquivada", 806: "nao_aprovada", 807: "contrato_assinado"}
+        for sid, et in etapas.items():
+            da._gravar(c, dict(base, id=sid, protocolo=f"CAMP-2026-000{sid}", etapa=et))
+        c.commit()
+        ab = lambda e: {x["id"] for x in da.filtrar(c, e)}   # noqa: E731
+        ver("abas: Em andamento (padrão), Recebidos, Não aprovadas/arquivadas e Todas; nada some em Todas",
+            ab("abertas") == {801, 802, 803, 807} and ab("recebidos") == {804} and ab("encerradas") == {805, 806} and ab("") == set(etapas),
+            (sorted(ab("abertas")), sorted(ab("recebidos")), sorted(ab("encerradas")), len(ab(""))))
+        n_ = da.numeros(c)
+        ver("números de cada aba", (n_.get("abertas"), n_.get("recebidos"), n_.get("encerradas"), n_.get("total")) == (4, 1, 2, 7), n_)
+        # ---- linha de etapas
+        H = ["2026-11-02 13:00 UTC · Rafa: etapa Em análise → Aprovada", "2026-11-03 14:00 UTC · Rafa: contrato enviado para assinatura (e-mail TR30 pelo Sender)",
+             "2026-11-03 14:01 UTC · Rafa: etapa Aprovada → Contrato enviado para assinatura",
+             "2026-11-03 14:02 UTC · Rafa: cobrança aberta no Mercado Pago (R$ 2.500,00, CAMP-COB-9, vence 10/12/2026)",
+             "2026-11-03 14:03 UTC · e-mail da cobrança (TR27) enviado ao doador pelo Sender", "2026-11-04 10:00 UTC · Rafa: nota interna"]
+        reg802 = dict(base, id=802, protocolo="CAMP-2026-000802", etapa="contrato_enviado", aprovada_em="2026-11-02T13:00:00+00:00",
+                      contrato_enviado_em="2026-11-03T14:00:00+00:00", historico=H, cobranca={"situacao": "aberta", "valor": 2500, "pago_em": ""},
+                      notas=[{"em": "04/11/2026 07:00", "quem": "Rafa", "texto": "Vamos cotar frete com 2 transportadoras."}])
+        da._gravar(c, reg802); c.commit()
+        ps = dc.passos(reg802)
+        est = {p_["chave"]: (p_["estado"], p_["data"]) for p_ in ps["passos"]}
+        ver("etapas: recebida/aprovada/contrato enviado feitos com data; visita pulada; cobrança feita (veio junto); assinatura é o próximo; o resto pendente",
+            est["recebida"] == ("feito", "2026-11-01") and est["aprovada"] == ("feito", "2026-11-02") and est["contrato_enviado"] == ("feito", "2026-11-03")
+            and est["visita"][0] == "pulado" and est["cobranca"] == ("feito", "2026-11-03") and est["contrato_assinado"][0] == "atual"
+            and est["paga"][0] == "pendente" and est["recebido"][0] == "pendente" and est["fundo"][0] == "pendente"
+            and ps["proximo"] == "Aguardar a assinatura do contrato", est)
+        p1 = dc.passos(dict(base, etapa="em_analise"))
+        p5 = dc.passos(dict(base, etapa="arquivada"))
+        ver("etapas: em análise = passo atual; arquivada = sem próximo passo, o que faltava fica pulado e a última é Arquivada",
+            [p_["estado"] for p_ in p1["passos"][:3]] == ["feito", "atual", "pendente"] and p5["proximo"] == ""
+            and p5["passos"][-1]["chave"] == "arquivada" and all(p_["estado"] in ("feito", "pulado") for p_ in p5["passos"]), (p1["passos"][:3], p5["passos"][-2:]))
+        p3 = dc.passos(dict(base, etapa="paga", cobranca={"situacao": "paga", "pago_em": "2026-11-05T10:00:00+00:00"}))
+        ver("etapas: paga = receber o acervo é o próximo; data do pagamento", p3["proximo"] == "Receber o acervo" and {p_["chave"]: p_["data"] for p_ in p3["passos"]}["paga"] == "2026-11-05", p3)
+        # ---- tela: só admin; lista com próximo passo
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        lt = x.get("/api/doacoes-acervo?etapa=").json()
+        it802 = next((i_ for i_ in lt.get("itens", []) if i_["id"] == 802), {})
+        ver("lista (Todas): as 7, cada uma com o próximo passo, tarefas abertas/atrasadas e o fundo", len(lt.get("itens", [])) == 7
+            and it802.get("proximo") == "Aguardar a assinatura do contrato" and it802.get("tarefas_atrasadas") == 0 and "fundo_codigo" in it802, it802)
+        d7 = x.get("/api/doacoes-acervo/807").json()
+        ver("contrato assinado e nenhuma tarefa: a tela sugere o roteiro de logística (não insere)", d7.get("sugerir_roteiro") is True and d7.get("tarefas") == [], d7.get("sugerir_roteiro"))
+        ver("operador não cria tarefa nem roteiro (403)", op.post("/api/doacoes-acervo/807/tarefas", json={"titulo": "x y"}).status_code == 403
+            and op.post("/api/doacoes-acervo/807/tarefas/roteiro").status_code == 403)
+        # ---- tarefas
+        r_ = x.post("/api/doacoes-acervo/807/tarefas", json={"titulo": " "})
+        ver("tarefa sem título: 400", r_.status_code == 400, r_.text[:150])
+        r_ = x.post("/api/doacoes-acervo/807/tarefas", json={"titulo": "Cotar frete", "responsavel": "Rafa", "prazo": "2026-01-10", "valor": "1.250,00"})
+        t_ = (r_.json().get("tarefas") or [{}])[0] if r_.status_code == 200 else {}
+        ver("criar tarefa: valor 1.250,00 → 1250; prazo vencido = atrasada", r_.status_code == 200 and t_.get("valor") == 1250.0 and t_.get("atrasada") is True and t_.get("situacao") == "a_fazer", r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/807/tarefas/roteiro")
+        tit = [t["titulo"] for t in r_.json().get("tarefas", [])]
+        ver("roteiro de logística: põe os 7 que faltam, sem repetir Cotar frete", r_.status_code == 200 and len(tit) == 8 and tit.count("Cotar frete") == 1
+            and set(dc.ROTEIRO) <= set(tit) and r_.json().get("roteiro", {}).get("criadas") == 7, tit)
+        r_ = x.post("/api/doacoes-acervo/807/tarefas/roteiro")
+        ver("roteiro de novo: nada novo", r_.status_code == 200 and len(r_.json().get("tarefas", [])) == 8 and r_.json()["roteiro"]["criadas"] == 0, r_.json().get("roteiro"))
+        ver("com tarefas, não sugere mais o roteiro", r_.json().get("sugerir_roteiro") is False)
+        ts = {t["titulo"]: t for t in r_.json()["tarefas"]}
+        r_ = x.put(f"/api/doacoes-acervo/807/tarefas/{ts['Cotar frete']['id']}", json={"situacao": "feita"})
+        r_ = x.put(f"/api/doacoes-acervo/807/tarefas/{ts['Comprar insumos de embalagem']['id']}", json={"valor": "380", "prazo": "2099-01-01"})
+        r_ = x.put(f"/api/doacoes-acervo/807/tarefas/{ts['Transporte']['id']}", json={"valor": "999", "situacao": "nao_se_aplica"})
+        tt = r_.json().get("tarefas_totais", {}) if r_.status_code == 200 else {}
+        ver("totais: previsto 1.630 (não conta 'não se aplica'), feito 1.250, a fazer 380; 1 feita; nenhuma atrasada",
+            (tt.get("custo_previsto"), tt.get("custo_feito"), tt.get("custo_a_fazer"), tt.get("feitas"), tt.get("atrasadas")) == (1630.0, 1250.0, 380.0, 1, 0), tt)
+        r_ = x.put(f"/api/doacoes-acervo/807/tarefas/{ts['Embalar o acervo']['id']}", json={"situacao": "pronta"})
+        ver("situação inválida: 400", r_.status_code == 400)
+        r_ = x.delete(f"/api/doacoes-acervo/807/tarefas/{ts['Catalogação inicial']['id']}")
+        ver("apagar tarefa (fica no histórico)", r_.status_code == 200 and len(r_.json()["tarefas"]) == 7
+            and any(i_["categoria"] == "tarefa" and "apagada: Catalogação inicial" in i_["texto"] for i_ in r_.json()["linha_do_tempo"]), r_.text[:200])
+        ver("operador não apaga tarefa (403)", op.delete(f"/api/doacoes-acervo/807/tarefas/{ts['Transporte']['id']}").status_code == 403)
+        # ---- arquivos
+        PDF = b"%PDF-1.4\n% orcamento de frete\n%%EOF\n"
+        b64 = lambda b: _b64.b64encode(b).decode()   # noqa: E731
+        r_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "../../Orçamento frete.pdf", "base64": b64(PDF), "tipo": "orcamento", "tarefa_id": ts["Cotar frete"]["id"]})
+        an = (r_.json().get("anexos") or [{}])[0] if r_.status_code == 200 else {}
+        ver("anexar PDF: nome limpo (sem pasta), tipo Orçamento, ligado à tarefa", r_.status_code == 200 and an.get("nome") == "Orçamento frete.pdf" and an.get("tipo_nome") == "Orçamento"
+            and an.get("tarefa_id") == ts["Cotar frete"]["id"], r_.text[:200])
+        ver("o arquivo fica na pasta ao lado do banco, fora do repositório", (dc.pasta_anexos() / "807").is_dir() and len(list((dc.pasta_anexos() / "807").iterdir())) == 1
+            and str(dc.pasta_anexos()).startswith(str(pathlib.Path(_os.environ["CAMP_DB_PATH"]).resolve().parent)))
+        r_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "virus.exe", "base64": b64(b"MZ....")})
+        ver("tipo não aceito (.exe): 400", r_.status_code == 400 and "não aceito" in r_.text, r_.text[:150])
+        r_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "falso.pdf", "base64": b64(b"\x89PNG\r\n\x1a\n" + b"0" * 20)})
+        ver("extensão .pdf com conteúdo PNG: 400 (confere os bytes)", r_.status_code == 400 and "não é PDF" in r_.text, r_.text[:150])
+        r_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "grande.pdf", "base64": b64(b"%PDF-" + b"0" * (dc.MAX_ANEXO + 1))})
+        ver("acima de 15 MB: 400", r_.status_code == 400 and "15 MB" in r_.text, r_.text[:150])
+        bz = _io.BytesIO(); z = _zf.ZipFile(bz, "w"); z.writestr("word/document.xml", "<w/>"); z.writestr("[Content_Types].xml", "<x/>"); z.close()
+        bx = _io.BytesIO(); z = _zf.ZipFile(bx, "w"); z.writestr("xl/workbook.xml", "<w/>"); z.close()
+        r_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "Lista de insumos.docx", "base64": b64(bz.getvalue()), "tipo": "documento"})
+        r2_ = x.post("/api/doacoes-acervo/807/anexos", json={"nome": "planilha.docx", "base64": b64(bx.getvalue())})
+        ver("DOCX de verdade aceito; XLSX com extensão .docx recusado", r_.status_code == 200 and len(r_.json()["anexos"]) == 2 and r2_.status_code == 400, (r_.status_code, r2_.status_code))
+        aid = an.get("id")
+        r_ = x.get(f"/api/doacoes-acervo/807/anexos/{aid}")
+        ver("baixar: o mesmo arquivo, sem cache e sem adivinhar o tipo", r_.status_code == 200 and r_.content == PDF and r_.headers.get("x-content-type-options") == "nosniff"
+            and "no-store" in r_.headers.get("cache-control", ""), r_.status_code)
+        ver("operador não baixa nem apaga arquivo (403)", op.get(f"/api/doacoes-acervo/807/anexos/{aid}").status_code == 403 and op.delete(f"/api/doacoes-acervo/807/anexos/{aid}").status_code == 403
+            and op.post("/api/doacoes-acervo/807/anexos", json={"nome": "a.pdf", "base64": b64(PDF)}).status_code == 403)
+        did = r_.status_code and next(a_["id"] for a_ in x.get("/api/doacoes-acervo/807").json()["anexos"] if a_["nome"].endswith(".docx"))
+        r_ = x.delete(f"/api/doacoes-acervo/807/anexos/{did}")
+        ver("apagar arquivo: some da lista e da pasta; fica no histórico", r_.status_code == 200 and len(r_.json()["anexos"]) == 1 and len(list((dc.pasta_anexos() / "807").iterdir())) == 1
+            and any(i_["categoria"] == "anexo" and "apagado: Lista de insumos.docx" in i_["texto"] for i_ in r_.json()["linha_do_tempo"]), r_.text[:200])
+        # ---- histórico único (802: histórico do site, nota, e-mail do painel)
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe, quando) VALUES ('doacao_acervo','802','email_enviado','adm@camp.arq.br',?, '2026-11-03 14:05:00')",
+                  (_j.dumps({"template": "TR30", "nome_modelo": "Contrato para assinatura"}),)); c.commit()
+        lt2 = x.get("/api/doacoes-acervo/802").json().get("linha_do_tempo", [])
+        q_ = [i_["quando"] for i_ in lt2]
+        cats = [i_["categoria"] for i_ in lt2]
+        ver("histórico único: do mais novo ao mais antigo; nota inteira (não só 'nota interna'), etapas, e-mails do site e do painel",
+            q_ == sorted(q_, reverse=True) and lt2[0]["categoria"] == "nota" and "cotar frete" in lt2[0]["texto"] and lt2[0]["quando"] == "2026-11-04T10:00:00Z"
+            and cats.count("etapa") == 2 and cats.count("email") >= 2 and not any(i_["texto"] == "nota interna" for i_ in lt2)
+            and any(i_["texto"].startswith("E-mail enviado pelo Sender: TR30") for i_ in lt2) and any(i_["quem"] == "Rafa" and i_["categoria"] == "etapa" for i_ in lt2), lt2[:4])
+        # ---- contrato assinado na Autentique: baixado sozinho quando todos assinam
+        TK = "tok-autentique-SEGREDO-0987654321zyxwvu"
+        for k, v in (("autentique.token", TK), ("autentique.ligado", "1"), ("wp.app_password", "xxxx")):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?,?,?,0)", (k, v, k))
+        c.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, pdf_sha256, assinantes, situacao, criado_por) VALUES (802,'doc-c1','https://assina.ae/x','s',?, 'pendente','adm')",
+                  (_j.dumps([{"public_id": "p1"}]),)); c.commit()
+        ASSINADO = b"%PDF-1.7\n% contrato assinado com a pagina de assinaturas\n%%EOF\n"
+        URL_ASS = "https://api.autentique.com.br/documentos/doc-c1/assinado.pdf?token=XYZ"
+        AUTQ, GETS = [], []
+        class RA:
+            def __init__(s, code, dados=None, content=b""): s.status_code, s._d, s.content = code, dados, content
+            def json(s): return s._d
+        class CliF:
+            def __enter__(s): return s
+            def __exit__(s, *a): return False
+            def post(s, url, headers=None, json=None, **kw):
+                AUTQ.append((json or {}).get("query", ""))
+                return RA(200, {"data": {"document": {"id": "doc-c1", "files": {"signed": URL_ASS}, "signatures": [
+                    {"public_id": "p1", "name": "Pessoa", "action": {"name": "SIGN"}, "signed": {"created_at": "2026-11-06 10:00:00"}, "rejected": None}]}}})
+            def get(s, url, headers=None, **kw):
+                GETS.append((url, dict(headers or {})))
+                return RA(200, content=ASSINADO)
+        au._cliente = lambda: CliF()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.content, s.headers = code, dados, b"", {}
+            def json(s): return s._d
+        class Hs:
+            def post(s, path, json=None): return Resp(200, {"ok": True, "registro": dict(reg802, etapa="contrato_assinado", assinado_em="2026-11-06")})
+            def get(s, path, params=None): return Resp(200, {"itens": []})
+        class WPs:
+            def __init__(s): s.h = Hs()
+        o_ = da.conferir_pendentes(c, WPs())
+        a8 = [a_ for a_ in dc.anexos(c, 802) if a_["tipo"] == "contrato_assinado"]
+        f8 = dc.pasta_anexos() / c.execute("SELECT arquivo FROM doacao_anexo WHERE site_id=802 AND tipo='contrato_assinado'").fetchone()[0] if a8 else None
+        ver("todos assinaram → o painel baixa o PDF assinado (files { signed }) e guarda como 'Contrato assinado'", o_.get("assinados") == 1 and len(a8) == 1 and a8[0]["automatico"]
+            and a8[0]["nome"] == "Contrato assinado CAMP-2026-000802.pdf" and f8 and f8.read_bytes() == ASSINADO and any("files { signed }" in q for q in AUTQ), (o_, a8, AUTQ[-1:]))
+        ver("o token vai só para o endereço da Autentique", GETS and GETS[0][0] == URL_ASS and GETS[0][1].get("Authorization") == f"Bearer {TK}", GETS[:1])
+        GETS.clear()
+        au.baixar_assinado(TK, "https://outro.exemplo.com/a.pdf")
+        ver("endereço de outro host: baixa sem mandar o token", GETS and "Authorization" not in GETS[0][1], GETS[:1])
+        r_ = x.post("/api/doacoes-acervo/802/contrato-assinado")
+        ver("Baixar contrato assinado agora (já guardado): não duplica", r_.status_code == 200 and r_.json().get("contrato_baixado", {}).get("novo") is False
+            and len([a_ for a_ in r_.json()["anexos"] if a_["tipo"] == "contrato_assinado"]) == 1 and r_.json().get("contrato_assinado_arquivo", {}).get("id") == a8[0]["id"], r_.text[:200])
+        c.execute("DELETE FROM doacao_anexo WHERE site_id=802 AND tipo='contrato_assinado'"); c.commit()
+        r_ = x.post("/api/doacoes-acervo/802/contrato-assinado")
+        ver("Baixar contrato assinado agora (assinado antes desta versão): baixa e guarda", r_.status_code == 200 and r_.json().get("contrato_baixado", {}).get("novo") is True
+            and len([a_ for a_ in r_.json()["anexos"] if a_["tipo"] == "contrato_assinado"]) == 1, r_.text[:200])
+        ver("Baixar agora sem documento assinado: 409 com frase", x.post("/api/doacoes-acervo/807/contrato-assinado").status_code == 409)
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        evs_ = " ".join(r_[0] or "" for r_ in c.execute("SELECT detalhe FROM evento WHERE entidade='doacao_acervo'"))
+        corpo_ = x.get("/api/doacoes-acervo/802").text
+        ver("o token e o endereço assinado (com credencial) nunca no log, nos eventos nem na resposta", TK not in log_ and "token=XYZ" not in log_ and TK not in evs_
+            and "token=XYZ" not in evs_ and TK not in corpo_ and "token=XYZ" not in corpo_)
+        fd = x.get("/api/fundos/F001")      # página do fundo (sem fundo: 404, só não pode quebrar)
+        ver("página do fundo continua respondendo", fd.status_code in (200, 404), fd.status_code)
+        # ---- LGPD: nomes dos arquivos viram "(removido)"; arquivos e tarefas (custos) ficam
+        c.execute("UPDATE doacao_acervo SET email='lgpd@x.com' WHERE site_id=807"); c.commit()
+        da.anonimizar_por_email(c, "lgpd@x.com"); c.commit()
+        nomes = [r_[0] for r_ in c.execute("SELECT nome FROM doacao_anexo WHERE site_id=807")]
+        evn = [r_[0] for r_ in c.execute("SELECT detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo='807' AND tipo LIKE 'anexo_%'")]
+        ver("LGPD: arquivos com nome neutro, eventos sem o nome; tarefas e arquivos ficam", nomes and all(n.startswith("arquivo-") for n in nomes)
+            and all("Orçamento" not in e and "insumos" not in e for e in evn) and c.execute("SELECT COUNT(*) FROM doacao_tarefa WHERE site_id=807").fetchone()[0] == 7, (nomes, evn[:2]))
+        for l in res: print(l)
     elif modo == "doacoes_fundo_auto":
         # CAMP-DOA-FUNDO 21/11/2026 (site FALSO). Rafael: "e precisa criar quando terminar o fundo e arquiteto automaticamente." Ao passar a
         # doação a "Acervo recebido pela CAMP": prévia com o próximo código (o mesmo cadastro de fundo de sempre, numa transação desfeita),
@@ -21900,6 +22095,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (pedem ação): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Doações (pedem ação): todas as verificações rodaram")
+
+print("Doações de acervo · central de cada doação: abas, linha de etapas, tarefas e roteiro de logística, arquivos, contrato assinado da Autentique, histórico único (CAMP-DOA-CENTRAL)")
+rc, out = rodar("doacoes_central", f"{tmp}/doacoes_central.db")
+if rc != 0: ok(False, f"teste doacoes_central não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (central): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 34, "Doações (central): todas as verificações rodaram")
 
 print("Doações de acervo · acervo recebido cria fundo e arquiteto: prévia com o próximo código, um só, site falhou reusa, arquiteto existente, manual igual, só admin (CAMP-DOA-FUNDO)")
 rc, out = rodar("doacoes_fundo_auto", f"{tmp}/doacoes_fundo_auto.db")
