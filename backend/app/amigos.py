@@ -30,6 +30,9 @@ de trabalho da equipe:
   do site) em dois cadastros ganha "e-mail repetido" e o filtro Repetidos. "Juntar cadastros" (só admin): prévia (o site simula), escolha de
   qual fica, confirmação JUNTAR; o site junta primeiro (POST /painel/apoios/{id}/juntar) e só então pagamentos, e-mails, histórico e notas
   passam para o que fica e o que sai é apagado aqui (sem tirar a pessoa da lista de e-mails).
+- Amigo pela doação de acervo (CAMP-DOA-AMIGO, 21/11/2026, Rafael: "Não vi na lista também a Raquel, que doou acervo e virou amiga.."; contrato
+  1.30, migração 240): a coleta guarda fonte, doacao_site_id e doacao_protocolo; a lista mostra a origem "doação de acervo" e o detalhe
+  "Origem: doação de acervo CAMP-…" com o link da doação.
 """
 from __future__ import annotations
 
@@ -223,10 +226,18 @@ def _situacao_de(sit_site: str, validade: str | None) -> str:
 
 _FONTE = {"situacao": ("situacao_pagamento",), "situacao_site": ("situacao_pagamento",), "status_pedido": ("status",), "faixa": ("faixa", "faixa_nome"),
           "area": ("area", "area_nome"), "origem_pagina": ("origem",), "valor_cobrado": ("valor_cobrado", "valor"), "criado_no_site": ("criado_em",),
-          "alterado_no_site": ("alterado_em",), "tipo": ("tipo",)}
+          "alterado_no_site": ("alterado_em",), "tipo": ("tipo",), "doacao_site_id": ("doacao_id",)}
 _CAMPOS_PESSOAIS = ("nome", "empresa", "cargo", "email", "telefone", "vinculo", "mensagem", "origem_pagina")
 # campo do painel → chave do POST ao site (para saber o que a coleta NÃO deve sobrescrever enquanto está pendente)
 _PEND_CAMPO = {"situacao": "situacao", "validade": "validade", "notas": "notas", "status_pedido": "status", "categoria": "categoria", "modalidade": "modalidade"}
+
+
+def _int_pos(v) -> int | None:
+    try:
+        n = int(v or 0)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def _gravar(con, x: dict, out: dict) -> None:
@@ -250,6 +261,8 @@ def _gravar(con, x: dict, out: dict) -> None:
         "valor_cobrado": float(x.get("valor_cobrado") or x.get("valor") or 0) or None, "inicio": _dia_sp(x.get("inicio")), "validade": validade,
         "codigo": _txt(x.get("codigo"), 40) or None, "fundador": int(x.get("fundador") or 0) or None, "renova": 1 if x.get("renova") is True else 0,
         "criado_no_site": _txt(x.get("criado_em"), 40) or None, "alterado_no_site": _txt(x.get("alterado_em"), 40) or None,
+        # CAMP-DOA-AMIGO (contrato 1.30, opcionais): de onde o cadastro nasceu e a doação de acervo que deu o Amigo
+        "fonte": _txt(x.get("fonte"), 40) or None, "doacao_site_id": _int_pos(x.get("doacao_id")), "doacao_protocolo": _txt(x.get("doacao_protocolo"), 40) or None,
     }
     ja = con.execute("SELECT * FROM amigo WHERE site_id=?", (sid,)).fetchone()
     if ja:                                 # campo que não veio (site mais antigo, resposta parcial) não muda o que já está aqui
@@ -1350,6 +1363,8 @@ def _linha(con, r, rep: dict | None = None) -> dict:
     v = _data(r["validade"])
     d["vence_em_dias"] = (v - hoje()).days if v else None
     d["origem_txt"] = "manual" if r["origem_pagamento"] == "manual" else ("site" if r["origem"] == "site" else "painel")
+    if r["doacao_site_id"] or r["fonte"] == "doacao_acervo":   # CAMP-DOA-AMIGO: Amigo pela doação de acervo
+        d["origem_txt"] = "doacao"
     if rep is not None:                                   # CAMP-AMIGO-DUP: etiqueta "e-mail repetido"
         d["email_repetido"], d["repetidos"] = r["id"] in rep, rep.get(r["id"], [])
     return d
@@ -1794,6 +1809,9 @@ def detalhe(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         d["repetidos"] = [{"id": o["id"], "nome": o["nome"], "protocolo": o["protocolo"], "situacao": o["situacao"], "inativo": bool(o["inativo_em"]), "pago_em": o["pago_em"],
                            "criado_no_site": o["criado_no_site"]} for o in _linhas(con, rep.get(aid, []))]
         d["erro_site"] = r["erro_site"]
+        if r["doacao_site_id"]:                              # CAMP-DOA-AMIGO: "Origem: doação de acervo CAMP-…" com o link da doação
+            dz = con.execute("SELECT site_id, protocolo, etapa FROM doacao_acervo WHERE site_id=?", (r["doacao_site_id"],)).fetchone()
+            d["doacao"] = {"id": r["doacao_site_id"], "protocolo": r["doacao_protocolo"] or (dz["protocolo"] if dz else ""), "no_painel": bool(dz)}
         d["pagamentos"] = [dict(p) for p in con.execute("SELECT id, chave, data, valor, meio, nota, origem, status, criado_por FROM amigo_pagamento WHERE amigo_id=? ORDER BY data DESC, id DESC", (aid,))]
         d["emails"] = [dict(e) for e in con.execute("SELECT id, modelo, assunto, situacao, canal, erro, criado_por, criado_em, enviado_em, modelo_site, sender_id FROM amigo_email WHERE amigo_id=? ORDER BY id DESC LIMIT 50", (aid,))]
         for e in d["emails"]:

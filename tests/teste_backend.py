@@ -55,6 +55,7 @@ MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e
 MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
 MODOS_RAPIDOS |= {"amigo_desativar_apagar"}   # CAMP-AMIGO-APAGAR 21/11/2026: desativar/reativar e apagar Amigo (assinatura do Mercado Pago cancelada pelo site falso; contrato 1.28; linha própria)
 MODOS_RAPIDOS |= {"amigo_duplicado"}   # CAMP-AMIGO-DUP 21/11/2026: e-mail repetido, filtro Repetidos e Juntar cadastros (site falso; contrato 1.29; linha própria)
+MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doação paga com a doação de origem; Conferir Amigos das doações pagas (site falso; contrato 1.30, migração 240; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 
 
@@ -18317,6 +18318,95 @@ def filho(modo):
         hist = " ".join(r_[0] or "" for r_ in c.execute("SELECT detalhe FROM evento WHERE entidade='amigo' AND codigo=?", (str(V),)))
         ver("histórico do que saiu sem dado pessoal", "Pedro" not in hist and "pedro" not in hist, hist[:200])
         for l in res: print(l)
+    elif modo == "amigo_doacao":
+        # CAMP-DOA-AMIGO (21/11/2026, Rafael: "Não vi na lista também a Raquel, que doou acervo e virou amiga.."; contrato 1.30, migração 240).
+        # Site FALSO: o Amigo que veio da doação traz a doação (doacao_id/doacao_protocolo) → lista com origem "doação de acervo" e detalhe com o
+        # link da doação; a doação mostra o Amigo (ou "vira Amigo quando a contribuição for paga"); "Conferir Amigos das doações pagas" simula e cria.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, datetime as _dt
+        from fastapi.testclient import TestClient
+        from app import auth, amigos as am, doacoes_acervo as da
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 240: colunas fonte, doacao_site_id e doacao_protocolo", {"fonte", "doacao_site_id", "doacao_protocolo"} <= {r[1] for r in c.execute("PRAGMA table_info(amigo)")})
+        am._HOJE = _dt.date(2026, 11, 21)
+        posts, estado = [], {"apoios": [], "rota": True}
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.text = code, dados, _j.dumps(dados)
+            def json(s): return s._d
+        RAQ = {"id": 777, "tipo": "amigo", "protocolo": "CAMP-2026-000777", "categoria": "amigo", "modalidade": "anual", "nome": "Raquel Dias", "email": "raquel@exemplo.com", "situacao_pagamento": "ativo",
+               "validade": "2027-11-20T12:00:00+00:00", "criado_em": "2026-11-20T12:00:00+00:00", "fonte": "doacao_acervo", "doacao_id": 501, "doacao_protocolo": "CAMP-2026-000501", "pagamentos": []}
+        def post(path, corpo):
+            posts.append((path, corpo))
+            if path.endswith("/doacoes-acervo/amigos"):
+                if not estado["rota"]:
+                    return Resp(404, {"code": "rest_no_route", "message": "Nenhuma rota"})
+                item = {"id": 501, "protocolo": "CAMP-2026-000501", "nome": "Raquel Dias", "email": "raquel@exemplo.com", "etapa": "paga", "motivo": "paga_sem_amigo", "vai": "criar",
+                        "cobranca": {"id": 601, "external_reference": "CAMP-COB-601", "valor": 1500.0, "pago_em": "2026-11-20T10:00:00.000-03:00"}, "amigo_existente": None}
+                if corpo.get("simular", True):
+                    return Resp(200, {"ok": True, "modo": "simular", "itens": [item], "total": 1})
+                estado["apoios"] = [RAQ]
+                return Resp(200, {"ok": True, "modo": "aplicar", "itens": [dict(item, amigo_id=777)], "total": 1})
+            return Resp(200, {"ok": True})
+        def get(path, params=None):
+            if path.endswith("/painel/apoios"):
+                return Resp(200, {"itens": estado["apoios"], "mais": False, "agora": "2026-11-21T12:00:00+00:00"})
+            return Resp(200, {"itens": [], "mais": False})
+        class H:
+            def post(s, path, json=None): return post(path, json or {})
+            def get(s, path, params=None): return get(path, params)
+        class WPF:
+            h = H()
+        am._wp = lambda: WPF(); da._wp = lambda: WPF()
+        c.execute("INSERT INTO configuracao (chave, valor) VALUES ('wp.app_password','x') ON CONFLICT(chave) DO UPDATE SET valor='x'")
+        def doacao(sid, nome, email, etapa, extra):
+            dd = {"id": sid, "protocolo": f"CAMP-2026-{sid:06d}", "nome": nome, "email": email, "etapa": etapa, "recebida_em": "2026-11-10T12:00:00+00:00", "alterado_em": "2026-11-20T12:00:00+00:00"}
+            dd.update(extra)
+            da._gravar(c, dd)
+        doacao(501, "Raquel Dias", "raquel@exemplo.com", "paga", {"amigo": None, "amigo_situacao": "falta", "cobranca": {"id": 601, "situacao": "paga", "valor": 1500.0, "external_reference": "CAMP-COB-601"}})
+        doacao(502, "Zeca Sá", "zeca@exemplo.com", "contrato_assinado", {"amigo": None, "amigo_situacao": "aguarda_pagamento", "amigo_texto": "Vira Amigo quando a contribuição for paga"})
+        doacao(503, "Velho Site", "velho@exemplo.com", "contrato_enviado", {"amigo": None})
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        # ---------- antes: a doação paga sem Amigo e a não paga ----------
+        d1 = x.get("/api/doacoes-acervo/501").json(); d2 = x.get("/api/doacoes-acervo/502").json(); d3 = x.get("/api/doacoes-acervo/503").json()
+        ver("doação paga sem cadastro de Amigo: situação falta (a tela pede a conferência)", d1.get("amigo_situacao") == "falta" and d1.get("amigo_painel") is None, d1.get("amigo_situacao"))
+        ver("doação não paga: aguarda o pagamento (vira Amigo quando a contribuição for paga)", d2.get("amigo_situacao") == "aguarda_pagamento" and d3.get("amigo_situacao") == "aguarda_pagamento", (d2.get("amigo_situacao"), d3.get("amigo_situacao")))
+        ver("Raquel não está nos Amigos antes da conferência", not [i_ for i_ in x.get("/api/amigos").json().get("itens", []) if i_["email"] == "raquel@exemplo.com"])
+        # ---------- conferência ----------
+        cods = [op.post("/api/doacoes-acervo/amigos/previa").status_code, op.post("/api/doacoes-acervo/amigos", json={"ids": [501]}).status_code]
+        ver("não admin (operador): 403 na prévia e no criar; site não chamado", cods == [403, 403] and not posts, cods)
+        pv = x.post("/api/doacoes-acervo/amigos/previa").json()
+        ver("prévia: o site simula e lista a doação paga sem Amigo; nada muda",
+            pv.get("total") == 1 and pv["itens"][0]["protocolo"] == "CAMP-2026-000501" and posts == [("/wp-json/camp/v1/painel/doacoes-acervo/amigos", {"simular": True})]
+            and c.execute("SELECT COUNT(*) FROM amigo").fetchone()[0] == 0, (pv, posts))
+        ver("criar sem escolher doação: 400, site não chamado", x.post("/api/doacoes-acervo/amigos", json={"ids": []}).status_code == 400 and len(posts) == 1)
+        posts.clear()
+        rc_ = x.post("/api/doacoes-acervo/amigos", json={"ids": [501]})
+        ver("criar: o site cria só a escolhida (simular false) e o painel busca os Amigos de novo",
+            rc_.status_code == 200 and rc_.json().get("criados") == 1 and posts == [("/wp-json/camp/v1/painel/doacoes-acervo/amigos", {"simular": False, "ids": [501]})], (rc_.text, posts))
+        a = c.execute("SELECT * FROM amigo WHERE site_id=777").fetchone()
+        ver("Raquel aparece nos Amigos (paga, ativa), com a doação de origem", a and a["situacao"] == "pago" and a["fonte"] == "doacao_acervo" and a["doacao_site_id"] == 501 and a["doacao_protocolo"] == "CAMP-2026-000501", dict(a) if a else None)
+        li = [i_ for i_ in x.get("/api/amigos").json().get("itens", []) if i_["email"] == "raquel@exemplo.com"]
+        ver("lista dos Amigos: origem doação de acervo", len(li) == 1 and li[0]["origem_txt"] == "doacao", li)
+        da_ = x.get(f"/api/amigos/{a['id']}").json()
+        ver("detalhe do Amigo: Origem doação de acervo CAMP-2026-000501, com o link da doação", (da_.get("doacao") or {}) == {"id": 501, "protocolo": "CAMP-2026-000501", "no_painel": True}, da_.get("doacao"))
+        ver("histórico da doação: Amigo conferido", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='doacao_acervo' AND codigo='501' AND tipo='amigo_conferido'").fetchone()[0] == 1)
+        doacao(501, "Raquel Dias", "raquel@exemplo.com", "paga", {"amigo": {"id": 777, "validade": "2027-11-20", "validade_br": "20/11/2027", "protocolo": "CAMP-2026-000777", "situacao": "ativo"}, "amigo_situacao": "ativo"}); c.commit()
+        d1 = x.get("/api/doacoes-acervo/501").json()
+        ver("detalhe da doação: link para o Amigo no painel", (d1.get("amigo_painel") or {}).get("id") == a["id"] and d1["amigo_painel"]["protocolo"] == "CAMP-2026-000777" and d1.get("amigo_situacao") == "ativo", d1.get("amigo_painel"))
+        estado["rota"] = False
+        r4 = x.post("/api/doacoes-acervo/amigos/previa")
+        ver("site antigo: avisa a versão do plugin e nada muda", r4.status_code == 409 and "1.39.0" in r4.json().get("erro", ""), r4.text)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: botão Conferir Amigos das doações pagas, aviso Vira Amigo… e Origem no detalhe do Amigo",
+            "Conferir Amigos das doações pagas" in html and "Vira Amigo da CAMP quando a contribuição for paga." in html and "data-am-doacao=" in html and "data-doa-amigo=" in html)
+        for l in res: print(l)
     elif modo == "ingressos_painel":
         # CAMP-INGRESSOS 19/11/2026 · Ingressos da visita guiada à Residência João Marino: busca no site (GET /painel/ingressos, contrato
         # 1.18; cliente FALSO), incremental, turmas e vagas, contas do mês por turma, filtros, CSV para o Excel, reenviar, papéis e LGPD.
@@ -22330,6 +22420,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos (repetidos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Amigos (repetidos): todas as verificações rodaram")
+
+print("Amigos da CAMP · doação de acervo paga vira Amigo (contrato 1.30): origem e link da doação, Conferir Amigos das doações pagas (site falso)")
+rc, out = rodar("amigo_doacao", f"{tmp}/amigo_doacao.db")
+if rc != 0: ok(False, f"teste amigo_doacao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos (doação): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 15, "Amigos (doação): todas as verificações rodaram")
 
 print("E-mails enviados: todas as fontes do painel e do site (site falso), busca incremental, filtros, CSV, papéis e LGPD")
 rc, out = rodar("emails_enviados", f"{tmp}/emails_enviados.db")
