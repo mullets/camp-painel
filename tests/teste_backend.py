@@ -55,6 +55,7 @@ MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e
 MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
 MODOS_RAPIDOS |= {"amigo_desativar_apagar"}   # CAMP-AMIGO-APAGAR 21/11/2026: desativar/reativar e apagar Amigo (assinatura do Mercado Pago cancelada pelo site falso; contrato 1.28; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
+MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -17288,6 +17289,21 @@ def filho(modo):
         ver("o Painel tem tempo-limite na primeira montagem e o erro diz 'Tentar de novo'",
             "+window.CAMP_BOOT_LIMITE_MS||20000" in html and 'onclick="carregarPainel()">Tentar de novo<' in html and "Tentar novamente" not in html[html.find("function painelErroHTML"):html.find("function painelErroHTML") + 400])
         for l in res: print(l)
+    elif modo == "camp_view":
+        # CAMP-VIEW: guarda rápida; o comportamento é provado no navegador (tests/navegador_visualizador.js e tests/navegador_bloco_branco.js)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("o .main contém o que é absoluto dentro dele (o .sr não faz mais a janela rolar)", ".main{display:flex;flex-direction:column;min-width:0;overflow:auto;position:relative}" in html)
+        ver("na tela, a janela nunca rola (quem rola é o .main)", "@media screen{html,body{overflow:hidden}}" in html)
+        ver("uma barra só do visualizador, com os controles padrão na ordem", "const VISOR_CONTROLES=['anterior','proxima','girar-esq','girar-dir','recortar','zoom-menos','zoom-mais','zoom-ajustar','abrir'];" in html and "function visorBarraHTML(o)" in html)
+        ver("#item usa a barra padrão (girar e recortar só com prévia e papel)", "barraV=visorBarraHTML({ctx:'item'" in html and "girar:opV&&temPrevia&&!!fonteImg,recortar:opV&&temPrevia&&!!fonteImg" in html)
+        ver("a gaveta, a tela cheia e a tela de conferir usam a mesma barra", "const barra=visorBarraHTML({ctx:conf?'conf':'rev'" in html)
+        ver("girar em #item é a rotina de sempre (girarFolha → POST /api/itens/{c}/girar)", "girarFolha(c,a==='girar-esq'?-90:90,false,window.ITEM_ATUAL)" in html and "API('/api/itens/'+encodeURIComponent(codigo)+'/girar'" in html)
+        ver("recortar em #item é o editor de sempre (abrirAjuste → /ajuste), na própria página", "function ajHost(){return revSel('.rev-col-img')||" in html)
+        ver("as mesmas teclas: ← → R L C K + − 0", "const VISOR_TECLAS={ArrowLeft:'anterior',ArrowRight:'proxima',r:'girar-dir',l:'girar-esq',c:'recortar',k:'recortar','+':'zoom-mais','=':'zoom-mais','-':'zoom-menos','0':'zoom-ajustar'};" in html)
+        for l in res: print(l)
+
     elif modo == "ux66_girar":
         # UX-66: girar a folha com um clique sem rolar, na gaveta, na tela cheia e na tela de conferir; o "?" abre os atalhos.
         # O comportamento é provado no navegador (tests/navegador_ux66_girar.js, 1366×768 e 1366×600); aqui, a guarda rápida.
@@ -17298,7 +17314,9 @@ def filho(modo):
             'data-rev-girar-rapido="90"' in html and 'Girar 90°</button>' in html and 'data-rev-girar-rapido="180"' in html and 'Girar 180°</button>' in html
             # redesenho da página do projeto (04/11/2026, §4.2 C): a barra virou a "Ferramentas da imagem" (role=toolbar), logo acima da
             # imagem, depois da identificação e dos avisos; os botões de girar não dependem de conf (só a Tela cheia)
-            and "const barra=`<div class=\"rev-cheia-bar rev-barra rv-ferr\" role=\"toolbar\" aria-label=\"Ferramentas da imagem\">${op&&p.previa?" in html and "const corpo=`<div class=\"rv\">${cab}${alertas}${barra}" in html)
+            # CAMP-VIEW (21/11/2026): a barra é a do visualizador padrão (visorBarraHTML, a mesma de #item); girar continua só com prévia e papel
+            and "const barra=visorBarraHTML({ctx:conf?'conf':'rev',codigo,classe:'rev-cheia-bar rev-barra rv-ferr'," in html and "girar:op&&p.previa,recortar:op&&p.previa" in html
+            and 'role="toolbar" aria-label="Ferramentas da imagem"' in html and "const corpo=`<div class=\"rv\">${cab}${alertas}${barra}" in html)
         ver("os botões usam a mesma rotina do atalho R (girarFolha → POST /api/itens/{c}/girar)",
             "if(b.dataset.revGirarRapido)girarFolha(b.dataset.codigo,+b.dataset.revGirarRapido)" in html)
         ver("a barra fica à vista sem rolar (sticky no alto e no pé)", ".rev-barra{position:sticky;top:0;bottom:0;" in html)
@@ -22082,6 +22100,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Montar o painel: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Visualizador padrão da folha (CAMP-VIEW): a mesma barra em #item e na conferência; o .main contém o absoluto")
+rc, out = rodar("camp_view", f"{tmp}/camp_view.db")
+if rc != 0: ok(False, f"teste camp_view não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Visualizador: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Girar a folha com um clique sem rolar (UX-66): Girar 90°/180° na barra, ? abre os atalhos")
 rc, out = rodar("ux66_girar", f"{tmp}/ux66_girar.db")

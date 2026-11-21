@@ -29,6 +29,7 @@ Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: os
 | 5 | Máquinas (admin) | Q · C · M · G | Qualidade do CAMP Vision · Configurações (admin) · Como o material anda · Glossário |
 A tecla de um item do "Mais" funciona com o "Mais" fechado; só o papel esconde de verdade. Conferindo uma folha, as letras do menu não valem
 (R gira, K recorta, Enter confere): por isso Arquitetos é I, não R.
+**Visualizador da folha (CAMP-VIEW, 21/11/2026, pedido do Rafael: "mantenha as views meio padronizadas"):** a MESMA barra (`visorBarraHTML`) e as mesmas teclas (`VISOR_TECLAS`) na página da folha (#item), na gaveta "Revisar folha", na tela cheia e na tela de conferir: ← → anterior/próxima, R gira à direita, L à esquerda, C (ou K, fora da tela cheia) recorta, + − 0 ampliam. Nessas telas as letras do menu não valem (R não vai para Cobranças, C não vai para Configurações, L não vai para Relatórios); Shift+letra continua indo para as telas.
 Nas listas do Precisa de você e de Problemas (UX-32): `J`/`K` descem/sobem, `Enter` abre e `I` ignora o item escolhido (esconder por 7 dias); sem item escolhido com J/K, o `I` continua sendo Arquitetos.
 Fixas: `⌘/Ctrl+K` busca · `[` ou `⌘/Ctrl+B` recolhe/expande o menu (recolhido = só ícones, nome e tecla na dica) · `F` foca o filtro da tela · `?` ajuda · `Esc` fecha. Item novo no menu = nova linha na tabela (o `check_ui` reprova se esquecer ou fora de ordem, e `tests/auditoria_atalhos.js` aperta TODAS as teclas da tabela).
 
