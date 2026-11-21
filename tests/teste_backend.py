@@ -18089,6 +18089,14 @@ def filho(modo):
         ver("turma 28/11 10h: 2 compras, 3 pessoas, 12 livres, 2 entraram, bruto 360, desconto 24, recebido 336", (t10["compras"], t10["pessoas"], t10["livres"], t10["entraram"], t10["bruto"], t10["desconto"], t10["total"], t10["amigos"]) == (2, 3, 12, 2, 360.0, 24.0, 336.0, 1), t10)
         ver("turma sem venda aparece com as vagas (28/11 13h)", any(t["chave"] == "2026-11-28|13:00" and t["compras"] == 0 and t["livres"] == 15 for t in m["turmas"]), m["turmas"])
         ver("totais do mês: 4 pessoas, recebido 336, descontos 144 (Patrono gratuito), 2 compras com Amigo", (m["totais"]["pessoas"], m["totais"]["total"], m["totais"]["desconto"], m["totais"]["amigos"]) == (4, 336.0, 144.0, 2), m["totais"])
+        # 21/11/2026 (Rafael: "tem algum erro na conta de desconto de amigos?"): meia-entrada NÃO é desconto de Amigo
+        ig._gravar(c, dict(A, id=590, ref="CAMP-INGRESSO-JM-20270130-1000-590", data="2027-01-30", hora="10:00", nome="Meia Um", email="meia1@x.com", pessoas=3, meias=2, total=240, desconto=None, amigo_id=0, codigo="MEIA0001"))
+        ig._gravar(c, dict(A, id=591, ref="CAMP-INGRESSO-JM-20270130-1300-591", data="2027-01-30", hora="13:00", nome="Meia Dois", email="meia2@x.com", pessoas=1, meias=1, total=60, desconto=None, amigo_id=0, codigo="MEIA0002"))
+        c.commit()
+        mj = ig.do_mes(c, "2027-01")
+        ver("meias sem Amigo: desconto de Amigo 0 (antes contava R$ 180), abatimento da meia separado (R$ 180), 0 compras com Amigo, vagas livres no total",
+            (mj["totais"]["desconto"], mj["totais"]["desconto_meia"], mj["totais"]["amigos"], mj["totais"]["pessoas"], mj["totais"]["total"]) == (0.0, 180.0, 0, 4, 300.0) and mj["totais"]["livres"] == mj["totais"]["vagas"] - 4, mj["totais"])
+        c.execute("DELETE FROM ingresso WHERE site_id IN (590, 591)"); c.commit()
         ver("filtros: situação e busca por referência", [x["id"] for x in ig.do_mes(c, "2026-11", "reservado")["itens"]] == [504] and [x["id"] for x in ig.do_mes(c, "2026-11", "todas", "20261129")["itens"]] == [503])
         x1 = [x for x in m["itens"] if x["id"] == 501][0]
         ver("linha: categoria do Amigo, meio e referência do Mercado Pago", (x1["amigo"], x1["meio"], x1["ref"]) == ("Amigo (20%)", "Pix", "CAMP-INGRESSO-JM-20261128-1000-501"), x1)
