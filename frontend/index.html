@@ -2520,7 +2520,6 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
       <div class="us-acoes"><button class="btn" id="us-atualizar" onclick="puxarUso(false)">Atualizar agora</button><button class="btn" id="us-tudo" onclick="puxarUso(true)" title="Lê todo o histórico do formulário no site">Puxar tudo</button></div></div>
     <p class="us-frase" id="us-frase" aria-live="polite"></p>
     <div class="hoje-kpis" id="us-kpis"></div>
-    <div class="panel" id="us-emkt"><div class="ph"><h2>Lista de e-mail da CAMP</h2></div><div class="pb"><div class="empty">Carregando…</div></div></div>
     <div class="panel">
       <div class="tabs" id="us-tabs"><button class="on" data-aba="downloads" onclick="usoAba('downloads')">Pedidos de download</button><button data-aba="pessoas" onclick="usoAba('pessoas')">Pessoas</button><button data-aba="materiais" onclick="usoAba('materiais')">Materiais</button></div>
       <div class="filterbar"><input id="us-q" placeholder="nome, e-mail, instituição, código, uso ou protocolo" oninput="clearTimeout(window._usq);window._usq=setTimeout(usoFiltrou,300)"><select id="us-uso" class="btn" onchange="usoFiltrou()" aria-label="Uso declarado"><option value="">todos os usos</option></select><select id="us-fundo" class="btn" onchange="usoFiltrou()" aria-label="Fundo"><option value="">todos os fundos</option></select><input id="us-de" type="date" class="btn" onchange="usoFiltrou()" title="a partir de"><input id="us-ate" type="date" class="btn" onchange="usoFiltrou()" title="até"><button class="btn sm" onclick="exportarUsoCSV()" title="Exporta a aba atual, com o filtro">Exportar CSV</button><details class="mais-menu" id="us-mais" hidden><summary class="btn sm" aria-haspopup="menu">Mais ⋯</summary><div class="mais-lista" role="menu"><button class="btn perigo-txt" role="menuitem" id="us-apagar-filtro" onclick="usoApagarFiltro()" hidden>Apagar os resultados</button></div></details><span class="cnt" id="us-cnt"></span></div>
@@ -10394,25 +10393,13 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t||!t.closest)r
   const st=t.closest('[data-ek-sit]');if(st){EK.sit=st.dataset.ekSit;carregarEmktTela();return}
   const ac=t.closest('[data-ek-acao]');if(ac){if(ac.dataset.ekAcao==='csv-sel')ekCsvSelecionados();else{EK.sel.clear();carregarEmktTela()}return}
   const sb=t.closest('#ek-sinc');if(sb){try{const r=await API('/api/contatos-email/sincronizar',{method:'POST'});toast(`Sincronizado: ${qtd(r.lidos||0,'registro lido','registros lidos')}, ${qtd(r.novos||0,'novo','novos')}`);carregarEmktTela()}catch(err){toast(err.message)}}});
-// 03/11 (Rafael: "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net"): inscrições com
-// "Quero receber e-mails" + cadastros de download com o aceite; uma linha por e-mail; quem saiu não volta; CSV no formato do Sender.net.
-async function carregarEmkt(){const box=document.querySelector('#us-emkt .pb');if(!box)return;
-  try{const d=await API('/api/contatos-email');const po=d.por_origem||{};
-    const partes=Object.entries(d.origens||{}).filter(([k])=>po[k]).map(([k,t])=>`${fmtN(po[k])} · ${t}`);
-    const linhas=d.itens.map(p=>`<tr><td>${escHtml(p.nome||'—')}${p.instituicao?`<br><small class="help">${escHtml(p.instituicao)}</small>`:''}</td><td class="mono">${escHtml(p.email)}</td><td><small>${escHtml(p.origens.join(' · '))}</small></td><td>${escHtml(fmtData(p.consentiu_em))}</td><td><button type="button" class="lnk perigo-txt" data-emkt-tirar="${escHtml(p.email)}">tirar da lista</button></td></tr>`).join('');
-    const fora=d.fora.map(p=>`<li><span class="mono">${escHtml(p.email)}</span> <small class="help">saiu em ${escHtml(fmtData(p.fora.quando))}${p.fora.motivo?' · '+escHtml(p.fora.motivo):''}</small> <button type="button" class="lnk" data-emkt-devolver="${escHtml(p.email)}">devolver à lista</button></li>`).join('');
-    box.innerHTML=`<p><b>${qtd(d.total,'pessoa aceitou','pessoas aceitaram')} receber e-mails da CAMP</b>${partes.length?` <small class="help">(${escHtml(partes.join(', '))})</small>`:''}</p>
-      ${d.total?`<div class="act"><a class="btn pri" href="#emails/aceite">Ver e filtrar em E-mails → Quem aceita e-mails</a><a class="btn" href="/api/contatos-email.csv" download>Baixar a lista para o Sender.net (CSV)</a></div><p class="help">O site já põe sozinho no grupo do Sender quem aceita. O CSV serve para conferir ou importar à mão (Subscribers → Import).</p>
-      <details class="cv-sec"><summary>Ver a lista (${fmtN(d.total)})</summary><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>De onde veio</th><th>Aceitou em</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div></details>`:'<p class="help">Ainda ninguém. Entram aqui sozinhas as pessoas que marcam "Quero receber e-mails da CAMP" nos formulários do site.</p>'}
-      ${fora?`<details class="cv-sec"><summary>Saíram da lista (${fmtN(d.fora.length)})</summary><ul class="list">${fora}</ul></details>`:''}`}
-  catch(e){box.innerHTML=`<p class="help">Não consegui carregar a lista: ${escHtml(e.message)}</p>`}}
 document.addEventListener('click',async e=>{let b=e.target.closest('[data-emkt-tirar]');
   if(b){const em=b.dataset.emktTirar;const r=await confirmar({titulo:'Tirar da lista de e-mail?',alvo:em,texto:'A pessoa não entra mais no CSV para o Sender.net, mesmo que se cadastre de novo. Lembre de descadastrá-la também no Sender.net, se ela já estiver lá.',campo:{rotulo:'Motivo (opcional)',placeholder:'ex.: pediu por e-mail para sair',maxlength:200},botao:'Tirar da lista'});if(!r)return;
-    try{await API('/api/contatos-email/tirar',{method:'POST',body:JSON.stringify({email:em,motivo:r.valor||null})});toast('Tirado da lista');carregarEmkt();carregarEmktTela()}catch(err){toast(err.message)}return}
-  b=e.target.closest('[data-emkt-devolver]');if(b){try{await API('/api/contatos-email/devolver',{method:'POST',body:JSON.stringify({email:b.dataset.emktDevolver})});toast('Devolvido à lista');carregarEmkt();carregarEmktTela()}catch(err){toast(err.message)}}});
+    try{await API('/api/contatos-email/tirar',{method:'POST',body:JSON.stringify({email:em,motivo:r.valor||null})});toast('Tirado da lista');carregarEmktTela()}catch(err){toast(err.message)}return}
+  b=e.target.closest('[data-emkt-devolver]');if(b){try{await API('/api/contatos-email/devolver',{method:'POST',body:JSON.stringify({email:b.dataset.emktDevolver})});toast('Devolvido à lista');carregarEmktTela()}catch(err){toast(err.message)}}});
 async function carregarUso(soLista){
   try{
-    if(!soLista||!US_RESUMO){US_RESUMO=await API('/api/uso/resumo');usoResumoHTML(US_RESUMO);carregarEmkt()}
+    if(!soLista||!US_RESUMO){US_RESUMO=await API('/api/uso/resumo');usoResumoHTML(US_RESUMO)}
     const chave=US.aba+JSON.stringify(usoFiltros());if(chave!==US.chave){US.chave=chave;US.pagina=1}
     tabelaCarregando('#us-body','Carregando…');
     const rota=US.aba==='pessoas'?'/api/uso/pessoas':US.aba==='materiais'?'/api/uso/materiais':'/api/uso',dl=US.aba==='downloads';
