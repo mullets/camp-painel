@@ -377,10 +377,15 @@ def _linha(r, amigos: dict | None = None) -> dict:
     for t in tp:
         por[t["tipo"]] = por.get(t["tipo"], 0) + _int(t.get("qtd"))
     cad = (amigos or {}).get((r["email"] or "").lower()) if r["email"] else None
+    # Descontos separados (21/11/2026, Rafael: "tem algum erro na conta de desconto de amigos?"): a meia-entrada NÃO é desconto de
+    # Amigo. Antes, "desconto" = preço cheio × pessoas − pago, e as meias entravam como desconto de Amigo.
+    preco = float(r["preco"] or 0)
+    d_amigo = round(sum(_int(t.get("qtd")) * max(0.0, preco - float(_num(t.get("valor")) or 0)) for t in tp if t.get("tipo") in ("amigo", "gratuidade")), 2)
+    d_meia = round(sum(_int(t.get("qtd")) * max(0.0, preco - float(_num(t.get("valor")) or 0)) for t in tp if t.get("tipo") == "meia"), 2)
     return {"id": r["site_id"], "ref": r["ref"] or "", "data": r["data"], "hora": r["hora"], "turma": f"{r['data']}|{r['hora']}",
             "nome": r["nome"] or "", "email": r["email"] or "", "telefone": r["telefone"] or "", "pessoas": r["pessoas"], "entraram": r["entraram"],
             "bruto": round((r["preco"] or 0) * (r["pessoas"] or 0), 2), "total": r["total"] or 0.0,
-            "desconto": round((r["preco"] or 0) * (r["pessoas"] or 0) - (r["total"] or 0), 2),
+            "desconto": d_amigo, "desconto_meia": d_meia,
             "amigo": f"{CATEGORIAS.get((dc or {}).get('categoria', ''), (dc or {}).get('categoria', ''))} ({(dc or {}).get('pct', 0)}%)" if dc else "",
             "meio": "" if r["situacao"] == "gratuito" else MEIOS.get(meio, meio), "situacao": r["situacao"], "situacao_nome": SITUACOES.get(r["situacao"], r["situacao"]),
             "codigo": r["codigo"] or "", "link": r["link"] or "", "modo": r["modo"] or "", "confirmado_em": r["confirmado_em"] or "", "criado_em": r["criado_em"] or "",
@@ -415,13 +420,13 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
     vagas_padrao = _int(cfg.get("vagas")) or 15
     turmas: dict[str, dict] = {}
     for t in con.execute("SELECT * FROM ingresso_turma WHERE data LIKE ? ORDER BY data, hora", (mes + "-%",)):
-        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0}
+        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "desconto_meia": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0}
     por_meio: dict[str, float] = {}
     for x in (y for y in todas_l if y["situacao"] in PENDENTES):     # tela: pendentes de cada turma (reserva em pagamento)
-        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
+        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "desconto_meia": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
         t["pendentes"] += x["pessoas"]
     for x in (y for y in todas_l if y["situacao"] in VALEM):
-        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
+        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "desconto_meia": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
         t["pagos" if x["situacao"] == "pago" else "gratuitos"] += x["pessoas"]
         if x["total"] and x["meio"]:
             por_meio[x["meio"]] = round(por_meio.get(x["meio"], 0.0) + float(x["total"]), 2)
@@ -430,15 +435,17 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
         t["entraram"] += x["entraram"]
         t["bruto"] = round(t["bruto"] + x["bruto"], 2)
         t["desconto"] = round(t["desconto"] + x["desconto"], 2)
+        t["desconto_meia"] = round(t["desconto_meia"] + x["desconto_meia"], 2)
         t["total"] = round(t["total"] + x["total"], 2)
-        t["amigos"] += 1 if x["amigo"] else 0
+        t["amigos"] += 1 if x["desconto"] > 0 else 0
         for k, v in x["por_tipo"].items():
             t["por_tipo"][k] = t["por_tipo"].get(k, 0) + v
     ts = sorted(turmas.values(), key=lambda t: t["chave"])
     for t in ts:
         t["livres"] = max(0, (t["vagas"] or vagas_padrao) - t["pessoas"])
     tot = {k: (round(sum(t[k] for t in ts), 2) if isinstance(ts[0][k], float) else sum(t[k] for t in ts)) if ts else 0
-           for k in ("compras", "pessoas", "entraram", "bruto", "desconto", "total", "amigos")}
+           for k in ("compras", "pessoas", "entraram", "bruto", "desconto", "desconto_meia", "total", "amigos", "livres", "pendentes")}
+    tot["vagas"] = sum((t["vagas"] or vagas_padrao) for t in ts)
     tot["por_tipo"] = _zerar_tipos()
     for t in ts:
         for k, v in t["por_tipo"].items():
@@ -635,10 +642,10 @@ def exportar(mes: str | None = None, situacao: str = "valem", u: dict = Depends(
     finally:
         con.close()
     cab = ["Data", "Hora", "Nome", "E-mail", "Telefone", "Pessoas", "Entraram", "Bruto (R$)", "Desconto Amigo (R$)", "Pago (R$)", "Amigo (categoria)", "Meio", "Situação", "Referência Mercado Pago",
-           "Inteiras", "Meias-entradas", "Amigo com desconto", "Gratuidades", "Amigo da CAMP (cadastro)"]
+           "Inteiras", "Meias-entradas", "Amigo com desconto", "Gratuidades", "Amigo da CAMP (cadastro)", "Meia-entrada: abatimento (R$)"]
     return _csv(cab, [("/".join(reversed(x["data"].split("-"))), x["hora"], x["nome"], x["email"], x["telefone"], x["pessoas"], x["entraram"],
                        float(x["bruto"]), float(x["desconto"]), float(x["total"]), x["amigo"], x["meio"], x["situacao_nome"], x["ref"],
-                       x["por_tipo"].get("inteira", 0), x["por_tipo"].get("meia", 0), x["por_tipo"].get("amigo", 0), x["por_tipo"].get("gratuidade", 0), _amigo_txt(x))
+                       x["por_tipo"].get("inteira", 0), x["por_tipo"].get("meia", 0), x["por_tipo"].get("amigo", 0), x["por_tipo"].get("gratuidade", 0), _amigo_txt(x), float(x["desconto_meia"]))
                       for x in d["itens"]], f"ingressos-joao-marino-{d['mes']}.csv")
 
 

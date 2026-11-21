@@ -2409,7 +2409,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
     <div class="ig-kpis" id="ig-kpis"></div>
     <div class="panel"><div class="filterbar"><select id="ig-mes" class="btn" aria-label="Mês"></select><select id="ig-sit" class="btn" aria-label="Situação (planilha)"></select><a class="btn sm" id="ig-csv" href="/api/ingressos/exportar.csv" download>Exportar CSV do mês</a><span class="cnt" id="ig-cnt"></span></div>
       <div class="tw"><table class="ig-sessoes">
-      <thead><tr><th>Turma</th><th>Ocupação</th><th class="ig-num">Pagos</th><th class="ig-num">Aguardando</th><th class="ig-num ig-col-ent">Entraram</th><th class="ig-num">Recebido</th><th class="ig-chev" aria-label="Abrir"></th></tr></thead>
+      <thead><tr><th>Turma</th><th>Ocupação</th><th class="ig-num">Livres</th><th class="ig-num">Aguardando</th><th class="ig-num ig-col-ent">Entraram</th><th class="ig-num">Recebido</th><th class="ig-chev" aria-label="Abrir"></th></tr></thead>
       <tbody id="ig-turmas"><tr><td class="empty">Carregando…</td></tr></tbody>
     </table></div></div>
     </div>
@@ -8734,9 +8734,10 @@ function igFiltros(){const p=new URLSearchParams();if(IG.mes)p.set('mes',IG.mes)
 async function carregarIngressos(){const tb=document.getElementById('ig-turmas');if(!tb)return;if(IG.aba==='datas')igCarregarDatas();
   try{const d=await API('/api/ingressos?'+igFiltros());IG.d=d;IG.mes=d.mes;const t=d.totais||{};
   const pm=t.por_meio||{},pmTxt=Object.keys(pm).length?Object.entries(pm).map(([k,v])=>`${k} ${igBRL(v)}`).join(' · '):'pago pelos visitantes';
-  const chips=Object.keys(IG_TIPO_CURTO).filter(k=>(t.por_tipo||{})[k]).map(k=>`<span class="tag">${fmtN(t.por_tipo[k])} ${escHtml(IG_TIPO_CURTO[k][t.por_tipo[k]===1?0:1])}</span>`).join(' ')||'<span class="ig-kpi-nada">nenhum</span>';
-  document.getElementById('ig-kpis').innerHTML=[[fmtN(t.pessoas||0),'pessoas no mês','pagos e gratuitos'],[igBRL(t.total),'recebido',pmTxt],[null,'por tipo',chips],[fmtN(t.entraram||0),'entraram','registrado na porta pelo QR'],[igBRL(t.desconto),'descontos de Amigo',qtd(t.amigos||0,'compra','compras')]]
-    .map(([v,l,x])=>`<div class="metrica ig-kpi">${v===null?`<div class="ig-kpi-chips">${x}</div><div class="l">${escHtml(l)}</div>`:`<div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(x)}</div>`}</div>`).join('');
+  /* 21/11/2026 (Rafael: "erro na conta de desconto de amigos? ui e ux meio ruim"): a meia-entrada não é desconto de Amigo; tipos junto das pessoas; vagas livres no lugar do card vazio */
+  const tiposTxt=t.pessoas?igTiposTxt(t.por_tipo||{}):'nenhuma venda ainda';
+  document.getElementById('ig-kpis').innerHTML=[[fmtN(t.pessoas||0),t.pessoas===1?'pessoa no mês':'pessoas no mês',tiposTxt],[igBRL(t.total),'recebido',pmTxt],[fmtN(t.livres||0),t.livres===1?'vaga livre':'vagas livres',`de ${fmtN(t.vagas||0)} no mês`+(t.pendentes?` · ${fmtN(t.pendentes)} aguardando pagamento`:'')],[fmtN(t.entraram||0),'entraram','registrado na porta pelo QR'],[igBRL(t.desconto),'desconto de Amigo',t.amigos?qtd(t.amigos,'compra com desconto','compras com desconto'):'nenhuma compra com desconto']]
+    .map(([v,l,x])=>`<div class="metrica ig-kpi"><div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(x)}</div></div>`).join('');
   document.getElementById('ig-mes').innerHTML=(d.meses||[]).map(m=>`<option value="${escHtml(m)}"${m===d.mes?' selected':''}>${escHtml(m.slice(5)+'/'+m.slice(0,4))}</option>`).join('');
   document.getElementById('ig-sit').innerHTML=[['valem','Pagos e gratuitos'],['todas','Todas as situações'],...Object.entries(d.situacoes||{})].map(([k,l])=>`<option value="${escHtml(k)}"${k===IG.sit?' selected':''}>${escHtml(l)}</option>`).join('');
   document.getElementById('ig-csv').href='/api/ingressos/exportar.csv?'+igFiltros();
@@ -8748,9 +8749,9 @@ async function carregarIngressos(){const tb=document.getElementById('ig-turmas')
     return `<tr class="ig-sessao${oc||x.pendentes?'':' ig-vazia'}${IG.L.turma===x.chave?' on':''}" data-ig-abrir="${escHtml(x.chave)}" tabindex="0" role="button" aria-label="Abrir a lista de presença de ${escHtml(igData(x.data,x.hora))}">
       <td data-l="Turma"><b>${escHtml(igData(x.data,x.hora))}</b>${x.por_tipo&&oc?`<small class="ig-tipos">${escHtml(igTiposTxt(x.por_tipo))}</small>`:''}</td>
       <td data-l="Ocupação"><span class="ig-ocup"><span class="ig-ocup-bar" aria-hidden="true"><i style="width:${pc}%"></i></span><span class="ig-ocup-n">${fmtN(oc)}/${fmtN(vg)}</span></span></td>
-      <td class="ig-num" data-l="Pagos">${fmtN((x.pagos||0)+(x.gratuitos||0))}</td><td class="ig-num" data-l="Aguardando">${x.pendentes?`<span class="tag a">${fmtN(x.pendentes)}</span>`:'0'}</td>
+      <td class="ig-num" data-l="Livres">${x.livres?fmtN(x.livres):'<span class="tag r">esgotada</span>'}</td><td class="ig-num" data-l="Aguardando">${x.pendentes?`<span class="tag a">${fmtN(x.pendentes)}</span>`:'0'}</td>
       <td class="ig-num ig-col-ent" data-l="Entraram">${fmtN(x.entraram)}</td><td class="ig-num" data-l="Recebido"><b>${escHtml(igBRL(x.total))}</b></td><td class="ig-chev" aria-hidden="true">›</td></tr>`}).join('')
-    +`<tr class="ig-total"><td>Total do mês</td><td>${fmtN(t.pessoas||0)} pessoas</td><td class="ig-num">${fmtN(t.pessoas||0)}</td><td></td><td class="ig-num ig-col-ent">${fmtN(t.entraram||0)}</td><td class="ig-num"><b>${escHtml(igBRL(t.total))}</b></td><td></td></tr>`
+    +`<tr class="ig-total"><td>Total do mês</td><td>${fmtN(t.pessoas||0)} de ${fmtN(t.vagas||0)} vagas</td><td class="ig-num">${fmtN(t.livres||0)}</td><td class="ig-num">${t.pendentes?fmtN(t.pendentes):''}</td><td class="ig-num ig-col-ent">${fmtN(t.entraram||0)}</td><td class="ig-num"><b>${escHtml(igBRL(t.total))}</b></td><td></td></tr>`
     :`<tr><td colspan="7" class="empty">${vazioHTML('Nenhuma turma neste mês.','Escolha outro mês. As turmas e as vendas chegam na próxima busca no site.','')}</td></tr>`;
   if(IG.L.turma&&IG.aba==='mes')igCarregarLista()}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#ig-turmas','Não consegui carregar os ingressos: '+e.message,'carregarIngressos()')}}}
