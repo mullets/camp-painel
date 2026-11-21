@@ -12,3 +12,5 @@ backend/backups/
 *.db.gz
 # currículos em PDF das inscrições da Residência (dados pessoais; ao lado do banco)
 inscricoes_cv/
+# anexos internos das doações de acervo (orçamentos, notas, contrato assinado; ao lado do banco)
+doacoes_anexos/

@@ -32,8 +32,9 @@ Q_ME = "query { me { name email subscription { documents credits } } }"
 M_CRIAR = ("mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) "
            "{ createDocument(document: $document, signers: $signers, file: $file) "
            "{ id name created_at signatures { public_id name email action { name } link { short_link } } } }")
-Q_DOC = ("query { document(id: \"%s\") { id name signatures { public_id name email action { name } link { short_link } "
-         "signed { created_at } rejected { created_at } } } }")
+Q_DOC = ("query { document(id: \"%s\") { id name files { signed } signatures { public_id name email action { name } link { short_link } "
+         "signed { created_at } rejected { created_at } } } }")      # CAMP-DOA-CENTRAL: files { signed } = o PDF assinado (docs: Resgatando documentos)
+MAX_ASSINADO = 30 * 1024 * 1024   # o PDF assinado (com a página de assinaturas) que o painel baixa e guarda
 
 MSG_TOKEN = "A Autentique recusou o token: confira o token da API (perfil → API na Autentique) e cole de novo."
 MSG_LIMITE = "Acabaram os documentos do mês na Autentique (plano grátis: 10 por mês): use o link colado ou espere o mês virar."
@@ -178,8 +179,8 @@ def criar_documento(tk: str, nome_doc: str, pdf: bytes, nome_arquivo: str, nome_
     return {"id": str(doc["id"]), "link": doador["link"], "assinantes": assin}
 
 
-def consultar(tk: str, doc_id: str) -> list[dict]:
-    """As assinaturas do documento (só as que têm ação: o dono da conta sem ação não conta)."""
+def consultar_doc(tk: str, doc_id: str) -> tuple[list[dict], str]:
+    """(assinaturas com ação, endereço do PDF assinado ou ""). O endereço vem de `files { signed }` (só existe depois de todos assinarem)."""
     did = re.sub(r"[^A-Za-z0-9_-]", "", str(doc_id or ""))[:80]   # vai literal na query (o tipo do argumento muda entre versões da API)
     if not did:
         raise ErroAutentique("Documento da Autentique sem id.")
@@ -187,7 +188,43 @@ def consultar(tk: str, doc_id: str) -> list[dict]:
     doc = d.get("document") if isinstance(d.get("document"), dict) else None
     if not doc:
         raise ErroAutentique("O documento não existe mais na Autentique (foi apagado lá?).")
-    return [s for s in _assinaturas(doc.get("signatures")) if s["acao"]]
+    files = doc.get("files") if isinstance(doc.get("files"), dict) else {}
+    url = str(files.get("signed") or "").strip()
+    return [s for s in _assinaturas(doc.get("signatures")) if s["acao"]], (url if url.lower().startswith("https://") else "")
+
+
+def consultar(tk: str, doc_id: str) -> list[dict]:
+    """As assinaturas do documento (só as que têm ação: o dono da conta sem ação não conta)."""
+    return consultar_doc(tk, doc_id)[0]
+
+
+def baixar_assinado(tk: str, url: str) -> bytes:
+    """CAMP-DOA-CENTRAL: baixa o PDF assinado. O token só vai para endereço da própria Autentique (nunca para outro host). Levanta
+    ErroAutentique com frase pronta (nunca com o endereço, que pode levar credencial)."""
+    from urllib.parse import urlparse
+    host = (urlparse(url or "").hostname or "").lower()
+    if not url.lower().startswith("https://") or not host:
+        raise ErroAutentique("A Autentique ainda não tem o PDF assinado deste documento.")
+    cab = {"Accept": "application/pdf"}
+    if tk and (host == "autentique.com.br" or host.endswith(".autentique.com.br")):
+        cab["Authorization"] = f"Bearer {tk}"
+    try:
+        with _cliente() as cl:
+            r = cl.get(url, headers=cab, follow_redirects=True)
+    except httpx.TimeoutException as e:
+        raise ErroAutentique("A Autentique demorou demais para mandar o PDF assinado. Tente de novo em instantes.") from e
+    except Exception as e:  # noqa: BLE001
+        raise ErroAutentique("Não consegui baixar o PDF assinado da Autentique agora. Tente de novo em instantes.") from e
+    if r.status_code in (401, 403):
+        raise ErroAutentique(MSG_TOKEN)
+    if r.status_code >= 400:
+        raise ErroAutentique(f"A Autentique respondeu {r.status_code} ao baixar o PDF assinado. Tente de novo em instantes.")
+    pdf = bytes(r.content or b"")
+    if not pdf.startswith(b"%PDF-"):
+        raise ErroAutentique("A Autentique não devolveu um PDF assinado. Tente de novo em instantes.")
+    if len(pdf) > MAX_ASSINADO:
+        raise ErroAutentique("O PDF assinado passa de 30 MB: baixe na Autentique e anexe à mão.")
+    return pdf
 
 
 def data_iso(v: str) -> str:

@@ -42,6 +42,9 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
   ser paga antes da assinatura). Na conferência da Autentique, se o site recusar voltar a etapa (cópia daqui atrasada: já paga), vai só a data.
 - CAMP-DOA-FUNDO (21/11/2026, Rafael: "e precisa criar quando terminar o fundo e arquiteto automaticamente."; sem mudar o contrato com o site):
   ao passar a "Acervo recebido pela CAMP", POST …/{id}/receber (prévia simulada; com aplicar, cria) — ver a seção no fim deste arquivo.
+- CAMP-DOA-CENTRAL (21/11/2026, sem mudar o contrato com o site): a tela vira a central de cada doação — abas (Em andamento, Recebidos,
+  Não aprovadas e arquivadas, Todas), linha de etapas, próximos passos (tarefas), arquivos, contrato assinado baixado da Autentique e
+  histórico único. Ver doacoes_central.py.
 """
 from __future__ import annotations
 
@@ -440,6 +443,10 @@ def filtrar(con, etapa: str = "", q: str = "") -> list[dict]:
     itens = [_linha(r) for r in rows]
     if etapa == "abertas":
         itens = [x for x in itens if x["etapa"] in ABERTAS]
+    elif etapa == "recebidos":                    # CAMP-DOA-CENTRAL: abas Em andamento / Recebidos / Não aprovadas e arquivadas / Todas
+        itens = [x for x in itens if x["etapa"] == "recebido"]
+    elif etapa == "encerradas":
+        itens = [x for x in itens if x["etapa"] in ("nao_aprovada", "arquivada")]
     elif etapa in ETAPAS:
         itens = [x for x in itens if x["etapa"] == etapa]
     if q:
@@ -467,6 +474,8 @@ def anonimizar_por_email(con, email: str) -> int:
         d["notas"], d["n_fotos"] = [], 0
         con.execute("UPDATE doacao_acervo SET nome=?, email=NULL, telefone=NULL, autor=NULL, local=NULL, dados=?, anonimizado=1 WHERE site_id=?",
                     (REMOVIDO, json.dumps(d, ensure_ascii=False), sid))
+        from . import doacoes_central                # CAMP-DOA-CENTRAL: nomes dos arquivos viram "(removido)"; arquivos e tarefas ficam
+        doacoes_central.anonimizar(con, sid)
     return len(ids)
 
 
@@ -478,7 +487,9 @@ def numeros(con) -> dict:
         return {}
     return {"abertas": sum(1 for r in rows if r[0] in ABERTAS), "novas": sum(1 for r in rows if r[0] == "em_analise"),
             "aguardando_pagamento": sum(1 for r in rows if r[0] == "cobranca"), "a_receber": sum(1 for r in rows if r[0] == "paga"),   # CAMP-DOA-LISTA (campo novo)
-            "pagas": sum(1 for r in rows if r[0] in ("paga", "recebido") and r[1]), "pagas_valor": round(sum((r[1] or 0) for r in rows if r[0] in ("paga", "recebido")), 2)}
+            "pagas": sum(1 for r in rows if r[0] in ("paga", "recebido") and r[1]), "pagas_valor": round(sum((r[1] or 0) for r in rows if r[0] in ("paga", "recebido")), 2),
+            # CAMP-DOA-CENTRAL (campos novos): o tamanho de cada aba
+            "recebidos": sum(1 for r in rows if r[0] == "recebido"), "encerradas": sum(1 for r in rows if r[0] in ("nao_aprovada", "arquivada")), "total": len(rows)}
 
 
 # ---------------------------------------------------------------- telas (só admin e master)
@@ -516,6 +527,8 @@ def _completo(con, sid: int) -> dict:
     x["emails"] = _historico_emails(con, sid)
     x["autentique"] = _aut_info(con, sid)
     x["fundo_vinculo"] = vinculo_fundo(con, sid)     # CAMP-DOA-FUNDO (campo novo, opcional)
+    from . import doacoes_central                   # CAMP-DOA-CENTRAL: linha de etapas, tarefas, arquivos, histórico único (campos novos)
+    x.update(doacoes_central.extras(con, x))
     return x
 
 
@@ -526,13 +539,29 @@ def _um(con, sid: int):
     return r
 
 
+def _com_central(con, itens: list[dict]) -> list[dict]:
+    """CAMP-DOA-CENTRAL (campos novos): em cada linha, o próximo passo, as tarefas abertas/atrasadas e o fundo."""
+    from . import doacoes_central as dc
+    res = dc.resumo_tarefas(con)
+    for x in itens:
+        r = con.execute("SELECT dados FROM doacao_acervo WHERE site_id=?", (x["id"],)).fetchone()
+        d = json.loads(r[0]) if r and r[0] else {}
+        d.update(x)
+        fv = vinculo_fundo(con, x["id"])
+        x["proximo"] = dc.passos(d, fv)["proximo"]
+        x["tarefas_abertas"] = res.get(int(x["id"]), {}).get("abertas", 0)
+        x["tarefas_atrasadas"] = res.get(int(x["id"]), {}).get("atrasadas", 0)
+        x["fundo_codigo"] = (fv or {}).get("codigo", "")
+    return itens
+
+
 @router.get("")
 def listar(etapa: str = "", q: str = "", u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         listas = json.loads(_estado(con, "listas") or "{}") or {}
         textos = {**AVISO_TEXTOS, **{k: str(v) for k, v in (listas.get("aviso_textos") or {}).items() if k in AVISO_TEXTOS}}
-        return {"itens": filtrar(con, etapa, q), "etapas": ETAPAS, "etapas_auto": list(ETAPAS_AUTO), "faixas": FAIXAS, "minimo": MINIMO, "numeros": numeros(con),
+        return {"itens": _com_central(con, filtrar(con, etapa, q)), "etapas": ETAPAS, "etapas_auto": list(ETAPAS_AUTO), "faixas": FAIXAS, "minimo": MINIMO, "numeros": numeros(con),
                 "listas": listas, "aviso_textos": textos, "aviso_padrao": AVISO_PADRAO, "avisar_pagamento": _avisar_pagamento(con),
                 "autentique": {"ativo": aut.ativo(con), "max_pdf": aut.MAX_PDF},
                 "site": {"ultima_busca": _estado(con, "ultima_busca") or None, "erro": _estado(con, "ultimo_erro") or None,
@@ -1402,6 +1431,8 @@ def _conferir_um(con, v, wp=None, ator: str = "sistema") -> dict:
                 (str(sid), ator, json.dumps({"documento_id": v["documento_id"], "assinado_em": dia, "etapa": (corpo or {}).get("etapa", "")}, ensure_ascii=False)))
     con.commit()
     registrar(logging.INFO, "autentique_assinado", "Contrato assinado por todos na Autentique", site_id=sid)
+    from . import doacoes_central                   # CAMP-DOA-CENTRAL: guarda o PDF assinado nos arquivos (falhou: fica o botão "Baixar agora")
+    doacoes_central.tentar_guardar_assinado(con, sid, ator)
     return {"situacao": "assinado", "assinado_em": dia, "mensagem": "Todos assinaram na Autentique: " + (
         "a doação passou a Contrato assinado pelas partes." if corpo and corpo.get("etapa") else "a data da assinatura foi guardada.")}
 
@@ -1639,7 +1670,10 @@ def origem_fundo(con, codigo: str) -> dict | None:
         r = r or con.execute("SELECT site_id, protocolo FROM doacao_acervo WHERE upper(json_extract(dados,'$.fundo'))=? ORDER BY site_id LIMIT 1", (codigo,)).fetchone()
     except Exception:  # noqa: BLE001  (banco sem as migrações 232/237)
         return None
-    return {"site_id": r["site_id"], "protocolo": r["protocolo"] or ""} if r else None
+    if not r:
+        return None
+    from . import doacoes_central                   # CAMP-DOA-CENTRAL (campo novo): o contrato assinado, para a página do fundo (só admin)
+    return {"site_id": r["site_id"], "protocolo": r["protocolo"] or "", "contrato_assinado": doacoes_central.contrato_assinado(con, r["site_id"])}
 
 
 def _arquitetos_parecidos(con, nome: str) -> list[dict]:
