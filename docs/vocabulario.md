@@ -247,6 +247,13 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   como sugerido; **nada é gravado** até a pessoa agir. **Usar sugestão** (em "Sugestões do CAMP Vision"; antes "Gravar este giro") grava;
   **Ver como chegou** mostra a imagem original; salvar ou confirmar a folha grava o giro junto; girar conta a partir do que está na tela.
 
+## Visualizador da folha (CAMP-VIEW, 21/11/2026)
+- A mesma barra em toda tela que mostra uma folha grande (#item, gaveta **Revisar folha**, tela cheia, tela de conferir), sempre nesta ordem:
+  **‹ Anterior** · "N de M" · **Próxima ›** | **↺ Girar à esquerda** · **↻ Girar 90°** · **✂ Recortar e alinhar** (e, na conferência, **Girar 180°**,
+  **⇋ Espelhar**, **Desfazer recorte/alinhamento**) | **−** · **N%** · **+** · **Ajustar** | **Abrir a imagem numa aba nova ↗** (e, na conferência,
+  **Tela cheia** e **? atalhos**). Girar e recortar só aparecem para quem pode (operador, admin) e quando há prévia do CAMP Vision; o TIF não muda.
+- Rodapé da página da folha: "Atalhos: ← anterior · → próxima · R girar 90° · L girar à esquerda · C recortar e alinhar · + − 0 ampliar · E editar".
+
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
   "Projeto Não Identificado 3"). Regra única em `similaridade.titulo_tecnico`: criar, importar planilha e editar recusam; **Publicar** bloqueia
