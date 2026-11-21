@@ -50,6 +50,7 @@ MODOS_RAPIDOS |= {"autentique_doacao"}   # CAMP-AUTENTIQUE 20/11/2026: contrato 
 MODOS_RAPIDOS |= {"doacoes_cpf"}   # CAMP-DOA-CPF 20/11/2026: CPF/CNPJ, endereço e valor proposto da intenção de doação (contrato 1.26; linha própria)
 MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha antiga do Google Forms (CSV) → simular, importar sem e-mail, idempotente (linha própria)
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
+MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e assinada) fica em Pedem ação até o acervo chegar; Autentique com a doação já paga (linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18438,9 +18439,9 @@ def filho(modo):
             and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=601").fetchone()[0] == "visita", (gets, o2))
         ver("site antigo (404): sem erro, marca 'sem rota'", da.coletar(c, WPF(Resp(404, {})))["sem_rota"] and da._estado(c, "sem_rota") == "1")
         ver("site com erro: guarda o erro, sem levantar", da.coletar(c, WPF(Resp(500, {})))["erro"] and "500" in da._estado(c, "ultimo_erro"))
-        ver("lista 'pedem ação' tem a em visita e não a paga; todas tem as duas", [x["id"] for x in da.filtrar(c, "abertas")] == [601] and len(da.filtrar(c, "")) == 2 and [x["id"] for x in da.filtrar(c, "", "beltrano")] == [602])
+        ver("lista 'pedem ação' tem a em visita e a paga (CAMP-DOA-LISTA: falta receber o acervo); todas tem as duas", [x["id"] for x in da.filtrar(c, "abertas")] == [602, 601] and len(da.filtrar(c, "")) == 2 and [x["id"] for x in da.filtrar(c, "", "beltrano")] == [602])
         n_ = da.numeros(c)
-        ver("números: 1 pede ação, 1 paga (R$ 1.500)", (n_["abertas"], n_["pagas"], n_["pagas_valor"]) == (1, 1, 1500.0), n_)
+        ver("números: 2 pedem ação (a paga também), 1 paga (R$ 1.500)", (n_["abertas"], n_["pagas"], n_["pagas_valor"]) == (2, 1, 1500.0), n_)
         # ---- telas e papéis
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
@@ -18450,7 +18451,7 @@ def filho(modo):
         ver("operador não vê, não muda, não vê foto (403)", all(r_.status_code == 403 for r_ in (op.get("/api/doacoes-acervo"), op.get("/api/doacoes-acervo/601"), op.post("/api/doacoes-acervo/601", json={"nota": "x"}), op.get("/api/doacoes-acervo/601/foto/0"))))
         x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         r_ = x.get("/api/doacoes-acervo?etapa=abertas")
-        ver("tela: itens, etapas, automáticas, números e estado da busca", r_.status_code == 200 and [i["id"] for i in r_.json()["itens"]] == [601] and r_.json()["etapas_auto"] == ["cobranca", "paga"] and "site" in r_.json() and r_.json()["numeros"]["abertas"] == 1, r_.text[:200])
+        ver("tela: itens, etapas, automáticas, números e estado da busca", r_.status_code == 200 and [i["id"] for i in r_.json()["itens"]] == [602, 601] and r_.json()["etapas_auto"] == ["cobranca", "paga"] and "site" in r_.json() and r_.json()["numeros"]["abertas"] == 2, r_.text[:200])
         d_ = x.get("/api/doacoes-acervo/601").json()
         ver("detalhe: respostas, faixa e fotos (só o número de cada)", d_["descricao"] == "40 rolos e 6 caixas" and d_["faixa_nome"] == "De 51 a 500 itens" and d_["fotos"] == [{"n": 0}, {"n": 1}], d_)
         ver("intenção que não existe: 404", x.get("/api/doacoes-acervo/999").status_code == 404)
@@ -18487,6 +18488,74 @@ def filho(modo):
         from app.log_tecnico import LOG_FILE
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
+        for l in res: print(l)
+    elif modo == "doacoes_pedem_acao":
+        # CAMP-DOA-LISTA 21/11/2026 (site e Autentique FALSOS). Rafael: "ele sumiu da lista de doações" (depois de assinar o contrato). Com a
+        # cobrança junto do contrato, a doação chega a "paga" antes (ou perto) da assinatura; "paga" não contava no "Pedem ação" e sumia, com o
+        # acervo ainda por receber. Prova: paga e contrato_assinado (e cobrança) ficam na lista padrão, recebido/arquivada/não aprovada saem;
+        # os números contam igual; a conferência da Autentique com a doação já paga só guarda a data (a etapa fica e a doação continua na lista);
+        # e a cópia atrasada (painel em "contrato enviado", site já pago) não trava a assinatura nem some.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da, autentique as au
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.content, s.headers = code, dados, b"", {}
+            def json(s): return s._d
+        posts = []
+        class H:
+            def __init__(s, fila): s.fila = list(fila)
+            def get(s, path, params=None): return Resp(200, {"itens": []})
+            def post(s, path, json=None): posts.append((path, dict(json or {}))); return s.fila.pop(0) if len(s.fila) > 1 else s.fila[0]
+        class WPF:
+            def __init__(s, *fila): s.h = H(fila)
+        base = {"recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Pessoa", "email": "p@x.com", "autor": "Arq", "valor": 1500, "notas": [], "historico": []}
+        etapas = {701: "paga", 702: "contrato_assinado", 703: "recebido", 704: "arquivada", 705: "nao_aprovada", 706: "cobranca"}
+        for sid, et in etapas.items():
+            da._gravar(c, dict(base, id=sid, protocolo=f"CAMP-2026-000{sid}", etapa=et))
+        c.commit()
+        ab = {x["id"] for x in da.filtrar(c, "abertas")}
+        ver("pedem ação: paga e contrato assinado (e cobrança) ficam; recebido, arquivada e não aprovada saem", ab == {701, 702, 706}, sorted(ab))
+        n_ = da.numeros(c)
+        ver("números: 3 pedem ação (até o acervo chegar), 1 paga com o acervo a receber", (n_["abertas"], n_.get("a_receber")) == (3, 1), n_)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r_ = x.get("/api/doacoes-acervo?etapa=abertas")
+        ver("tela (filtro padrão Pedem ação): a paga e a assinada aparecem", r_.status_code == 200 and {i["id"] for i in r_.json()["itens"]} == {701, 702, 706}, r_.text[:200])
+        # ---- Autentique: assinou com a doação já paga (fluxo novo: cobrança junto do contrato) → só a data; etapa e lista ficam
+        for k, v in (("autentique.token", "tok-teste-1234567890abcdefghij"), ("autentique.ligado", "1"), ("wp.app_password", "xxxx")):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?,?,?,0)", (k, v, k))
+        da._gravar(c, dict(base, id=707, protocolo="CAMP-2026-000707", etapa="paga", assinado_em=""))
+        da._gravar(c, dict(base, id=708, protocolo="CAMP-2026-000708", etapa="contrato_enviado", assinado_em=""))
+        for sid in (707, 708):
+            c.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (?,?,?,?, 'pendente')",
+                      (sid, f"doc{sid}", "https://assina.exemplo/x", _j.dumps([{"public_id": "p1", "papel": "doador"}])))
+        c.commit()
+        au.consultar = lambda tk, did: [{"public_id": "p1", "assinado_em": "2026-11-21 10:00:00", "recusado_em": ""}]
+        v7 = c.execute("SELECT * FROM doacao_autentique WHERE site_id=707").fetchone()
+        posts.clear()
+        r7 = da._conferir_um(c, v7, WPF(Resp(200, {"ok": True, "registro": dict(base, id=707, protocolo="CAMP-2026-000707", etapa="paga", assinado_em="2026-11-21")})))
+        ver("assinou já paga: manda só a data (a etapa não volta) e continua em Pedem ação", r7["situacao"] == "assinado" and len(posts) == 1 and "etapa" not in posts[0][1]
+            and posts[0][1].get("assinado_em") == "2026-11-21" and 707 in {x["id"] for x in da.filtrar(c, "abertas")}
+            and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=707").fetchone()[0] == "paga", (r7, posts))
+        # ---- cópia atrasada: o painel acha "contrato enviado", o site já está em "paga" e recusa voltar a etapa (400 camp_valor)
+        v8 = c.execute("SELECT * FROM doacao_autentique WHERE site_id=708").fetchone()
+        posts.clear()
+        recusa = Resp(400, {"code": "camp_valor", "message": "Nada foi gravado: a contribuição já foi paga: a etapa só pode ir para “Acervo recebido” ou “Arquivada”."})
+        ok8 = Resp(200, {"ok": True, "registro": dict(base, id=708, protocolo="CAMP-2026-000708", etapa="paga", assinado_em="2026-11-21")})
+        try:
+            r8 = da._conferir_um(c, v8, WPF(recusa, ok8))
+        except Exception as e:  # noqa: BLE001
+            r8 = {"situacao": "erro", "erro": str(e)[:200]}
+        sit8 = c.execute("SELECT situacao FROM doacao_autentique WHERE site_id=708").fetchone()[0]
+        ver("cópia atrasada: o site recusa voltar a etapa → manda só a data; assinatura registrada, etapa paga do site, na lista",
+            r8.get("situacao") == "assinado" and sit8 == "assinado" and len(posts) == 2 and posts[0][1].get("etapa") == "contrato_assinado" and "etapa" not in posts[1][1]
+            and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=708").fetchone()[0] == "paga" and 708 in {x["id"] for x in da.filtrar(c, "abertas")}, (r8, sit8, posts))
+        ver("nenhuma intenção perdida (8 no painel)", c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == 8)
         for l in res: print(l)
     elif modo == "doacoes_texto":
         # CAMP-DOA-TEXTO 20/11/2026. Rafael: "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas,

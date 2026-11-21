@@ -37,6 +37,9 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
   Brasília), SIMULADO por padrão (linha a linha: vai criar / vai completar (campos vazios) / já igual, com os avisos) e, em "Importar",
   cada linha vai ao site em POST …/importar (cria a intenção, origem ficha_google, NENHUM e-mail; ou completa só o vazio da que já existe,
   achada pelo e-mail). Idempotente pela chave (e-mail + carimbo). O CSV não fica guardado; nada de nome/CPF no log técnico.
+- CAMP-DOA-LISTA (21/11/2026, Rafael: "ele sumiu da lista de doações", sem mudar o contrato com o site). "Pedem ação" (o filtro padrão) vai
+  até o acervo chegar: só recebido, nao_aprovada e arquivada saem (antes "paga" saía, e com a cobrança junto do contrato a doação costuma
+  ser paga antes da assinatura). Na conferência da Autentique, se o site recusar voltar a etapa (cópia daqui atrasada: já paga), vai só a data.
 """
 from __future__ import annotations
 
@@ -87,7 +90,11 @@ ONDE_TEMPLATE = "em E-mails → Modelos do Sender"
 VERSAO_CONTRATO_SITE = "1.34.0"
 MSG_SITE_SEM_CONTRATO = f"O site ainda não manda o contrato para assinatura: avise quem cuida do site (plugin da CAMP {VERSAO_CONTRATO_SITE} ou mais novo). Nada foi enviado."
 RE_LINK = re.compile(r"^https?://[^\s/]+\.[^\s]+$", re.I)
-ABERTAS = ("em_analise", "info", "visita", "aprovada", "contrato_enviado", "contrato_assinado", "cobranca")   # pedem ação da equipe
+# CAMP-DOA-LISTA (21/11/2026, Rafael: "ele sumiu da lista de doações"): com a cobrança indo junto do contrato, a doação costuma chegar a "paga"
+# antes (ou perto) da assinatura, e "paga" não estava aqui: sumia do "Pedem ação" com o acervo ainda por receber. Agora pede ação tudo o que
+# não é final: só "Acervo recebido", "Não aprovada" e "Arquivada" saem da lista padrão.
+FINAIS = ("recebido", "nao_aprovada", "arquivada")
+ABERTAS = tuple(k for k in ETAPAS if k not in FINAIS)   # pedem ação da equipe (inclui "paga": falta receber o acervo)
 MINIMO = 1000.0
 # CAMP-DOA-CPF (contrato 1.26): dados pessoais que o LGPD apaga em `dados` (o endereço, um dict, também)
 PESSOAIS_DADOS = ("nome", "email", "telefone", "descricao", "local", "fotos_link", "autor", "documento", "documento_tipo")
@@ -462,13 +469,13 @@ def anonimizar_por_email(con, email: str) -> int:
 
 
 def numeros(con) -> dict:
-    """Para a tela e o "Precisa de você": quantas pedem ação, novas (em análise) e contribuições pagas."""
+    """Para a tela e o "Precisa de você": quantas pedem ação (até o acervo chegar), novas (em análise), pagas e pagas com o acervo ainda a receber."""
     try:
         rows = con.execute("SELECT etapa, valor FROM doacao_acervo").fetchall()
     except Exception:  # noqa: BLE001
         return {}
     return {"abertas": sum(1 for r in rows if r[0] in ABERTAS), "novas": sum(1 for r in rows if r[0] == "em_analise"),
-            "aguardando_pagamento": sum(1 for r in rows if r[0] == "cobranca"),
+            "aguardando_pagamento": sum(1 for r in rows if r[0] == "cobranca"), "a_receber": sum(1 for r in rows if r[0] == "paga"),   # CAMP-DOA-LISTA (campo novo)
             "pagas": sum(1 for r in rows if r[0] in ("paga", "recebido") and r[1]), "pagas_valor": round(sum((r[1] or 0) for r in rows if r[0] in ("paga", "recebido")), 2)}
 
 
@@ -1374,7 +1381,14 @@ def _conferir_um(con, v, wp=None, ator: str = "sistema") -> dict:
     if corpo:
         corpo.update({"nota": f"Contrato assinado por todos na Autentique em {dia[8:10]}/{dia[5:7]}/{dia[:4]} (documento {v['documento_id']}).",
                       "autor_painel": "Autentique (painel)", "avisar_pagamento": "1" if _avisar_pagamento(con) else "0"})
-        resp = (wp or _wp()).h.post(f"{ROTA}/{sid}", json=corpo)
+        w = wp or _wp()
+        resp = w.h.post(f"{ROTA}/{sid}", json=corpo)
+        if resp.status_code == 400 and corpo.get("etapa") and str(_json(resp).get("code") or "") == "camp_valor":
+            # CAMP-DOA-LISTA: a cópia daqui estava atrasada (o site já passou da assinatura: cobrança paga antes da conferência) e o site
+            # recusou voltar a etapa. Manda só a data, como para quem já passou dessa etapa: a etapa do site fica (nunca volta) e a
+            # assinatura não fica pendente para sempre.
+            corpo.pop("etapa", None)
+            resp = w.h.post(f"{ROTA}/{sid}", json=corpo)
         if resp.status_code >= 400:
             raise aut.ErroAutentique(f"Todos assinaram, mas o site não aceitou a etapa agora: {_erro_site(resp).detail}")
         d = _json(resp)
