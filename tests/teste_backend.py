@@ -18114,14 +18114,14 @@ def filho(modo):
         ver("inativo fora do Enviar cobrança (nem com forçar): nada na fila e nenhum link pedido ao site",
             cb.get("na_fila") == 0 and sorted(cb.get("inativos") or []) == ["Ana Lima", "Beto Reis"] and not posts, (cb, posts))
         pc = am.previa_cobranca(c, [A1, A2])
-        ver("prévia da cobrança: inativos fora e listados", pc["total"] == 0 and sorted(pc["inativos"]) == ["Ana Lima", "Beto Reis"], pc)
+        ver("prévia da cobrança: inativos fora e listados", pc["total"] == 0 and sorted(pc.get("inativos") or []) == ["Ana Lima", "Beto Reis"], pc)
         c.execute("UPDATE amigo SET validade='2026-12-01', situacao='pago' WHERE id IN (?,?)", (A1, A2)); c.commit()
         ver("inativo sem lembretes automáticos (TR17–TR19)", not [l_ for l_ in am.lembretes_devidos(c) if l_["id"] in (A1, A2)], am.lembretes_devidos(c))
         ver("inativo sem boas-vindas nem aviso de vencimento; recibo ainda sai à mão",
             am.enfileirar(c, [A1], "boas_vindas", "", "", "t") == 0 and am.enfileirar(c, [A1], "aviso_vencido", "", "", "t") == 0 and am.enfileirar(c, [A1], "recibo", "", "", "t") == 1)
         lst = x.get("/api/amigos").json(); lsi = x.get("/api/amigos?situacao=inativos").json()
         ver("lista padrão sem os inativos; filtro Inativos mostra só eles; resumo conta",
-            not {A1, A2, A3} & {i_["id"] for i_ in lst["itens"]} and {i_["id"] for i_ in lsi["itens"]} == {A1, A2, A3} and lst["resumo"].get("inativos") == 3 and lst["numeros"]["ativos"] == 1, (lst["resumo"], [i_["id"] for i_ in lsi["itens"]]))
+            not {A1, A2, A3} & {i_["id"] for i_ in lst.get("itens", [])} and {i_["id"] for i_ in lsi.get("itens", [])} == {A1, A2, A3} and lst.get("resumo", {}).get("inativos") == 3 and lst.get("numeros", {}).get("ativos") == 1, (lst.get("resumo"), [i_["id"] for i_ in lsi.get("itens", [])]))
         r4 = x.post("/api/amigos/desativar", json={"ids": [A4]}).json()
         ver("Mercado Pago falhou ao cancelar: não desativa e diz o motivo", r4.get("desativados") == 0 and "Mercado Pago" in (r4.get("erros") or [{}])[0].get("erro", "") and not um(A4)["inativo_em"], r4)
         # ---------- reativar ----------
@@ -18158,7 +18158,7 @@ def filho(modo):
         ver("apagar: no histórico, sem dado pessoal (nem o motivo da desativação)", eva and _j.loads(eva[0]).get("pagamentos_mantidos") == 2 and "Ana" not in hist and "ana@" not in hist and "pediu para sair" not in hist, hist[:300])
         lt = x.get("/api/amigos").json(); li = x.get("/api/amigos?situacao=inativos").json()
         ver("apagar: some do painel (lista, Inativos e detalhe); a receita do ano continua com os pagamentos",
-            A1 not in [i_["id"] for i_ in lt["itens"] + li["itens"]] and x.get(f"/api/amigos/{A1}").status_code == 404 and lt["numeros"]["receita_ano"] == 90.0, lt["numeros"])
+            A1 not in [i_["id"] for i_ in lt.get("itens", []) + li.get("itens", [])] and x.get(f"/api/amigos/{A1}").status_code == 404 and lt.get("numeros", {}).get("receita_ano") == 90.0, lt.get("numeros"))
         ver("apagar de novo: 404 (já não existe)", x.post(f"/api/amigos/{A1}/apagar", json={"confirmacao": "APAGAR"}).status_code == 404)
         posts.clear()
         r3 = x.post(f"/api/amigos/{A3}/apagar", json={"confirmacao": "apagar"})
