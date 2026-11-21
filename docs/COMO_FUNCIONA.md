@@ -84,6 +84,7 @@ bash tests/rodar_um.sh tests/auditoria_painel.js
    - [C.10 Relatórios para prestação de contas (rotas_relatorios.py)](#c10-relatórios-para-prestação-de-contas-rotasrelatoriospy)
    - [C.11 Exportação EAD 2002 / CSV / BagIt (exportacao.py)](#c11-exportação-ead-2002--csv--bagit-exportacaopy)
    - [C.12 Doações de acervo: assinatura eletrônica pela Autentique (autentique.py)](#c12-doações-de-acervo-assinatura-eletrônica-pela-autentique-autentiquepy-camp-autentique)
+   - [C.13 Doações de acervo: acervo recebido cria o fundo e o arquiteto (CAMP-DOA-FUNDO)](#c13-doações-de-acervo-acervo-recebido-cria-o-fundo-e-o-arquiteto-camp-doa-fundo)
 - [Parte D — Telas, acervo e desenvolvimento](#parte-d--telas-acervo-e-desenvolvimento)
    - [D.1 O frontend (frontend/index.html)](#d1-o-frontend-frontendindexhtml)
    - [D.2 As telas do menu, uma a uma](#d2-as-telas-do-menu-uma-a-uma)
@@ -3419,6 +3420,21 @@ Guia para quem configura: `docs/autentique.md`. Nada muda no contrato com o site
 - **Eventos** (`evento`, entidade `doacao_acervo`): `autentique_criado`, `autentique_enviado`, `autentique_assinado`, `autentique_recusado` (sem nome, e-mail ou token).
 - Tabela `doacao_autentique` (migração 236): `site_id`, `documento_id`, `link`, `pdf_sha256`, `assinantes` (JSON só com `public_id`, `papel`, datas), `situacao` (`criado` · `pendente` · `assinado` · `recusado`), `assinado_em`, `conferido_em`, `erro`.
 - Testes: modo `autentique_doacao` em `tests/teste_backend.py` (Autentique e site falsos) e `tests/navegador_autentique.js` (portas 8830/8831; a Autentique falsa entra por `CAMP_AUTENTIQUE_URL`, variável só de teste).
+
+
+## C.13 Doações de acervo: acervo recebido cria o fundo e o arquiteto (CAMP-DOA-FUNDO)
+
+Rafael (21/11/2026): "e precisa criar quando terminar o fundo e arquiteto automaticamente." Nada muda no contrato com o site.
+
+- **Quando**: no detalhe da doação, ao escolher a etapa **Acervo recebido pela CAMP**. A caixa **Criar fundo e arquiteto agora** vem marcada; desmarcada, vale o caminho de sempre (o código digitado em **Código do fundo** vai ao site no `POST /api/doacoes-acervo/{id}`).
+- **Prévia**: `POST /api/doacoes-acervo/{id}/receber` sem `aplicar` (só admin). O servidor monta o plano (`_plano`) e o EXECUTA numa transação desfeita (`_executar` + `rollback`), para o código mostrado ser exatamente o que o cadastro daria. Nome: `autor` da doação (a quem o acervo pertenceu); fundo com o mesmo nome do arquiteto, como no cadastro de Fundos (crédito "Acervo <nome>/CAMP…"); sigla pelas iniciais (`sigla_sugerida`, a mesma regra de `nfIniciais`), vazia se já for de outro fundo.
+- **Mesmo nome**: arquiteto com o mesmo nome sem acento e sem caixa (forma autorizada ou grafia do carimbo, `similaridade.normalizar`) → a prévia propõe **Usar o existente** e, se ele já é produtor de um fundo (ou há fundo de mesmo nome), usar esse fundo; **Criar novo** com o mesmo nome é recusado (409), como no cadastro.
+- **Código**: `rotas_fundos.criar_fundo` (o mesmo de `POST /api/fundos`), que pega `rotas_fundos.proximo_codigo` = `v_proximo_fundo` (maior código + 1; fundo não se apaga, então nunca reusa e não preenche buraco). O arquiteto novo sai de `rotas_fundos.inserir_agente` (o mesmo de `POST /api/agentes`) e fica produtor do fundo.
+- **Confirmar** (`aplicar: true`): `BEGIN IMMEDIATE`, fundo + arquiteto + vínculo em `doacao_fundo` (migração 237; `site_id` é a chave: uma doação nunca ganha dois fundos) + eventos (`fundo`/`criado` e `agente`/`criado` com `origem: doacao_acervo`, `doacao_acervo`/`fundo_vinculado`, todos com o e-mail de quem confirmou), `commit`; só então o `POST /painel/doacoes-acervo/{id}` de sempre com `etapa=recebido`, `fundo=<código>` e o resto do Salvar (quantidade catalogada, nota, aviso). A nota começa com "Criados no painel: o fundo … e o arquiteto …" (fica no histórico do site).
+- **Site falhou**: o fundo fica (código não volta), `doacao_fundo.site_erro` guarda o motivo e a tela diz "Tente de novo: o mesmo fundo será usado." A prévia seguinte avisa que vai usar o mesmo.
+- **O que vai para o fundo**: só onde há campo e só fato: `data_inicio`/`data_fim` (o período dos documentos, se for um intervalo de anos claro: "1960–1990", "1975"), `dimensao_suporte` (caixas, rolos e volume combinados pela equipe) e `procedencia` "Doação à CAMP.". O "onde está guardado" da doação não vira "lugares" do arquiteto (não é onde ele atuou). Nada de CPF, endereço, nome de quem doa, nem biografia. O fundo nasce "não publicado" e sem termo no site: o envio é o de sempre, na página do fundo.
+- **Vínculo dos dois lados**: o detalhe da doação traz `fundo_vinculo` ("Fundo: F0xx · nome · arquiteto …"; no caminho manual, o código digitado se existir no painel); `GET /api/fundos/{c}/detalhe` traz `doacao` (só admin e master) e a página do fundo mostra "Origem: doação de acervo CAMP-…".
+- Testes: modo `doacoes_fundo_auto` em `tests/teste_backend.py` (site falso) e `tests/navegador_doacao_fundo.js`.
 
 ---
 

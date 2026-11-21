@@ -130,8 +130,12 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     eventos = [dict(r) for r in con.execute(
         "SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='fundo' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
     contagens = contagens_fundo(con, codigo)
+    doacao = None
+    if u["papel"] in ("admin", "master"):        # CAMP-DOA-FUNDO (campo novo, opcional): a doação de acervo de onde o fundo veio
+        from .doacoes_acervo import origem_fundo
+        doacao = origem_fundo(con, codigo)
     con.close()
-    return {"fundo": dict(f), "agentes": agentes, "projetos": projetos, "site": site, "eventos": eventos, "contagens": contagens}
+    return {"fundo": dict(f), "agentes": agentes, "projetos": projetos, "site": site, "eventos": eventos, "contagens": contagens, "doacao": doacao}
 
 
 def contagens_fundo(con, codigo: str) -> dict:
@@ -159,6 +163,35 @@ def verificar_fundo(d: VerificarFundo, u: dict = Depends(auth.exige("admin"))) -
         con.close()
 
 
+def proximo_codigo(con) -> str:
+    """O próximo código de fundo da tabela de autoridade: o maior já dado + 1 (v_proximo_fundo). Fundo não se apaga, então nunca reusa."""
+    return con.execute("SELECT codigo FROM v_proximo_fundo").fetchone()[0]
+
+
+def inserir_agente(con, tipo: str, nome: str, existencia_inicio=None, existencia_fim=None, historia=None, fonte_historia=None, lugares=None) -> int:
+    """A linha do arquiteto (agente). Quem chama valida e grava o evento. Não faz commit."""
+    return con.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim, historia, fonte_historia, lugares) VALUES (?,?,?,?,?,?,?)",
+                       (tipo, nome.strip(), existencia_inicio, existencia_fim, historia, fonte_historia, lugares)).lastrowid
+
+
+def criar_fundo(con, titulo: str, sigla: str | None, data_inicio, data_fim, tipo_agente: str, ator: str, agente_id: int | None = None,
+                detalhe: dict | None = None) -> dict:
+    """O cadastro do fundo, num só lugar (POST /api/fundos e o acervo recebido de uma doação, CAMP-DOA-FUNDO): código de
+    proximo_codigo, crédito padrão, o arquiteto produtor (o `agente_id` dado; senão o de mesmo nome, ou um novo com as datas do fundo,
+    como sempre foi) e o evento "criado". Quem chama valida nome e sigla. Não faz commit (quem chama controla a transação)."""
+    titulo = titulo.strip()
+    codigo = proximo_codigo(con)
+    con.execute("INSERT INTO fundo (codigo, sigla, titulo, data_inicio, data_fim, credito_padrao) VALUES (?,?,?,?,?,?)",
+                (codigo, sigla, titulo, data_inicio, data_fim, f"Acervo {titulo}/CAMP - Casa da Arquitetura Moderna Paulista"))
+    if agente_id is None:
+        ag = con.execute("SELECT id FROM agente WHERE forma_autorizada=?", (titulo,)).fetchone()
+        agente_id = ag[0] if ag else inserir_agente(con, tipo_agente, titulo, data_inicio, data_fim)
+    con.execute("INSERT OR IGNORE INTO fundo_agente (fundo_codigo, agente_id, papel, inicio, fim) VALUES (?,?,'produtor',?,?)",
+                (codigo, agente_id, data_inicio, data_fim))
+    _evento(con, "fundo", codigo, "criado", ator, {"sigla": sigla, **(detalhe or {"titulo": titulo})})
+    return {"codigo": codigo, "agente_id": agente_id}
+
+
 @router.post("/fundos")
 def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))):
     con = connect()
@@ -175,16 +208,7 @@ def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))):
         if par:
             con.close()
             return JSONResponse(status_code=409, content={"detail": f"Já existe fundo com nome parecido ({par[0]['codigo']} {par[0]['titulo']}): confirme se é um fundo novo.", "parecidos": par})
-    codigo = con.execute("SELECT codigo FROM v_proximo_fundo").fetchone()[0]
-    con.execute("INSERT INTO fundo (codigo, sigla, titulo, data_inicio, data_fim, credito_padrao) VALUES (?,?,?,?,?,?)",
-                (codigo, sigla, d.titulo.strip(), d.data_inicio, d.data_fim,
-                 f"Acervo {d.titulo.strip()}/CAMP - Casa da Arquitetura Moderna Paulista"))
-    ag = con.execute("SELECT id FROM agente WHERE forma_autorizada=?", (d.titulo.strip(),)).fetchone()
-    aid = ag[0] if ag else con.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim) VALUES (?,?,?,?)",
-                                       (d.tipo_agente, d.titulo.strip(), d.data_inicio, d.data_fim)).lastrowid
-    con.execute("INSERT OR IGNORE INTO fundo_agente (fundo_codigo, agente_id, papel, inicio, fim) VALUES (?,?,'produtor',?,?)",
-                (codigo, aid, d.data_inicio, d.data_fim))
-    _evento(con, "fundo", codigo, "criado", u["email"], {"sigla": sigla, "titulo": d.titulo})
+    codigo = criar_fundo(con, d.titulo, sigla, d.data_inicio, d.data_fim, d.tipo_agente, u["email"], detalhe={"titulo": d.titulo})["codigo"]
     con.commit(); con.close()
     from .publicador import criar_fundo_no_site
     site = criar_fundo_no_site(codigo, u["email"])
@@ -396,8 +420,7 @@ def criar_agente(d: NovoAgente, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     if con.execute("SELECT 1 FROM agente WHERE lower(forma_autorizada)=lower(?)", (d.forma_autorizada.strip(),)).fetchone():
         con.close(); raise HTTPException(409, "Já existe agente com esse nome")
-    aid = con.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim, historia, fonte_historia, lugares) VALUES (?,?,?,?,?,?,?)",
-                      (d.tipo, d.forma_autorizada.strip(), d.existencia_inicio, d.existencia_fim, d.historia, d.fonte_historia, d.lugares)).lastrowid
+    aid = inserir_agente(con, d.tipo, d.forma_autorizada, d.existencia_inicio, d.existencia_fim, d.historia, d.fonte_historia, d.lugares)
     for f in d.formas_variantes:
         if f.strip():
             con.execute("INSERT OR IGNORE INTO agente_forma_variante (agente_id, forma, contexto) VALUES (?,?,'carimbo')", (aid, f.strip().upper()))

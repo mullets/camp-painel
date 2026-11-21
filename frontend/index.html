@@ -4089,7 +4089,7 @@ async function addFundo(confirmarNovo){const root=document.getElementById('m-fun
   if(!await confirmar({titulo:'Reservar este fundo?',alvo:`${cod} · ${sig} · ${nome}`,html:`<p>Os arquivos deste fundo vão se chamar <b class="mono">${escHtml(cod)}-P0001-AAAA-S01-D00001</b> e a etiqueta terá <b class="mono">${escHtml(sig)}</b>.</p><p><b>Código e sigla não mudam depois</b>: estão no nome de todos os arquivos.</p>`,botao:'Reservar'}))return;
   try{const r=await API('/api/fundos',{method:'POST',body:JSON.stringify({titulo:document.getElementById('nf-nome').value,sigla:document.getElementById('nf-sigla').value,data_inicio:+document.getElementById('nf-ini').value||null,data_fim:+document.getElementById('nf-fim').value||null,tipo_agente:document.getElementById('nf-tipo').value,confirmar_novo:confirmarNovo===true})});closeModal();toast(r.site&&r.site.erro?`${r.codigo} criado no painel; site pendente: ${r.site.erro}`:`${r.codigo} ${r.sigla} reservado e criado no site`);await carregarFundosAPI();nav('fundo/'+r.codigo)}catch(e){err.textContent=e.message}}
 async function showFundo(code){if(!EU){document.getElementById('login').classList.add('on');return}let d;const _car=carregandoPagina('fd',code);try{d=await API(`/api/fundos/${code}/detalhe`)}catch(e){if(e.status===404){mostrarNaoEncontrado('Fundo não encontrado',code+' não existe ou foi removido.','fundos')}else toast(e.message);return}const f=d.fundo;FUNDO_NOME[code]=f.titulo;if(rotaAtual()==='fundo/'+code){setWhere(rotaAtual());crumbs(rotaAtual())}registrarRecente('fundo/'+code,code+' · '+f.titulo,'fundo');const site=Object.fromEntries(d.site.map(x=>[x.status,x.n]));const podeEditar=['admin','master'].includes(EU.papel);
-  document.getElementById('fd').innerHTML=`<div class="dethdr"><span class="sig ${f.sigla?'':'na'}">${escHtml(f.sigla||'—')}</span><div><h1>${escHtml(f.titulo)}</h1><div class="meta"><span class="code">${code}</span> · ${f.data_inicio?`${escHtml(f.data_inicio)}–${escHtml(f.data_fim||'')}`:'período não informado'} · ${STATUS[f.status_site]||f.status_site}</div>${contagensFundoHTML(code,d.contagens)}</div>
+  document.getElementById('fd').innerHTML=`<div class="dethdr"><span class="sig ${f.sigla?'':'na'}">${escHtml(f.sigla||'—')}</span><div><h1>${escHtml(f.titulo)}</h1><div class="meta"><span class="code">${code}</span> · ${f.data_inicio?`${escHtml(f.data_inicio)}–${escHtml(f.data_fim||'')}`:'período não informado'} · ${STATUS[f.status_site]||f.status_site}</div>${contagensFundoHTML(code,d.contagens)}${d.doacao?`<div class="help">Origem: <a href="#doacoes" data-doa-origem="${+d.doacao.site_id}">doação de acervo ${escHtml(d.doacao.protocolo)}</a></div>`:''}</div>
     <div class="act">${(site.publish||0)>0?`<a class="btn" href="https://camp.arq.br/colecoes/" target="_blank">Ver página pública</a>`:''}${podeEditar?`<button class="btn" onclick="editarFundo('${code}')">Editar</button><button class="btn pri" onclick="abrirNovoProjeto('${code}')">Novo projeto</button>`:''}${exportarMenuHTML('fundos',code)}${menuMaisHTML([
       {html:`<button class="btn" role="menuitem" onclick="nav('etiquetas/fundo/${code}')">Etiqueta do fundo</button>`},
       ...(EU&&EU.papel!=='leitura'?[{html:`<button class="btn" role="menuitem" data-dup-fundo="${code}">Procurar projetos duplicados</button>`}]:[]),
@@ -8937,7 +8937,7 @@ const doaData=s=>s?String(s).slice(0,10).split('-').reverse().join('/'):'';
 async function carregarDoacoes(){const tb=document.getElementById('doa-lista');if(!tb)return;
   const p=new URLSearchParams();if(DOA.etapa)p.set('etapa',DOA.etapa);if(DOA.q)p.set('q',DOA.q);
   try{const d=await API('/api/doacoes-acervo?'+p);DOA.d=d;const n=d.numeros||{};
-  document.getElementById('doa-kpis').innerHTML=[[fmtN(n.novas||0),'novas','em análise'],[fmtN(n.abertas||0),'pedem ação','até a cobrança'],[fmtN(n.aguardando_pagamento||0),'aguardando pagamento','cobrança enviada'],[fmtN(n.pagas||0),'contribuições pagas',doaBRL(n.pagas_valor)]].map(([v,l,x])=>`<div class="hoje-kpi"><div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="help">${escHtml(x)}</div></div>`).join('');
+  document.getElementById('doa-kpis').innerHTML=[[fmtN(n.novas||0),'novas','em análise'],[fmtN(n.abertas||0),'pedem ação','até o acervo chegar'],[fmtN(n.aguardando_pagamento||0),'aguardando pagamento','cobrança enviada'],[fmtN(n.pagas||0),'contribuições pagas',doaBRL(n.pagas_valor)+(n.a_receber?` · ${qtd(n.a_receber,'acervo a receber','acervos a receber')}`:'')]].map(([v,l,x])=>`<div class="hoje-kpi"><div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="help">${escHtml(x)}</div></div>`).join('');
   document.getElementById('doa-etapa').innerHTML=[['abertas','Pedem ação'],['','Todas as etapas'],...Object.entries(d.etapas||{})].map(([k,l])=>`<option value="${escHtml(k)}"${k===DOA.etapa?' selected':''}>${escHtml(l)}</option>`).join('');
   if(d.listas&&d.listas.formulario)document.getElementById('doa-form').href=d.listas.formulario;
   document.getElementById('doa-cnt').textContent=qtd((d.itens||[]).length,'intenção','intenções');
@@ -8960,6 +8960,7 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   const mails=(x.emails||[]).map(e=>{const d=e.detalhe||{};return `<li><small>${escHtml(fmtDataHora(e.quando))} · ${escHtml(e.ator)}</small><br>${escHtml((d.template?d.template+' · ':'')+(d.nome_modelo||d.modelo||'')+(d.etapa_nome?': '+d.etapa_nome:''))} — ${e.tipo==='email_enviado'?'enviado pelo Sender':escHtml('não saiu'+(d.erro?': '+d.erro:''))}</li>`}).join('');
   openDrawer('Intenção de doação de acervo',x.protocolo||'',`<div class="cfg doa-det" data-doa-id="${x.id}">
   <p><span class="tag ${DOA_TAG[x.etapa]||''}">${escHtml(x.etapa_nome)}</span>${x.valor?` · contribuição <b>${escHtml(doaBRL(x.valor))}</b>`:''}${x.valor_proposto_fmt?` · proposto pela pessoa: ${escHtml(x.valor_proposto_fmt)}`:''}${x.assinado_em?` · contrato assinado em ${escHtml(doaData(x.assinado_em))}`:''}</p>
+  ${doaFundoLinha(x.fundo_vinculo)}
   <ul class="doa-etapas" aria-label="Etapas">${trilha}</ul>
   ${an?'<p class="help"><span class="tag">dados apagados</span> Os dados pessoais desta intenção foram apagados (LGPD).</p>':''}
   <dl>${dl}</dl>
@@ -8969,6 +8970,7 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   <h3>Andamento</h3>
   <label class="field">Etapa<select id="doa-etapa-sel">${opts}</select></label>
   <div id="doa-aviso" hidden></div>
+  <div id="doa-receber" hidden></div>
   <p class="help">“Cobrança enviada” e “Contribuição paga” o sistema marca sozinho. Para “Contrato assinado pelas partes”, informe antes a data em que as duas partes assinaram.</p>
   ${campo('contrato','Link do contrato para assinatura',x.contrato_link,'url',' placeholder="https://" maxlength="500" autocomplete="off" spellcheck="false"')}
   <p class="help">${DOA.d&&DOA.d.autentique&&DOA.d.autentique.ativo?'Ou anexe o PDF em Enviar contrato para assinatura: o painel cria o contrato na Autentique. ':''}Clicksign, D4Sign, gov.br, DocuSign… Clique em Salvar para guardar.${x.contrato_link?` <a href="${escHtml(x.contrato_link)}" target="_blank" rel="noopener noreferrer">Abrir o contrato</a>`:''}${x.contrato_enviado_em?` · enviado para assinatura em ${escHtml(fmtDataHora(x.contrato_enviado_em))}`:''}</p>
@@ -8996,7 +8998,7 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   <label class="field" id="doa-texto-campo" hidden>Texto para o contrato (se não colar, selecione aqui e copie)<textarea id="doa-texto" rows="14" readonly spellcheck="false"></textarea></label></div>
   ${notas?`<p><b>Notas internas</b></p><ul class="doa-notas">${notas}</ul>`:''}
   ${mails?`<details><summary>E-mails desta doação</summary><ul class="cob-hist">${mails}</ul></details>`:''}
-  <details><summary>Histórico</summary><ul class="cob-hist">${hist||'<li>—</li>'}</ul></details></div>`);doaAvisoBloco()}
+  <details><summary>Histórico</summary><ul class="cob-hist">${hist||'<li>—</li>'}</ul></details></div>`);doaAvisoBloco();doaReceberBloco()}
 /* CAMP-DOA-AVISOS: bloco do aviso, conforme a etapa escolhida (some em Em análise, contrato e cobrança: eles têm os e-mails deles). */
 function doaAvisoBloco(){const box=document.getElementById('doa-aviso'),sel=document.getElementById('doa-etapa-sel'),det=document.querySelector('.doa-det');if(!box||!sel||!det)return;
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(det.dataset.doaId))||{},k=sel.value,textos=(DOA.d&&DOA.d.aviso_textos)||{},padrao=(DOA.d&&DOA.d.aviso_padrao)||[];
@@ -9006,6 +9008,41 @@ function doaAvisoBloco(){const box=document.getElementById('doa-aviso'),sel=docu
   box.innerHTML=`<div class="panel cob-previa"><label class="conf-opcao"><input type="checkbox" id="doa-avisar"${padrao.includes(k)?' checked':''}><span><b>Avisar a pessoa por e-mail</b><small>Sai pelo Sender (modelo TR31 · Andamento da doação). Sem o modelo, a etapa muda e nada sai.</small></span></label>
   <label class="field">Texto do aviso (pronto para esta etapa; pode editar)<textarea id="doa-aviso-texto" rows="3" maxlength="3000">${escHtml(textos[k])}</textarea></label>
   <label class="field">Mensagem (opcional; vai depois do texto)<textarea id="doa-aviso-msg" rows="2" maxlength="2000"></textarea></label></div>`}
+/* CAMP-DOA-FUNDO (21/11/2026, Rafael: "e precisa criar quando terminar o fundo e arquiteto automaticamente."): ao escolher "Acervo recebido
+   pela CAMP", a prévia "Vai criar o fundo F0xx · <nome> e o arquiteto <nome>" (o servidor simula o cadastro de sempre numa transação desfeita),
+   com nomes editáveis, "usar o existente" × "criar novo" quando já há arquiteto ou fundo de mesmo nome, e a caixa "Criar fundo e arquiteto
+   agora" (desmarcada: o caminho de sempre, código digitado em Volume e catalogação). Nomes só como texto (escHtml) e ids em data-*. */
+let DOA_REC={id:null,ultimo:null,seq:0};
+function doaFundoLinha(fv){if(!fv)return '';
+  return `<p class="doa-fundo">Fundo: <a href="#fundo/${escHtml(fv.codigo)}">${escHtml(fv.codigo+' · '+(fv.titulo||''))}</a>${fv.agente_id?` · arquiteto <a href="#arquitetos/${+fv.agente_id}">${escHtml(fv.agente_nome||'')}</a>`:''}${fv.pelo_painel&&!fv.site_ok&&fv.site_erro?' <span class="tag a">o site ainda não recebeu: use Salvar de novo</span>':''}</p>`}
+function doaReceberBloco(){const box=document.getElementById('doa-receber'),sel=document.getElementById('doa-etapa-sel'),det=document.querySelector('.doa-det');if(!box||!sel||!det)return;
+  const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(det.dataset.doaId))||{};
+  if(sel.value!=='recebido'||x.etapa==='recebido'){box.hidden=true;box.innerHTML='';DOA_REC.ultimo=null;return}
+  if(!box.hidden&&box.dataset.id===String(det.dataset.doaId))return;
+  box.dataset.id=String(det.dataset.doaId);box.hidden=false;
+  box.innerHTML=`<div class="panel cob-previa"><label class="conf-opcao"><input type="checkbox" id="doa-rec-criar" checked><span><b>Criar fundo e arquiteto agora</b><small>Desmarque para usar um fundo que já existe digitando o código em Volume e catalogação → Código do fundo.</small></span></label>
+  <div id="doa-rec-previa"><p class="help">Calculando a prévia…</p></div></div>`;doaReceberPrevia(det.dataset.doaId,true)}
+function doaRecEscolha(){const g=k=>document.getElementById('doa-rec-'+k),e={};
+  const ra=document.querySelector('input[name="doa-rec-arq"]:checked');if(ra){e.arquiteto=ra.value;if(ra.value==='existente')e.arquiteto_id=+ra.dataset.arqId}
+  const rf=document.querySelector('input[name="doa-rec-fundo"]:checked');if(rf){e.fundo=rf.value;if(rf.value==='existente')e.fundo_codigo=rf.dataset.fundo}
+  if(g('arq-nome')&&!g('arq-nome').disabled&&g('arq-nome').value.trim())e.arquiteto_nome=g('arq-nome').value.trim();if(g('tipo')&&!g('tipo').disabled)e.tipo_agente=g('tipo').value;
+  if(g('fundo-nome')&&!g('fundo-nome').disabled&&g('fundo-nome').value.trim())e.fundo_nome=g('fundo-nome').value.trim();if(g('sigla')&&!g('sigla').disabled)e.sigla=g('sigla').value.trim().toUpperCase();return e}
+async function doaReceberPrevia(id,inicio){const out=document.getElementById('doa-rec-previa');if(!out)return;const seq=++DOA_REC.seq,esc=inicio?{}:doaRecEscolha();
+  let r;try{r=await API('/api/doacoes-acervo/'+(+id)+'/receber',{method:'POST',body:JSON.stringify(esc)})}catch(err){if(seq!==DOA_REC.seq)return;DOA_REC.ultimo=null;
+    out.innerHTML=`<p class="help"><span class="tag a">falta acertar</span> ${escHtml(err.message)}</p><label class="field">Nome do arquiteto<input id="doa-rec-arq-nome" maxlength="200" value="${escHtml(esc.arquiteto_nome||'')}"></label><label class="field">Nome do fundo (vazio = o do arquiteto)<input id="doa-rec-fundo-nome" maxlength="200" value="${escHtml(esc.fundo_nome||'')}"></label><div class="act"><button type="button" class="btn" data-doa-acao="rec-previa">Atualizar a prévia</button></div>`;return}
+  if(seq!==DOA_REC.seq)return;DOA_REC.ultimo=r;
+  if(r.vinculado){out.innerHTML=`<p><b>${escHtml(r.frase)}</b></p>`;return}
+  const a=r.arquiteto||{},f=r.fundo||{},arqs=r.arquitetos_existentes||[],fds=r.fundos_existentes||[],tipos=r.tipos_agente||{};
+  const radA=arqs.length?`<div role="radiogroup" aria-label="Arquiteto">${arqs.map(q=>`<label class="conf-opcao"><input type="radio" name="doa-rec-arq" value="existente" data-arq-id="${+q.id}"${a.acao==='usar'&&a.id===q.id?' checked':''}><span><b>Usar o existente: ${escHtml(q.nome)}</b><small>${q.fundos&&q.fundos.length?escHtml('Produtor de '+q.fundos.map(z=>z.codigo+' · '+z.titulo).join(', ')):'Ainda sem fundo'}</small></span></label>`).join('')}<label class="conf-opcao"><input type="radio" name="doa-rec-arq" value="novo"${a.acao==='criar'?' checked':''}><span><b>Criar novo</b><small>É outra pessoa ou escritório: mude o nome abaixo.</small></span></label></div>`:'';
+  const radF=fds.length?`<div role="radiogroup" aria-label="Fundo">${fds.map(z=>`<label class="conf-opcao"><input type="radio" name="doa-rec-fundo" value="existente" data-fundo="${escHtml(z.codigo)}"${f.acao==='usar'&&f.codigo===z.codigo?' checked':''}><span><b>Usar o existente: ${escHtml(z.codigo+' · '+z.titulo)}</b><small>O acervo entra neste fundo.</small></span></label>`).join('')}<label class="conf-opcao"><input type="radio" name="doa-rec-fundo" value="novo"${f.acao==='criar'?' checked':''}><span><b>Criar novo</b><small>Um fundo próprio para este acervo.</small></span></label></div>`:'';
+  const usaA=a.acao==='usar',usaF=f.acao==='usar';
+  out.innerHTML=`<p class="doa-rec-frase"><b>${escHtml(r.frase)}</b></p>${radA}
+  <label class="field">Nome do arquiteto<input id="doa-rec-arq-nome" maxlength="200" value="${escHtml(a.nome||'')}"${usaA?' disabled':''}></label>
+  <label class="field">Tipo<select id="doa-rec-tipo"${usaA?' disabled':''}>${Object.entries(tipos).map(([k,l])=>`<option value="${escHtml(k)}"${k===a.tipo?' selected':''}>${escHtml(l)}</option>`).join('')}</select></label>${radF}
+  <label class="field">Nome do fundo<input id="doa-rec-fundo-nome" maxlength="200" value="${escHtml(f.nome||'')}"${usaF?' disabled':''}></label>
+  ${usaF?'':`<label class="field">Sigla (3 letras; pode ficar para depois)<input id="doa-rec-sigla" maxlength="3" value="${escHtml(f.sigla||'')}" autocomplete="off"></label>
+  <p class="help">${[f.data_inicio?`Período: ${escHtml(String(f.data_inicio))}–${escHtml(String(f.data_fim||''))} (dos documentos, pelo formulário)`:'',f.dimensao_suporte?`Dimensão: ${escHtml(f.dimensao_suporte)}`:'','Procedência: doação à CAMP. Nada de CPF, endereço ou biografia vai ao fundo ou ao arquiteto.'].filter(Boolean).join(' · ')}</p>`}
+  <div class="act"><button type="button" class="btn" data-doa-acao="rec-previa">Atualizar a prévia</button></div>`}
 async function doaMudar(id,corpo,ok){try{const x=await API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(x);toast(x.aviso?x.aviso.mensagem:x.email_cobranca?ok+'. '+x.email_cobranca.mensagem:x.dados_pessoais&&!x.dados_pessoais.salvo?x.dados_pessoais.mensagem:ok);carregarDoacoes()}catch(err){toast(err.message)}}
 /* CAMP-DOA-CPF: só vai ao site o que a equipe mudou no bloco CPF/CNPJ e endereço (apagou = "__limpar__"). */
 function doaPessoaisMudados(corpo){const mud=k=>{const el=document.getElementById('doa-p-'+k);if(!el)return null;const a0=el.tagName==='SELECT'?((Array.from(el.options).find(o=>o.defaultSelected)||{}).value||''):el.defaultValue;const v1=el.value.trim();return v1===String(a0).trim()?null:(v1||'__limpar__')};
@@ -9018,6 +9055,7 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='copiar'){const l=v('link');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){doaMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
   if(a==='texto'){await doaTexto(id,true);return}
+  if(a==='rec-previa'){doaReceberPrevia(id);return}
   if(a==='conferir-assinatura'){try{const r=await API('/api/doacoes-acervo/'+id+'/conferir-assinatura',{method:'POST'});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r.doacao);toast(r.resultado.mensagem);carregarDoacoes()}catch(err){toast(err.message)}return}
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{};
   const corpo={contrato_link:v('contrato')||(x.contrato_link?'__limpar__':''),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
@@ -9025,10 +9063,22 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='contrato'){doaEnviarContrato(id,box);return}
   const avi=document.getElementById('doa-avisar');if(avi&&avi.checked&&corpo.etapa){corpo.avisar=true;corpo.aviso_texto=v('aviso-texto');corpo.mensagem=v('aviso-msg')}
   doaPessoaisMudados(corpo);
+  if(a==='salvar'&&corpo.etapa==='recebido'&&(document.getElementById('doa-rec-criar')||{}).checked){await doaReceber(id,x,corpo);return}
   if(a==='salvar'){doaMudar(id,corpo,'Intenção de doação atualizada');return}
   if(a==='cobrar'){const r=await confirmar({titulo:'Gerar cobrança no Mercado Pago',alvo:(box.querySelector('.tag')||{}).textContent||'',texto:'O site abre o pagamento da contribuição (Pix ou cartão) e manda o link por e-mail (TR27), se o modelo do Sender estiver configurado. Confirme que o contrato já foi enviado para assinatura.',botao:'Gerar cobrança',cancelar:'Voltar',botaoOcupado:'Abrindo…',acao:()=>API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(Object.assign({},corpo,{acao:'gerar_cobranca'}))})});if(r&&r.resultado){doaDrawer(r.resultado);toast('Cobrança aberta: o link do Mercado Pago está pronto'+(r.resultado.email_cobranca?'. '+r.resultado.email_cobranca.mensagem:''));carregarDoacoes()}return}});
+/* CAMP-DOA-FUNDO: confirmar cria o fundo e o arquiteto (de uma vez) e manda a etapa ao site; site falhou → o fundo fica e "Criar e salvar" de
+   novo usa o mesmo. */
+async function doaReceber(id,x,corpo){const pv=DOA_REC.ultimo;if(!pv){toast('Acerte a prévia do fundo e do arquiteto antes (ou desmarque Criar fundo e arquiteto agora)');return}
+  const mud=Object.assign({},corpo);delete mud.etapa;delete mud.fundo;let falhou=false;
+  const r=await confirmar({titulo:'Acervo recebido pela CAMP',alvo:x.protocolo||'',texto:`${pv.frase}. Depois a etapa vai ao site com o código do fundo. O código não volta: se o site falhar, o fundo fica e tentar de novo usa o mesmo.`,
+    botao:pv.vinculado?'Salvar':'Criar e salvar',cancelar:'Voltar',botaoOcupado:'Criando…',acao:async()=>{try{return await API('/api/doacoes-acervo/'+(+id)+'/receber',{method:'POST',body:JSON.stringify(Object.assign(doaRecEscolha(),{aplicar:true,mudanca:mud}))})}catch(e){falhou=true;throw e}}});
+  if(r&&r.resultado){limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r.resultado);toast(r.resultado.receber?r.resultado.receber.mensagem:'Acervo recebido');carregarDoacoes()}
+  else if(falhou){await carregarDoacoes();doaAbrir(id)}}
+document.addEventListener('click',e=>{const o=e.target.closest&&e.target.closest('[data-doa-origem]');if(!o)return;e.preventDefault();nav('doacoes');doaAbrir(+o.dataset.doaOrigem)});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#doa-lista tr[data-doa-abrir]')){e.preventDefault();doaAbrir(e.target.dataset.doaAbrir)}});
-document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel')doaAvisoBloco()});
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel'){doaAvisoBloco();doaReceberBloco()}
+  else if(e.target&&e.target.id==='doa-rec-criar'){const pv=document.getElementById('doa-rec-previa');if(pv)pv.hidden=!e.target.checked}
+  else if(e.target&&e.target.closest&&e.target.closest('#doa-rec-previa')&&(e.target.type==='radio'||e.target.tagName==='SELECT')){const det=document.querySelector('.doa-det');if(det)doaReceberPrevia(det.dataset.doaId)}});
 /* CAMP-DOA-IMPORTAR (contrato 1.27; Rafael: "pode registrar todos, mas não enviaremos email, e a raquel já tá aí"): o CSV da antiga Ficha de
    Doação de Acervo. Escolher o arquivo SIMULA (nada muda); "Importar" aplica: cria no site (nenhum e-mail) ou completa só o vazio de quem já
    está (pelo e-mail). Dados da pessoa só em texto (escHtml); a etapa de cada linha vai em data-linha (número da linha). */
