@@ -23,6 +23,16 @@ def ver(u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close()
 
 
+@router.get("/api/clima/resumo")
+def ver_resumo(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Só o que a barra do topo precisa (média, pior nível, frase); leve para ler a cada 5 min. Ver clima.resumo_barra."""
+    con = connect()
+    try:
+        return clima.resumo_barra(con)
+    finally:
+        con.close()
+
+
 @router.get("/api/clima/serie")
 def serie(sensor: str, dias: int = 7, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()

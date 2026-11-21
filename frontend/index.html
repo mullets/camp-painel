@@ -1209,6 +1209,29 @@ body.na-painel #system-banner.impede.on{display:flex!important}
   .top .who{padding:2px}
   .top .who-menu{top:62px;right:12px}
 }
+/* CAMP-HOME-CLIMA (21/11/2026): média do clima das salas na barra do topo, ao lado do estado dos sistemas. Cor = pior sensor; cinza = todos sem leitura recente */
+.top>.clima-topo{flex:none}.clima-topo[hidden]{display:none}
+.clima{position:relative}.clima>summary{list-style:none}.clima>summary::-webkit-details-marker{display:none}
+.clima-btn{-webkit-tap-highlight-color:transparent;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:6px 12px 6px 9px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;font-size:var(--fs-tab)}
+.clima-btn:hover{background:var(--hover);border-color:var(--line-forte)}
+.clima-ico{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.clima-btn b{font-weight:600}.clima-umid,.clima-sem{color:var(--ink2);font-size:var(--fs-2nd)}
+.clima-btn.ok .clima-ico{color:var(--green)}
+.clima-btn.aviso{border-color:var(--amber);background:var(--amber-soft)}.clima-btn.aviso .clima-ico,.clima-btn.aviso b{color:var(--amber)}
+.clima-btn.critico{border-color:var(--red);background:var(--red-soft)}.clima-btn.critico .clima-ico,.clima-btn.critico b{color:var(--red)}
+.clima-btn.sem{border-style:dashed;color:var(--ink3)}.clima-btn.sem .clima-ico{color:var(--ink3)}
+.clima-painel{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(340px,calc(100vw - 24px));background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sombra-pop);padding:12px 14px;display:grid;gap:8px;white-space:normal}
+.clima-painel h2{margin:0;font-size:var(--fs-sub)}
+.clima-frase{margin:0;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.clima-frase::before{content:"";width:10px;height:10px;border-radius:50%;flex:none;background:var(--ink3)}
+.clima-frase.ok::before{background:var(--green)}.clima-frase.aviso::before{background:var(--amber)}.clima-frase.critico::before{background:var(--red)}
+.clima-conta,.clima-faixa{margin:0;font-size:var(--fs-2nd);color:var(--ink2)}
+.clima-salas{list-style:none;margin:0;padding:0;display:grid;gap:2px;font-size:var(--fs-2nd)}
+.clima-salas li{display:flex;gap:8px;align-items:baseline;padding:4px 0 4px 8px;border-left:3px solid var(--line-forte)}
+.clima-salas li.ok{border-left-color:var(--green)}.clima-salas li.aviso{border-left-color:var(--amber)}.clima-salas li.critico{border-left-color:var(--red)}
+.clima-salas li span{margin-left:auto;color:var(--ink2);white-space:nowrap}
+.clima-pe{display:flex;gap:8px;border-top:1px solid var(--line2);padding-top:8px}
+@media (max-width:720px){.clima-btn{padding:6px 10px 6px 8px}.clima-umid,.clima-sem{display:none}.clima-painel{position:fixed;left:12px;right:12px;top:64px;width:auto}}
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
@@ -2095,7 +2118,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
       <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
       <div class="res" id="qres"></div>
     </div>
-    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span class="who-nome">Rafael</span><div class="av">RM</div><svg class="who-seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div><div class="who-menu" id="who-menu" role="menu" hidden><div class="who-cab" role="presentation"><b id="who-cab-nome"></b><small id="who-cab-papel"></small></div><hr><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
+    <div class="where" id="where"></div><div class="clima-topo" id="clima-topo" hidden></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span class="who-nome">Rafael</span><div class="av">RM</div><svg class="who-seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div><div class="who-menu" id="who-menu" role="menu" hidden><div class="who-cab" role="presentation"><b id="who-cab-nome"></b><small id="who-cab-papel"></small></div><hr><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
     <div class="system-banner" id="system-banner" onclick="faixaAbrirMaquinas()"><span class="health-dot"></span><div><b id="system-banner-title">Atenção no sistema</b><span id="system-banner-text"></span></div><span class="when" id="system-banner-when"></span></div>
   </div>
 
@@ -10091,6 +10114,35 @@ function sisQuando(){const el=document.getElementById('machine-status');if(!el)r
   if(btn){btn.classList.toggle('sis-velho',velho);const v=btn.querySelector('.sis-velho-txt');if(v)v.hidden=!velho}
   if(q){q.classList.toggle('velho',velho);q.innerHTML=SIS_ULTIMA?`Última verificação: <b>${escHtml(quandoTxt(SIS_ULTIMA))}</b>${velho?` · <span class="sis-aviso">informação desatualizada${SIS_ERRO?': o painel não conseguiu verificar de novo':''}</span>`:''}`:'Ainda não verificado.'}}
 setInterval(sisQuando,30e3);
+/* CAMP-HOME-CLIMA (21/11/2026, pedido do Rafael): na barra do topo, um resumo do clima das salas — a MÉDIA dos sensores com leitura recente
+   ("23,1° · 55%"), com a cor do PIOR sensor (um problema numa sala aparece) e cinza só se todos estão sem leitura recente. Clicar abre um
+   painel pequeno com a frase, quantos sensores entram na média, as salas e o link para o Clima do acervo. Lê /api/clima/resumo (só o que o
+   coletor guardou; nunca fala com a Tuya) ao entrar e a cada 5 min. Desligado ou sem sensor: não aparece. */
+const CLIMA_NIVEL_TXT={ok:'Dentro da faixa',aviso:'Fora da faixa',critico:'Muito fora da faixa',sem_leitura:'Sem leitura recente'};
+function climaHa(s){s=Math.max(+s||0,0);if(s<3600)return Math.max(Math.floor(s/60),1)+' min';if(s<86400)return Math.floor(s/3600)+' h';const d=Math.floor(s/86400);return d+(d===1?' dia':' dias')}
+function climaGrau(v){return v==null?'—':fmtNum(v,1,1)+'°'}
+function climaPct(v){return v==null?'—':fmtNum(Math.round(v))+'%'}
+function climaTopoHTML(d){
+  const nv=d.nivel==='sem_leitura'?'sem':d.nivel,cls=['ok','aviso','critico'].includes(nv)?nv:'sem';
+  const media=d.na_media===1?'1 sensor':`${fmtN(d.na_media)} sensores`;
+  const conta=d.nivel==='sem_leitura'?`${d.sensores===1?'O sensor está':'Os '+fmtN(d.sensores)+' sensores estão'} sem leitura recente`:`Média de ${media}${d.sem_leitura?` · ${fmtN(d.sem_leitura)} sem leitura recente, fora da média`:''} · lido há ${climaHa(d.idade_s)}`;
+  const rotulo=d.nivel==='sem_leitura'?`Clima das salas: ${d.frase}.`:`Clima das salas: média de ${media}, ${fmtNum(d.temperatura_c,1,1)} °C e ${climaPct(d.umidade_pct)} de umidade. ${d.frase}.`;
+  const pill=d.nivel==='sem_leitura'?`<b>—°</b><span class="clima-sem">sem leitura há ${escHtml(climaHa(d.idade_s))}</span>`:`<b>${climaGrau(d.temperatura_c)}</b><span class="clima-umid">· ${climaPct(d.umidade_pct)}</span>`;
+  const salas=(d.salas||[]).map(x=>{const c=x.sem_leitura_recente?'sem':(x.nivel||'sem');return `<li class="${c}"><b>${escHtml(x.nome)}</b><span>${x.sem_leitura_recente?`sem leitura há ${escHtml(climaHa(x.idade_s))}`:`${climaGrau(x.temperatura_c)} · ${climaPct(x.umidade_pct)}`}</span></li>`}).join('');
+  const fx=d.faixa||{},faixa=fx.temp_min!=null?`<p class="clima-faixa">Faixa desejada: ${fmtNum(fx.temp_min,1)} a ${fmtNum(fx.temp_max,1)} °C · ${fmtNum(fx.umid_min)} a ${fmtNum(fx.umid_max)} % de umidade</p>`:'';
+  return `<details class="clima" data-clima-nivel="${escHtml(d.nivel)}"><summary class="clima-btn ${cls}" aria-label="${escHtml(rotulo)}" title="${escHtml(rotulo)}"><svg class="clima-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/><path d="M12 11v6"/></svg>${pill}</summary>
+    <div class="clima-painel" role="region" aria-labelledby="clima-tit"><h2 id="clima-tit">Clima das salas</h2>
+    <p class="clima-frase ${cls}">${escHtml(d.frase)}</p><p class="clima-conta">${escHtml(conta)}</p>
+    ${salas?`<ul class="clima-salas" aria-label="Salas">${salas}</ul>`:''}${faixa}
+    <div class="clima-pe"><a class="btn sm" href="/clima" target="_blank" rel="noopener">Abrir Clima do acervo</a></div></div></details>`}
+async function atualizarClimaTopo(){
+  const el=document.getElementById('clima-topo');if(!el||!EU||document.hidden&&el.dataset.lido)return;
+  let d;try{d=await API('/api/clima/resumo')}catch(_){return}   /* falhou: fica o que já estava (o painel tenta de novo em 5 min) */
+  el.dataset.lido='1';
+  if(!d||!d.mostrar){el.hidden=true;el.innerHTML='';return}
+  const aberto=!!el.querySelector('details.clima[open]');el.innerHTML=climaTopoHTML(d);if(aberto)el.querySelector('details.clima').open=true;el.hidden=false}
+document.addEventListener('click',e=>{const ab=document.querySelector('#clima-topo details.clima[open]');if(ab&&!e.target.closest('#clima-topo'))ab.open=false});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const ab=document.querySelector('#clima-topo details.clima[open]');if(ab){e.stopImmediatePropagation();ab.open=false;ab.querySelector('summary').focus()}},true);
 document.addEventListener('click',async e=>{const v=e.target.closest('[data-sis-verificar]');if(v){v.disabled=true;v.textContent='Verificando…';try{SIS_ERRO=null;await atualizarTopoEstacoes(await API('/api/estacoes?fresco=1'))}catch(err){SIS_ERRO=err.message;sisQuando();toast('Não consegui verificar agora: '+err.message)}return}
   const f=e.target.closest('[data-sis-fechar]');if(f){const dt=f.closest('details');if(dt){dt.open=false;dt.querySelector('summary').focus()}return}
   const ab=document.querySelector('#machine-status details.sis[open]');if(ab&&!e.target.closest('#machine-status'))ab.open=false});
@@ -10571,7 +10623,7 @@ function versaoHTML(v){const dt=x=>{const d=new Date(x);return isNaN(d)?'':`${St
 if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{const f=document.getElementById('foot');f.innerHTML=versaoHTML(v);f.title=[v.assunto,v.hash?`código ${v.hash}`:(v.versao||'')].filter(Boolean).join(' · ')}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
 
 function aplicarUsuario(u){try{aplicarUsuario0(u);window.CAMP_BOOT_OK=true;document.querySelectorAll('.boot-erro').forEach(x=>x.remove())}catch(e){bootErro(e);try{route_to(rotaAtual())}catch(_){}}}   /* UX-69: uma exceção aqui parava tudo antes de carregar o painel */
-function aplicarUsuario0(u){EU=u;umPassoMarcar();if(u&&u.publicar_um_passo===undefined)API('/api/auth/eu').then(x=>{if(EU&&x&&x.id===EU.id){EU.publicar_um_passo=!!x.publicar_um_passo;EU.conferir_so_avisos=!!x.conferir_so_avisos;EU.importacao_automatica=!!x.importacao_automatica;umPassoMarcar()}}).catch(()=>{});atualizarTopoEstacoes();clearInterval(window._estTopTimer);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}const r0=rotaAtual().split('/')[0];window.FUNDOS_PRONTOS=carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();if(r0!=='projetos')carregarProjetosAPI();if(r0!=='painel')carregarPainel();if(r0!=='filas')carregarFilas();if(r0!=='solicitacoes')carregarSolicitacoes();if(r0!=='erros')carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;atualizarAvatarTopo(u);document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}aplicarPermissoes();(window.PREFS_PRONTAS=carregarPreferenciasAjuda()).finally(vigiarTarefas);route_to(rotaAtual())}
+function aplicarUsuario0(u){EU=u;umPassoMarcar();if(u&&u.publicar_um_passo===undefined)API('/api/auth/eu').then(x=>{if(EU&&x&&x.id===EU.id){EU.publicar_um_passo=!!x.publicar_um_passo;EU.conferir_so_avisos=!!x.conferir_so_avisos;EU.importacao_automatica=!!x.importacao_automatica;umPassoMarcar()}}).catch(()=>{});atualizarTopoEstacoes();clearInterval(window._estTopTimer);atualizarClimaTopo();clearInterval(window._climaTimer);window._climaTimer=setInterval(atualizarClimaTopo,5*60e3);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}const r0=rotaAtual().split('/')[0];window.FUNDOS_PRONTOS=carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();if(r0!=='projetos')carregarProjetosAPI();if(r0!=='painel')carregarPainel();if(r0!=='filas')carregarFilas();if(r0!=='solicitacoes')carregarSolicitacoes();if(r0!=='erros')carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;atualizarAvatarTopo(u);document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}aplicarPermissoes();(window.PREFS_PRONTAS=carregarPreferenciasAjuda()).finally(vigiarTarefas);route_to(rotaAtual())}
 async function checarSessao(){try{aplicarUsuario(await API('/api/auth/eu'))}catch(e){if(!MODO_SERVIDOR){return}document.getElementById('login').classList.add('on')}}
 /* CAMP-120 (exaustão, 20/10): com a página do projeto (ou a tela de conferir) aberta, o CAMP Vision relê o lote, outra pessoa aprova ou a releitura
    termina, e a tela continuava mostrando o estado velho (com botões que já não valiam). Agora, a cada 12 s, a tela pergunta a "marca" do projeto;

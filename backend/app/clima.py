@@ -323,3 +323,69 @@ def resumo(con, com_serie: bool = True) -> dict:
     return {"sensores": sensores, "faixa": fx, "coleta": dict(c) if c else None, "coletando": em_andamento(),
             "ligado": coleta_min(con) > 0, "coleta_min": coleta_min(con),
             "configurado": bool(_cfg(con, "clima.tuya_access_id") and _cfg(con, "clima.tuya_access_secret"))}
+
+
+def _ha(idade_s: int | None) -> str:
+    s = max(int(idade_s or 0), 0)
+    if s < 3600:
+        return f"{max(s // 60, 1)} min"
+    if s < 86400:
+        return f"{s // 3600} h"
+    d = s // 86400
+    return f"{d} dia" if d == 1 else f"{d} dias"
+
+
+def _num_br(v: float) -> str:
+    return f"{v:.1f}".replace(".", ",")
+
+
+def _desvio(fx: dict, s: dict) -> tuple[float, str]:
+    """O que está mais fora da faixa neste sensor, já na escala da margem (1 = no limite do crítico) e a frase curta."""
+    pior, frase = 0.0, ""
+    t, u = s.get("temperatura_c"), s.get("umidade_pct")
+    if t is not None:
+        for fora, lado in ((t - fx["temp_max"], "alta"), (fx["temp_min"] - t, "baixa")):
+            if fora > 0 and fora / MARGEM_TEMP_C > pior:
+                pior = fora / MARGEM_TEMP_C
+                frase = f"temperatura {lado} demais ({_num_br(t)}°)" if fora > MARGEM_TEMP_C else f"temperatura um pouco {lado} ({_num_br(t)}°)"
+    if u is not None:
+        for fora, lado in ((u - fx["umid_max"], "alta"), (fx["umid_min"] - u, "baixa")):
+            if fora > 0 and fora / MARGEM_UMID > pior:
+                pior = fora / MARGEM_UMID
+                frase = f"umidade {lado} demais ({round(u)}%)" if fora > MARGEM_UMID else f"umidade um pouco {lado} ({round(u)}%)"
+    return pior, frase
+
+
+def resumo_barra(con) -> dict:
+    """O que a barra do topo do painel mostra (CAMP-HOME-CLIMA): a MÉDIA dos sensores com leitura recente, o PIOR nível entre eles
+    e uma frase curta. Sensor sem leitura recente (mais de 3 h, a mesma regra da tela de clima) fica fora da média; se todos estão
+    assim, o nível é 'sem_leitura'. Desligado (clima.coleta_min = 0) ou sem sensor: {"mostrar": False} e a barra não mostra nada.
+    Só lê o que o coletor guardou (nunca fala com a Tuya)."""
+    if coleta_min(con) <= 0:
+        return {"mostrar": False}
+    r = resumo(con, com_serie=False)
+    todos = r["sensores"]
+    if not todos:
+        return {"mostrar": False}
+    fx = r["faixa"]
+    frescos = [s for s in todos if not s["sem_leitura_recente"]]
+    velhos = [s for s in todos if s["sem_leitura_recente"]]
+    salas = [{"nome": s["nome"], "temperatura_c": s["temperatura_c"], "umidade_pct": s["umidade_pct"], "nivel": s["nivel"],
+              "sem_leitura_recente": s["sem_leitura_recente"], "idade_s": s["idade_s"]} for s in todos]
+    base = {"mostrar": True, "faixa": fx, "sensores": len(todos), "na_media": len(frescos), "sem_leitura": len(velhos), "salas": salas}
+    if not frescos:
+        idade = min(s["idade_s"] for s in velhos)
+        return {**base, "nivel": "sem_leitura", "temperatura_c": None, "umidade_pct": None, "idade_s": idade,
+                "frase": f"Sem leitura há {_ha(idade)}"}
+    def media(k):
+        v = [s[k] for s in frescos if s[k] is not None]
+        return round(sum(v) / len(v), 1) if v else None
+    ordem = {"ok": 0, "aviso": 1, "critico": 2}
+    nivel_ = max((s["nivel"] or "ok" for s in frescos), key=lambda n: ordem[n])
+    if nivel_ == "ok":
+        frase = "Tudo dentro da faixa"
+    else:
+        pior = max((s for s in frescos if s["nivel"] == nivel_), key=lambda s: _desvio(fx, s)[0])
+        frase = f"{pior['nome']}: {_desvio(fx, pior)[1]}"
+    return {**base, "nivel": nivel_, "temperatura_c": media("temperatura_c"), "umidade_pct": media("umidade_pct"),
+            "idade_s": min(s["idade_s"] for s in frescos), "frase": frase}
