@@ -54,6 +54,7 @@ MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados 
 MODOS_RAPIDOS |= {"doacoes_pedem_acao"}   # CAMP-DOA-LISTA 21/11/2026: "paga" (e assinada) fica em Pedem ação até o acervo chegar; Autentique com a doação já paga (linha própria)
 MODOS_RAPIDOS |= {"doacoes_fundo_auto"}   # CAMP-DOA-FUNDO 21/11/2026: acervo recebido cria fundo e arquiteto (prévia, um só, site falhou reusa, arquiteto existente, manual igual, só admin; linha própria)
 MODOS_RAPIDOS |= {"amigo_desativar_apagar"}   # CAMP-AMIGO-APAGAR 21/11/2026: desativar/reativar e apagar Amigo (assinatura do Mercado Pago cancelada pelo site falso; contrato 1.28; linha própria)
+MODOS_RAPIDOS |= {"amigo_duplicado"}   # CAMP-AMIGO-DUP 21/11/2026: e-mail repetido, filtro Repetidos e Juntar cadastros (site falso; contrato 1.29; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 
 
@@ -18215,6 +18216,107 @@ def filho(modo):
         o = am.coletar(c, type("W", (), {"h": type("G", (), {"get": lambda s_, p_, params=None: Resp(200, {"itens": [{"id": 901, "tipo": "amigo", "nome": "Ana Lima", "email": "ana@x.com", "apagado": True}], "mais": False})})()})())
         ver("coleta depois de apagar: o nome não volta", um(A1)["nome"] == "(removido)" and um(A1)["email"] is None and not o["erro"], (o, dict(um(A1))))
         for l in res: print(l)
+    elif modo == "amigo_duplicado":
+        # CAMP-AMIGO-DUP (21/11/2026, Rafael: "por que ele conseguiu fazer 2 cadastros como amigo?"; contrato 1.29). Site FALSO: o mesmo e-mail
+        # (normalizado) em dois cadastros ganha a etiqueta "e-mail repetido" e o filtro Repetidos; "Juntar cadastros" mostra a prévia (o site
+        # simula), exige JUNTAR, o site junta primeiro (falhou = nada muda) e aqui pagamentos, e-mails, histórico e notas passam para o que fica.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, datetime as _dt
+        from fastapi.testclient import TestClient
+        from app import auth, amigos as am
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        am._HOJE = _dt.date(2026, 11, 21)
+        posts, falhar = [], {"juntar": False}
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.text = code, dados, _j.dumps(dados)
+            def json(s): return s._d
+        def site(path, corpo):
+            posts.append((path, corpo))
+            if path.endswith("/juntar"):
+                if corpo.get("simular"):
+                    return Resp(200, {"ok": True, "modo": "simular", "move": {"pagamentos": 1}, "assinatura": {"havia": True, "cancelada": False}})
+                if falhar["juntar"]:
+                    return Resp(502, {"code": "camp_mp_cancelar", "message": "Nada foi mudado: não deu para cancelar a assinatura mensal no Mercado Pago (HTTP 500). Tente de novo em instantes."})
+                fica = int(path.split("/")[-2])
+                return Resp(200, {"ok": True, "modo": "aplicar", "assinatura": {"havia": True, "cancelada": True},
+                                  "fica": {"id": fica, "tipo": "amigo", "nome": "Pedro B.", "email": "pedro.b@exemplo.com", "situacao_pagamento": "aguardando", "categoria": "estudante", "modalidade": "anual",
+                                           "pagamentos": [{"id": "31", "status": "rejected", "valor": 20, "data": "2026-11-10"}]},
+                                  "sai": {"id": corpo.get("outro_id"), "tipo": "amigo", "apagado": True, "juntado_a": fica}})
+            return Resp(200, {"ok": True})
+        class H:
+            def post(s, path, json=None): return site(path, json or {})
+            def get(s, path, params=None): return Resp(200, {"itens": [], "mais": False})
+        class WPF:
+            h = H()
+        am._wp = lambda: WPF()
+        c.execute("INSERT INTO configuracao (chave, valor) VALUES ('wp.app_password','x') ON CONFLICT(chave) DO UPDATE SET valor='x'")
+        def novo(sid, nome, email, mod, sit, criado, pago_em=None, notas=None, fundador=None):
+            return c.execute("""INSERT INTO amigo (site_id, tipo, protocolo, categoria, modalidade, nome, email, situacao, criado_no_site, pago_em, notas, fundador)
+                                VALUES (?,'amigo',?,'estudante',?,?,?,?,?,?,?,?)""", (sid, f"CAMP-2026-{sid:06d}", mod, nome, email, sit, criado, pago_em, notas, fundador)).lastrowid
+        N = novo(113206, "Pedro B.", "pedro.b@exemplo.com", "anual", "pendente", "2026-11-20T12:00:00+00:00")
+        V = novo(112999, "Pedro B. S. F.", " Pedro.B@Exemplo.com", "mensal", "recusado", "2026-11-10T12:00:00+00:00", notas="ligar de tarde", fundador=9)
+        E1 = novo(120001, "Eva Reis", "eva@gmail.com", "anual", "pago", "2026-10-01T12:00:00+00:00", pago_em="2026-10-01")
+        E2 = novo(120002, "Eva R.", "E.va+camp@gmail.com", "anual", "pendente", "2026-11-15T12:00:00+00:00")
+        U = novo(120003, "Uno Só", "uno@exemplo.com", "anual", "pago", "2026-09-01T12:00:00+00:00", pago_em="2026-09-01")
+        c.execute("INSERT INTO amigo_pagamento (amigo_id, chave, data, valor, meio, origem, status) VALUES (?,'mp-31','2026-11-10',20,'credit_card','mp','rejected')", (V,))
+        c.execute("INSERT INTO amigo_email (amigo_id, modelo, assunto, corpo, para, situacao) VALUES (?,'cobranca_pendente','Pagamento pendente','Olá','pedro.b@exemplo.com','enviado')", (V,))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('amigo',?,'criado','site','{}')", (str(V),))
+        c.execute("INSERT INTO emkt_site (site_id, email, nome, origem, situacao) VALUES ('post-112999','pedro.b@exemplo.com','Pedro','apoio','inscrito')")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        um = lambda i: c.execute("SELECT * FROM amigo WHERE id=?", (i,)).fetchone()
+        # ---------- etiqueta e filtro ----------
+        ver("e-mail normalizado como no site (caixa, espaços; Gmail sem pontos e +sufixo)", am.normaliza_email(" Pedro.B@Exemplo.com ") == "pedro.b@exemplo.com" and am.normaliza_email("E.va+camp@GoogleMail.com") == "eva@gmail.com")
+        l = x.get("/api/amigos").json(); por = {i_["id"]: i_ for i_ in l.get("itens", [])}
+        ver("lista: o mesmo e-mail em dois cadastros ganha a etiqueta e-mail repetido (Gmail também); o resto não",
+            all(por[i]["email_repetido"] for i in (N, V, E1, E2)) and not por[U]["email_repetido"] and por[N]["repetidos"] == [V], {i: por[i].get("email_repetido") for i in por})
+        lr = x.get("/api/amigos?situacao=repetidos").json()
+        ver("filtro Repetidos: só os cadastros com e-mail repetido; resumo conta", sorted(i_["id"] for i_ in lr.get("itens", [])) == sorted([N, V, E1, E2]) and l.get("resumo", {}).get("repetidos") == 4, (lr.get("resumo"), [i_["id"] for i_ in lr.get("itens", [])]))
+        dN = x.get(f"/api/amigos/{N}").json()
+        ver("detalhe: lista o outro cadastro do mesmo e-mail (para Juntar cadastros)", [o["id"] for o in dN.get("repetidos", [])] == [V] and dN["repetidos"][0]["protocolo"] == "CAMP-2026-112999", dN.get("repetidos"))
+        # ---------- papéis ----------
+        cods = [op.get(f"/api/amigos/{N}/juntar/previa?outro={V}").status_code, op.post(f"/api/amigos/{N}/juntar", json={"outro_id": V, "confirmacao": "JUNTAR"}).status_code]
+        ver("não admin (operador): 403 na prévia e no juntar; site não chamado", cods == [403, 403] and not posts, cods)
+        # ---------- prévia ----------
+        pv = x.get(f"/api/amigos/{V}/juntar/previa?outro={N}").json()
+        ver("prévia: sugere ficar o da adesão mais recente (nenhum pago); o site simula; nada muda",
+            pv.get("recomendado") == N and pv["fica"]["id"] == N and pv["sai"]["id"] == V and pv["move"]["pagamentos"] == 1 and pv["move"]["emails"] == 1 and pv["move"]["notas"] is True and pv["move"]["fundador"] == 9
+            and pv.get("assinatura") is True and posts == [("/wp-json/camp/v1/painel/apoios/113206/juntar", {"outro_id": 112999, "simular": True})] and um(V)["email"], (pv, posts))
+        pe = x.get(f"/api/amigos/{E2}/juntar/previa?outro={E1}").json()
+        ver("prévia: com um ativo (pago), sugere o ativo", pe.get("recomendado") == E1 and pe["fica"]["id"] == E1, pe.get("recomendado"))
+        pf = x.get(f"/api/amigos/{N}/juntar/previa?outro={V}&fica={V}").json()
+        ver("prévia: dá para escolher qual fica", pf["fica"]["id"] == V and pf.get("recomendado") == N, pf.get("fica"))
+        ver("e-mails diferentes: não junta (400)", x.get(f"/api/amigos/{N}/juntar/previa?outro={U}").status_code == 400)
+        posts.clear()
+        r0 = x.post(f"/api/amigos/{N}/juntar", json={"outro_id": V, "confirmacao": "sim"})
+        ver("juntar sem digitar JUNTAR: 400, nada muda e o site não é chamado", r0.status_code == 400 and not posts and um(V)["email"], r0.text)
+        falhar["juntar"] = True
+        r1 = x.post(f"/api/amigos/{N}/juntar", json={"outro_id": V, "confirmacao": "JUNTAR"})
+        ver("site falhou (assinatura não cancelou): 502, Nada foi juntado e nada muda aqui",
+            r1.status_code == 502 and (r1.json().get("erro") or "").startswith("Nada foi juntado:") and um(V)["email"] and c.execute("SELECT amigo_id FROM amigo_pagamento WHERE chave='mp-31'").fetchone()[0] == V, r1.text)
+        falhar["juntar"] = False; posts.clear()
+        r2 = x.post(f"/api/amigos/{N}/juntar", json={"outro_id": V, "fica_id": N, "confirmacao": " juntar "})
+        d2 = r2.json()
+        ver("juntar: o site junta primeiro, com a confirmação", r2.status_code == 200 and posts == [("/wp-json/camp/v1/painel/apoios/113206/juntar", {"outro_id": 112999, "simular": False, "confirmar": "JUNTAR"})] and d2.get("assinatura_cancelada") is True, (r2.text, posts))
+        ver("juntar: pagamento, e-mail e histórico passam para o que fica",
+            c.execute("SELECT amigo_id FROM amigo_pagamento WHERE chave='mp-31'").fetchone()[0] == N and c.execute("SELECT COUNT(*) FROM amigo_email WHERE amigo_id=?", (N,)).fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='criado'", (str(N),)).fetchone()[0] == 1 and d2.get("pagamentos") == 1, d2)
+        n_ = um(N); v_ = um(V)
+        ver("juntar: notas e número de Fundador vêm junto; situação do que fica como o site deixou", "ligar de tarde" in (n_["notas"] or "") and "CAMP-2026-112999" in (n_["notas"] or "") and n_["fundador"] == 9 and n_["situacao"] == "pendente", dict(n_))
+        ver("juntar: o que sai é apagado (dados pessoais) e some do painel", v_["apagado_em"] and v_["email"] is None and v_["nome"] == "(removido)" and x.get(f"/api/amigos/{V}").status_code == 404, dict(v_))
+        ver("juntar: a pessoa continua na lista de e-mails (está no cadastro que fica)", c.execute("SELECT COUNT(*) FROM emkt_site WHERE email='pedro.b@exemplo.com'").fetchone()[0] == 1)
+        l2 = x.get("/api/amigos").json(); p2 = {i_["id"]: i_ for i_ in l2.get("itens", [])}
+        ver("depois de juntar: sem a etiqueta e fora de Repetidos; histórico diz cadastro juntado",
+            not p2[N]["email_repetido"] and l2.get("resumo", {}).get("repetidos") == 2 and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='juntado'", (str(N),)).fetchone()[0] == 1, l2.get("resumo"))
+        hist = " ".join(r_[0] or "" for r_ in c.execute("SELECT detalhe FROM evento WHERE entidade='amigo' AND codigo=?", (str(V),)))
+        ver("histórico do que saiu sem dado pessoal", "Pedro" not in hist and "pedro" not in hist, hist[:200])
+        for l in res: print(l)
     elif modo == "ingressos_painel":
         # CAMP-INGRESSOS 19/11/2026 · Ingressos da visita guiada à Residência João Marino: busca no site (GET /painel/ingressos, contrato
         # 1.18; cliente FALSO), incremental, turmas e vagas, contas do mês por turma, filtros, CSV para o Excel, reenviar, papéis e LGPD.
@@ -22219,6 +22321,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos (desativar/apagar): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Amigos (desativar/apagar): todas as verificações rodaram")
+
+print("Amigos da CAMP · um Amigo por e-mail (contrato 1.29): etiqueta e-mail repetido, filtro Repetidos, Juntar cadastros com prévia e JUNTAR (site falso)")
+rc, out = rodar("amigo_duplicado", f"{tmp}/amigo_duplicado.db")
+if rc != 0: ok(False, f"teste amigo_duplicado não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos (repetidos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Amigos (repetidos): todas as verificações rodaram")
 
 print("E-mails enviados: todas as fontes do painel e do site (site falso), busca incremental, filtros, CSV, papéis e LGPD")
 rc, out = rodar("emails_enviados", f"{tmp}/emails_enviados.db")
