@@ -14,7 +14,7 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
   const page = await ctx.newPage();
   const erros = [];
   // conhecidos e fora deste cartão: o 401 de /api/auth/eu ANTES do login (é assim que a tela descobre que precisa entrar) e o /favicon.ico que o painel não tem
-  const ESPERADO = m => /\[\/api\/auth\/eu\]$|\[\/favicon\.ico\]$/.test(m);
+  const ESPERADO = m => /\[\/api\/auth\/eu\]$|\[\/favicon\.ico\]$|\/previa\?t=/.test(m);   // CAMP-HOME-UX: a miniatura da linha pede a prévia, que a semente não tem (a imagem some sozinha, como nas outras listas)
   page.on('console', m => { if (m.type() === 'error' && !ESPERADO('[' + ((m.location() || {}).url || '').replace(BASE, '') + ']')) erros.push('console.error: ' + m.text() + ' [' + ((m.location() || {}).url || '').replace(BASE, '') + ']'); });
   page.on('pageerror', e => erros.push('pageerror: ' + e.message));
   const falhas = []; page.on('response', r => { if (r.status() >= 400) falhas.push(r.status() + ' ' + r.url().replace(BASE, '')); });

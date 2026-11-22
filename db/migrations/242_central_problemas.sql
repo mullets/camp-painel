@@ -1,12 +1,11 @@
--- 241 · CAMP-PROB-UX (22/11/2026). Rafael: redesenho da tela Problemas ("Central de Problemas", documento de produto 1.0).
--- Fluxo de trabalho, responsável, evidências, revisão, modelos de decisão, visões salvas, rascunho e reconhecimento (pontos) dos problemas.
+-- 242 · CAMP-PROB-UX (22/11/2026). Rafael: redesenho da tela Problemas ("Central de Problemas", documento de produto 1.0).
+-- Fluxo de trabalho, evidências, revisão, modelos de decisão, visões salvas e rascunho dos problemas. O responsável usa a tarefa_responsavel
+-- da Home (migração 241, chave 'erro:<id>') e os pontos são os da Home (home_trabalho.eventos_validados): nada disso é duplicado aqui.
 -- Tudo ADITIVO: colunas novas opcionais e tabelas novas. A coluna `situacao` (aberto · em_correcao · corrigido · fechado · ignorado) continua
 -- sendo a regra de quem já lê (menu, Precisa de você, publicação, relatórios); a `fase` só detalha o trabalho e é sempre compatível com ela
 -- (ver backend/app/central_problemas.py, FASE_SITUACAO). Problema antigo fica com fase NULL e a fase é deduzida da situação.
 -- Idempotente: ADD COLUMN repetido é ignorado por executar_script_idempotente; CREATE ... IF NOT EXISTS; INSERT OR IGNORE. Nada de UPDATE.
 ALTER TABLE erro ADD COLUMN fase TEXT;                 -- novo · triagem · em_analise · aguardando_informacao · aguardando_revisao · devolvido · reaberto · resolvido · duplicado · invalido (NULL = deduzida da situação)
-ALTER TABLE erro ADD COLUMN responsavel TEXT;          -- e-mail de quem está com o problema (NULL = não atribuído)
-ALTER TABLE erro ADD COLUMN responsavel_em TEXT;
 ALTER TABLE erro ADD COLUMN duplicado_de INTEGER;      -- problema que ficou (o duplicado guarda a referência; nada é apagado)
 ALTER TABLE erro ADD COLUMN enviado_revisao_por TEXT;  -- quem mandou para revisão (a revisão por outra pessoa compara com quem aprova)
 ALTER TABLE erro ADD COLUMN enviado_revisao_em TEXT;
@@ -69,29 +68,8 @@ CREATE TABLE IF NOT EXISTS erro_rascunho (
   PRIMARY KEY (erro_id, usuario_id)
 );
 
--- reconhecimento: pontos SÓ de resolução validada (pesos por complexidade); reabrir estorna (revertido_em). Nunca vale para avaliar desempenho.
-CREATE TABLE IF NOT EXISTS erro_ponto (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  erro_id     INTEGER NOT NULL,
-  pessoa      TEXT NOT NULL,                           -- e-mail
-  pontos      INTEGER NOT NULL,
-  motivo      TEXT NOT NULL,                           -- resolucao · revisao
-  criado_em   TEXT NOT NULL DEFAULT (datetime('now')),
-  revertido_em TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_erro_ponto_pessoa ON erro_ponto(pessoa);
-CREATE INDEX IF NOT EXISTS idx_erro_ponto_erro ON erro_ponto(erro_id);
-
--- preferência de cada pessoa: esconder o próprio progresso e conquistas
-CREATE TABLE IF NOT EXISTS erro_progresso_pref (
-  usuario_id INTEGER PRIMARY KEY,
-  ocultar    INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE INDEX IF NOT EXISTS idx_erro_situacao ON erro(situacao);
 
 INSERT OR IGNORE INTO configuracao (chave, valor, descricao, sensivel) VALUES
   ('problemas.revisao_outra_pessoa', '0', 'Problemas: tipos sensíveis (autoria, crédito, folha de outro projeto) só são resolvidos depois da revisão de OUTRA pessoa. 0 = desligado (padrão), 1 = ligado', 0),
-  ('problemas.tipos_revisao', 'autoria_divergente,credito,projeto_errado', 'Problemas: tipos que pedem revisão por outra pessoa quando ela está ligada (separados por vírgula)', 0),
-  ('problemas.ranking_equipe', '0', 'Problemas: mostrar o ranking da equipe no mês. 0 = desligado (padrão). Nunca usar para avaliar desempenho de ninguém', 0),
-  ('problemas.meta_semana', '0', 'Problemas: meta coletiva de resoluções validadas por semana (0 = sem meta; a tela só mostra quantas foram resolvidas)', 0);
+  ('problemas.tipos_revisao', 'autoria_divergente,credito,projeto_errado', 'Problemas: tipos que pedem revisão por outra pessoa quando ela está ligada (separados por vírgula)', 0);

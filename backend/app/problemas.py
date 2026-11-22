@@ -288,8 +288,6 @@ def reabrir_se_voltou(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
     for r in voltam:
         n = con.execute("UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL, fechado_por=NULL WHERE id=? AND situacao='corrigido'", (r["id"],)).rowcount
         if n:
-            from .central_problemas import estornar_pontos
-            estornar_pontos(con, r["id"], ator, "reaberto_automatico")
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'reaberto_automatico',?,?)",
                         (str(r["id"]), ator, json.dumps({"codigo": r["codigo"], "motivo": "A folha entrou no painel: o problema volta a valer."}, ensure_ascii=False)))
             out.append(r["id"])

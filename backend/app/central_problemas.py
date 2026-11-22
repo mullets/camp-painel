@@ -9,11 +9,12 @@ relatórios, fechamentos automáticos). Aqui ficam, por cima dela:
 - **Transições e campos obrigatórios** (`TRANSICOES`, `requisitos`): resolver exige conclusão e evidência ou justificativa (autoria e
   crédito exigem fonte); reabrir e invalidar exigem justificativa; duplicado exige a referência. Quem e quando ficam gravados.
 - **Revisão por outra pessoa** (`problemas.revisao_outra_pessoa`, desligada por padrão) para os tipos de `problemas.tipos_revisao`.
-- **Prioridade explicável** (`prioridade`): impacto documental, bloqueio, urgência, idade como desempate e a marca "resolução rápida";
-  sempre com o motivo em palavras ("Crítico: bloqueia a publicação").
-- **Reconhecimento** (`erro_ponto`): pontos só de resolução VALIDADA (pela regra dos campos obrigatórios e, quando ligada, pela revisão),
-  com peso por complexidade; reabrir estorna. Conquistas por qualidade; ranking só com `problemas.ranking_equipe`=1 (desligado).
-  Nada disso muda o estado real de um problema.
+- **Prioridade explicável** (`prioridade`): a MESMA nota 0–100 da Home (`home_trabalho.prioridade`: gravidade, tempo parado com teto,
+  bloqueio, risco público), com o motivo em palavras, mais o impacto documental do tipo ("autoria conflitante") como desempate e a marca
+  "resolução rápida".
+- **Responsável**: a `tarefa_responsavel` da Home (chave `erro:<id>`) e a mesma regra (`home_trabalho.atribuir_tarefa`).
+- **Reconhecimento**: UM sistema de pontos, o da Home (`home_trabalho.eventos_validados`, recontado do estado: reabriu, o ponto some);
+  aqui só se acrescentam conquistas de qualidade, sem pontos. Nada disso muda o estado real de um problema.
 Só lê e grava o banco (nunca o QNAP)."""
 from __future__ import annotations
 
@@ -73,10 +74,6 @@ FASE_SQL = (f"(CASE WHEN fase IS NOT NULL AND {_SIT_DA_FASE} = {SQL_SITUACAO_NOR
             "ELSE 'resolvido' END)")
 SISTEMA_SQL = ("(fechado_por = 'painel (automático)' OR resolucao LIKE 'Resolvido sozinho:%' OR resolucao LIKE 'Resolvido na conferência:%' "
                "OR resolucao LIKE 'Limpeza criteriosa:%' OR (fechado_por IS NULL AND resolucao LIKE 'Mensagem repetida%'))")
-PESO_GRAV = {"bloqueia": 3, "corrigir": 2, "aviso": 1}
-COMPLEXOS = ("autoria_divergente", "projeto_errado", "credito", "codigo")
-PONTOS_REVISAO = 5
-NIVEIS = ((0, "Iniciante"), (200, "Assistente de acervo"), (500, "Conferente"), (1000, "Catalogador"), (2000, "Pesquisador"), (4000, "Arquivista"))
 
 
 def fase_efetiva(situacao: str | None, fase: str | None, duplicado_de=None, resolucao: str | None = None) -> str:
@@ -131,34 +128,34 @@ IMPACTO = {"autoria_divergente": (25, "autoria conflitante"), "credito": (20, "c
 
 
 def prioridade(e: dict, no_ar: bool = False) -> dict:
-    """Nota e motivos, em palavras. Impacto documental + bloqueio + urgência; a idade só desempata; "resolução rápida" é marca,
-    nunca passa um crítico. Puro (sem banco): a tela e os testes usam a mesma conta."""
-    pts, motivos = 0.0, []
-    if e.get("gravidade") == "bloqueia":
-        pts += 50; motivos.append((50, "bloqueia a publicação"))
-        if no_ar:
-            pts += 20; motivos.append((20, "projeto no site com este problema"))
-    imp = IMPACTO.get(e.get("categoria"), IMPACTO["outro"])
-    pts += imp[0]; motivos.append((imp[0], imp[1]))
-    if e.get("origem") == "site":
-        pts += 15; motivos.append((15, "avisado por visitante do site"))
+    """A nota da Home (home_trabalho.prioridade, 0–100, com a frase do porquê) para um problema, mais o impacto documental do tipo e a
+    origem (visitante do site) na frase e no desempate. Pura (sem banco): a tela e os testes usam a mesma conta."""
+    from .home_trabalho import prioridade as nota_home
     fase = e.get("fase") or "novo"
+    desde = e.get("enviado_revisao_em") if fase == "aguardando_revisao" and e.get("enviado_revisao_em") else e.get("criado_em")
+    tipo = "erro" if e.get("gravidade") == "bloqueia" else ("aviso" if e.get("gravidade") == "aviso" else "problema")
+    item = {"acao": {"tipo": tipo}, "espera_h": _horas(desde), "urgente": "está no site" if no_ar and e.get("gravidade") == "bloqueia" else ""}
+    h = nota_home(item)
+    imp = IMPACTO.get(e.get("categoria"), IMPACTO["outro"])
+    extras = [imp[1]]
+    if e.get("origem") == "site":
+        extras.append("avisado por visitante do site")
     if fase == "aguardando_revisao":
-        d = _dias(e.get("enviado_revisao_em") or e.get("fase_em") or e.get("criado_em"))
-        pts += 8 + min(d, 30) / 3; motivos.append((8 + min(d, 30) / 3, f"aguardando revisão há {d} {'dia' if d == 1 else 'dias'}" if d else "aguardando revisão"))
+        extras.append("aguardando revisão")
     elif fase == "devolvido":
-        pts += 10; motivos.append((10, "devolvido pela revisão"))
-    if e.get("gravidade") == "aviso":
-        pts -= 10
-    dias = _dias(e.get("criado_em"))
-    pts += min(dias, 90) / 15              # desempate: no máximo 6 pontos
-    if dias >= 30:
-        motivos.append((min(dias, 90) / 15, f"aberto há {dias} dias"))
-    motivos.sort(key=lambda x: -x[0])
-    sev = SEVERIDADE.get(e.get("gravidade"), SEVERIDADE["corrigir"])
-    principais = [m[1] for m in motivos[:2]]
-    razao = sev[1] + ": " + " · ".join(principais) if principais else sev[1]
-    return {"nota": round(pts, 1), "razao": razao, "motivos": [m[1] for m in motivos], "rapida": e.get("categoria") in TIPOS_RAPIDOS}
+        extras.append("devolvido pela revisão")
+    razao = h["motivo"] + " · " + " · ".join(extras)
+    return {"nota": h["nota"], "nivel": h["nivel"], "rotulo": h["rotulo"], "razao": razao, "motivos": [h["motivo"]] + extras,
+            "partes": h["partes"], "impacto": imp[0] + (15 if e.get("origem") == "site" else 0), "rapida": e.get("categoria") in TIPOS_RAPIDOS}
+
+
+def _horas(ts) -> float | None:
+    s_ = str(ts or "").replace("T", " ")[:19]
+    try:
+        d = datetime.strptime(s_, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - d).total_seconds() / 3600)
 
 
 # ---------------- listagem ----------------
@@ -179,7 +176,8 @@ def enriquecer(con, rows, usuario: dict | None = None) -> list[dict]:
     for i in range(0, len(projs), 400):
         parte = list(projs)[i:i + 400]
         no_ar |= {r[0] for r in con.execute(f"SELECT codigo FROM projeto WHERE status_site='no_ar' AND codigo IN ({','.join('?' * len(parte))})", parte)}
-    nomes = _nomes(con)
+    from .home_trabalho import responsaveis
+    resp = responsaveis(con, [f"erro:{x['id']}" for x in base])
     eu = (usuario or {}).get("email")
     out = []
     for x in base:
@@ -191,7 +189,8 @@ def enriquecer(con, rows, usuario: dict | None = None) -> list[dict]:
         x["tipo_rotulo"] = ROTULO_TIPO.get(x.get("categoria"), "Outro")
         x["titulo"] = ("Folha retirada pelo CAMP Vision" if x.get("tipo") == "retirada" else
                        "Folha recusada na importação" if x.get("tipo") == "recusada" else TITULO_TIPO.get(x.get("categoria"), "Problema relatado"))
-        x["responsavel_nome"] = nomes.get(x.get("responsavel")) or x.get("responsavel")
+        r_ = resp.get(f"erro:{x['id']}")
+        x["responsavel_id"], x["responsavel_nome"] = (r_["id"], r_["nome"]) if r_ else (None, None)
         x["idade_dias"] = _dias(x.get("criado_em"))
         x["aberto"] = f in FASES_ABERTAS
         x["prioridade"] = prioridade(x, (x.get("projeto_codigo") in no_ar)) if x["aberto"] else None
@@ -213,7 +212,7 @@ class Filtros(BaseModel):
     gravidade: str | None = None
     categoria: str | None = None
     origem: str | None = None
-    responsavel: str | None = None    # eu · ninguem · e-mail
+    responsavel: str | None = None    # eu · ninguem · id da pessoa
     fundo: str | None = None
     projeto: str | None = None
     de: str | None = None
@@ -234,7 +233,8 @@ def _where(f: Filtros, u: dict, escondidos: list[int], com_aba: bool = True) -> 
     if aba == "prioridades":
         w.append("gravidade<>'aviso'")
     elif aba == "minha_fila":
-        w.append("responsavel=?"); p.append(u.get("email") or "")
+        # a mesma "Minha fila" da Home: atribuído a mim ou relatado por mim
+        w.append("(EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id AND tr.usuario_id=?) OR EXISTS (SELECT 1 FROM evento ev WHERE ev.entidade='erro' AND ev.tipo='criado' AND ev.codigo=CAST(erro.id AS TEXT) AND ev.ator=?))"); p += [u.get("id") or 0, u.get("email") or ""]
     elif aba == "concluidos":
         w.append("situacao IN ('corrigido','fechado','ignorado')")
     elif aba not in ("todos", "todos_qualquer"):
@@ -252,11 +252,13 @@ def _where(f: Filtros, u: dict, escondidos: list[int], com_aba: bool = True) -> 
             w.append(f"{col} IN ({','.join('?' * len(vs))})"); p += vs
     if f.responsavel:
         if f.responsavel == "ninguem":
-            w.append("(responsavel IS NULL OR responsavel='')")
+            w.append("NOT EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id)")
         elif f.responsavel == "eu":
-            w.append("responsavel=?"); p.append(u.get("email") or "")
+            w.append("EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id AND tr.usuario_id=?)"); p.append(u.get("id") or 0)
+        elif f.responsavel.strip().isdigit():
+            w.append("EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id AND tr.usuario_id=?)"); p.append(int(f.responsavel.strip()))
         else:
-            w.append("responsavel=?"); p.append(f.responsavel.strip())
+            raise HTTPException(400, "Responsável inválido")
     if f.fundo and re.fullmatch(r"F\d{3}", f.fundo.strip().upper()):
         w.append("substr(codigo,1,4)=?"); p.append(f.fundo.strip().upper())
     if f.projeto and f.projeto.strip():
@@ -275,7 +277,7 @@ def _where(f: Filtros, u: dict, escondidos: list[int], com_aba: bool = True) -> 
         if chip == "critico":
             w.append("gravidade='bloqueia'")
         elif chip == "sem_responsavel":
-            w.append("(responsavel IS NULL OR responsavel='')")
+            w.append("NOT EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id)")
         elif chip == "minha_revisao":
             w.append(f"{FASE_SQL}='aguardando_revisao' AND COALESCE(enviado_revisao_por,'')<>?"); p.append(u.get("email") or "")
         elif chip == "antigos":
@@ -293,7 +295,7 @@ def _where(f: Filtros, u: dict, escondidos: list[int], com_aba: bool = True) -> 
         num = re.fullmatch(r"#?(\d{1,9})", t)
         tl = "%" + t.lower() + "%"
         cond = ("lower(codigo) LIKE ? OR lower(descricao) LIKE ? OR lower(coalesce(relatado_por,'')) LIKE ? OR lower(coalesce(resolucao,'')) LIKE ? "
-                "OR lower(coalesce(responsavel,'')) LIKE ? "
+                "OR EXISTS (SELECT 1 FROM tarefa_responsavel tr JOIN usuario uu ON uu.id=tr.usuario_id WHERE tr.tarefa_id='erro:'||erro.id AND lower(uu.nome) LIKE ?) "
                 "OR EXISTS (SELECT 1 FROM projeto pj WHERE pj.codigo=substr(erro.codigo,1,10) AND (lower(pj.titulo) LIKE ? OR lower(coalesce(pj.cidade,'')) LIKE ?)) "
                 "OR EXISTS (SELECT 1 FROM fundo fd WHERE fd.codigo=substr(erro.codigo,1,4) AND (lower(fd.titulo) LIKE ? OR lower(coalesce(fd.sigla,'')) LIKE ?)) "
                 "OR EXISTS (SELECT 1 FROM erro_evidencia ev WHERE ev.erro_id=erro.id AND lower(ev.valor) LIKE ?)")
@@ -333,7 +335,7 @@ def listar(con, f: Filtros, u: dict, ordem: str = "prioridade", pagina: int = 1,
         if "talvez" in chips:
             todos = [x for x in todos if x.get("resolvido_sozinho")]
         if ordem == "prioridade":
-            todos.sort(key=lambda x: (-((x.get("prioridade") or {}).get("nota") or 0), x.get("criado_em") or "", x["id"]))
+            todos.sort(key=lambda x: (-((x.get("prioridade") or {}).get("nota") or 0), -((x.get("prioridade") or {}).get("impacto") or 0), x.get("criado_em") or "", x["id"]))
         else:
             todos.sort(key=lambda x: x.get("criado_em") or "", reverse=ordem != "antigos")
         total = len(todos)
@@ -361,7 +363,7 @@ def resumo(con, f: Filtros, u: dict) -> dict:
         "criticos": _conta(con, w0, p0, "gravidade='bloqueia'"),
         "em_analise": _conta(con, w0, p0, f"{FASE_SQL} IN ({','.join('?' * len(FASES_EM_ANALISE))})", list(FASES_EM_ANALISE)),
         "aguardando_revisao": _conta(con, w0, p0, f"{FASE_SQL}='aguardando_revisao'"),
-        "sem_responsavel": _conta(con, w0, p0, "(responsavel IS NULL OR responsavel='')"),
+        "sem_responsavel": _conta(con, w0, p0, "NOT EXISTS (SELECT 1 FROM tarefa_responsavel tr WHERE tr.tarefa_id='erro:'||erro.id)"),
     }
     from .contagens import SEM_CONVIDADO_ERRO
     fech = [SEM_CONVIDADO_ERRO, "situacao IN ('corrigido','fechado')"]
@@ -463,29 +465,6 @@ def requisitos(con, e, alvo: str) -> list[str]:
     return []
 
 
-def estornar_pontos(con, eid: int, ator: str, motivo: str = "reaberto") -> int:
-    """Reabrir estorna os pontos daquela resolução (resolução e revisão). Não faz commit."""
-    try:
-        n = con.execute("UPDATE erro_ponto SET revertido_em=datetime('now') WHERE erro_id=? AND revertido_em IS NULL", (eid,)).rowcount
-    except Exception:  # noqa: BLE001  (banco sem a migração 241)
-        return 0
-    if n:
-        _evento(con, eid, "pontos_estornados", ator, {"motivo": motivo, "lancamentos": n})
-    return n
-
-
-def pontos_resolucao(e, tem_fonte: bool) -> int:
-    return 10 * PESO_GRAV.get(e["gravidade"], 1) + (10 if e["categoria"] in COMPLEXOS else 0) + (5 if tem_fonte else 0)
-
-
-def _lancar(con, eid: int, pessoa: str, pontos: int, motivo: str) -> None:
-    if not pessoa or pessoa == ATOR_SISTEMA:
-        return
-    if con.execute("SELECT 1 FROM erro_ponto WHERE erro_id=? AND pessoa=? AND motivo=? AND revertido_em IS NULL", (eid, pessoa, motivo)).fetchone():
-        return                              # resolver de novo sem reabrir não lança duas vezes
-    con.execute("INSERT INTO erro_ponto (erro_id, pessoa, pontos, motivo) VALUES (?,?,?,?)", (eid, pessoa, pontos, motivo))
-
-
 class MudarFase(BaseModel):
     fase: str
     conclusao: str | None = None        # resolver / enviar para revisão
@@ -537,10 +516,8 @@ def mudar_fase(con, eid: int, d: MudarFase, u: dict) -> dict:
         if e["categoria"] == "autoria_divergente":
             con.execute("UPDATE item SET autoria_divergente=0 WHERE codigo=?", (e["codigo"],))
         quem = (e["enviado_revisao_por"] if atual == "aguardando_revisao" and e["enviado_revisao_por"] else ator)
-        _lancar(con, eid, quem, pontos_resolucao(e, bool(fontes)), "resolucao")
-        if atual == "aguardando_revisao" and quem != ator:
-            _lancar(con, eid, ator, PONTOS_REVISAO, "revisao")
-        det.update(conclusao=conc, validado_por_revisao=atual == "aguardando_revisao")
+        # os pontos são os da Home (recontados do estado); "credito" diz quem resolveu quando outra pessoa aprovou na revisão
+        det.update(conclusao=conc, validado_por_revisao=atual == "aguardando_revisao", credito=quem)
         con.execute("DELETE FROM erro_rascunho WHERE erro_id=?", (eid,))
     elif alvo == "aguardando_revisao":
         sets += ["situacao='em_correcao'", "enviado_revisao_por=?", "enviado_revisao_em=datetime('now')", "revisado_por=NULL", "revisado_em=NULL"]; vals += [ator]
@@ -557,7 +534,6 @@ def mudar_fase(con, eid: int, d: MudarFase, u: dict) -> dict:
         if len(just) < 5:
             raise HTTPException(400, "Para reabrir, escreva a justificativa")
         sets += ["situacao='aberto'", "resolvido_em=NULL", "fechado_por=NULL", "duplicado_de=NULL", "revisado_por=NULL", "revisado_em=NULL", "motivo_pendencia=?"]; vals += [just]
-        estornar_pontos(con, eid, ator)
         det.update(justificativa=just)
     elif alvo == "invalido":
         if len(just) < 5:
@@ -569,8 +545,9 @@ def mudar_fase(con, eid: int, d: MudarFase, u: dict) -> dict:
         return {"ok": True, "fase": "duplicado", "duplicado_de": d.referencia}
     else:                                   # triagem, em_analise
         sets += [f"situacao='{FASE_SITUACAO[alvo]}'", "motivo_pendencia=NULL"]
-        if not e["responsavel"] and alvo == "em_analise":
-            sets += ["responsavel=?", "responsavel_em=datetime('now')"]; vals += [ator]     # quem começa a analisar assume (dá para trocar)
+        if alvo == "em_analise" and not con.execute("SELECT 1 FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{eid}",)).fetchone():
+            from .home_trabalho import atribuir_tarefa
+            atribuir_tarefa(con, f"erro:{eid}", u["id"], u, TITULO_TIPO.get(e["categoria"]))   # quem começa a analisar assume (dá para trocar)
             det["assumiu"] = True
     sets += ["fase=?", "fase_em=datetime('now')"]; vals += [alvo]
     con.execute(f"UPDATE erro SET {', '.join(sets)} WHERE id=?", (*vals, eid))
@@ -597,8 +574,9 @@ def juntar_duplicado(con, e, ref: int | None, ator: str, just: str = "") -> None
     res = f"Duplicado do nº {alvo['id']}." + (f" {just}" if just else "")
     con.execute("""UPDATE erro SET situacao='ignorado', fase='duplicado', fase_em=datetime('now'), duplicado_de=?, resolvido_em=datetime('now'),
                    fechado_por=?, resolucao=? WHERE id=?""", (alvo["id"], ator, res, e["id"]))
-    if not alvo["responsavel"] and e["responsavel"]:
-        con.execute("UPDATE erro SET responsavel=?, responsavel_em=datetime('now') WHERE id=?", (e["responsavel"], alvo["id"]))
+    r_ = con.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{e['id']}",)).fetchone()
+    if r_ and not con.execute("SELECT 1 FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{alvo['id']}",)).fetchone():
+        con.execute("INSERT INTO tarefa_responsavel (tarefa_id, usuario_id, atribuido_por) VALUES (?,?,?)", (f"erro:{alvo['id']}", r_[0], ator))   # o responsável segue
     _evento(con, e["id"], "duplicado_juntado", ator, {"fica": alvo["id"], "justificativa": just or None})
     _evento(con, alvo["id"], "recebeu_duplicado", ator, {"duplicado": e["id"], "codigo": e["codigo"]})
 
@@ -625,7 +603,10 @@ def historico(con, e) -> list[dict]:
     ids = [str(e["id"])] + [str(r[0]) for r in con.execute("SELECT id FROM erro WHERE duplicado_de=?", (e["id"],))]
     nomes = _nomes(con)
     out = []
-    for r in con.execute(f"SELECT id, quando, tipo, ator, detalhe, codigo FROM evento WHERE entidade='erro' AND codigo IN ({','.join('?' * len(ids))}) ORDER BY quando, id", ids):
+    tar = [f"erro:{i}" for i in ids]
+    for r in con.execute(f"""SELECT id, quando, tipo, ator, detalhe, CASE WHEN entidade='tarefa' THEN substr(codigo,6) ELSE codigo END AS codigo FROM evento
+                             WHERE (entidade='erro' AND codigo IN ({','.join('?' * len(ids))})) OR (entidade='tarefa' AND codigo IN ({','.join('?' * len(tar))}))
+                             ORDER BY quando, id""", ids + tar):
         try:
             det = json.loads(r["detalhe"] or "{}")
         except ValueError:
@@ -673,7 +654,6 @@ def detalhe(con, eid: int, u: dict) -> dict:
                 x["previa"] = f"/api/itens/{x['folha']}/previa"
             elif str(it["arquivo_jpg"] or "").startswith(("http://", "https://")):
                 x["previa"] = it["arquivo_jpg"]
-    x["responsavel_nome"] = nomes.get(e["responsavel"]) or e["responsavel"]
     x["enviado_revisao_nome"] = nomes.get(e["enviado_revisao_por"]) or e["enviado_revisao_por"]
     x["revisado_nome"] = nomes.get(e["revisado_por"]) or e["revisado_por"]
     x["fechado_nome"] = (nomes.get(e["fechado_por"]) or e["fechado_por"]) if e["fechado_por"] else (ATOR_SISTEMA if x.get("resolvido_pelo_sistema") else None)
@@ -681,66 +661,35 @@ def detalhe(con, eid: int, u: dict) -> dict:
 
 
 # ---------------- reconhecimento (fase 3) ----------------
-def nivel(pontos: int) -> dict:
-    n, nome, mn = 1, NIVEIS[0][1], 0
-    for i, (lim, nm) in enumerate(NIVEIS):
-        if pontos >= lim:
-            n, nome, mn = i + 1, nm, lim
-    prox = NIVEIS[n] if n < len(NIVEIS) else None
-    return {"n": n, "nome": nome, "min": mn, "prox_min": prox[0] if prox else None, "prox_nome": prox[1] if prox else None}
-
-
-def progresso(con, u: dict) -> dict:
+def conquistas_qualidade(con, u: dict) -> list[dict]:
+    """Conquistas de qualidade da Central (sem pontos: os pontos são só os da Home). Tiradas do estado atual; reabriu, some."""
+    from .home_trabalho import eventos_validados
     eu = u.get("email") or ""
-    try:
-        pref = con.execute("SELECT ocultar FROM erro_progresso_pref WHERE usuario_id=?", (u.get("id"),)).fetchone()
-    except Exception:  # noqa: BLE001
-        pref = None
-    ocultar = bool(pref and pref[0])
-    pts = con.execute("SELECT COALESCE(SUM(pontos),0) FROM erro_ponto WHERE pessoa=? AND revertido_em IS NULL", (eu,)).fetchone()[0]
-    res_v = con.execute("SELECT COUNT(DISTINCT erro_id) FROM erro_ponto WHERE pessoa=? AND motivo='resolucao' AND revertido_em IS NULL", (eu,)).fetchone()[0]
-    com_fonte = con.execute("""SELECT COUNT(DISTINCT p.erro_id) FROM erro_ponto p WHERE p.pessoa=? AND p.motivo='resolucao' AND p.revertido_em IS NULL
-                               AND EXISTS (SELECT 1 FROM erro_evidencia v WHERE v.erro_id=p.erro_id AND v.tipo<>'justificativa')""", (eu,)).fetchone()[0]
-    revisoes = con.execute("SELECT COUNT(*) FROM erro_ponto WHERE pessoa=? AND motivo='revisao' AND revertido_em IS NULL", (eu,)).fetchone()[0]
+    meus = [int(x["ref"][5:]) for x in eventos_validados(con) if x["email"] == eu and x["tipo"].startswith("problema_")]
+    com_fonte = 0
+    if meus:
+        com_fonte = con.execute(f"""SELECT COUNT(DISTINCT erro_id) FROM erro_evidencia WHERE tipo<>'justificativa' AND erro_id IN ({','.join('?' * len(meus))})""", meus).fetchone()[0]
+    revisoes = con.execute("""SELECT COUNT(*) FROM erro e WHERE e.situacao='corrigido' AND e.revisado_por=? AND COALESCE(e.enviado_revisao_por,'')<>?""", (eu, eu)).fetchone()[0]
     apoio = con.execute("""SELECT COUNT(DISTINCT v.erro_id) FROM erro_evidencia v JOIN erro e ON e.id=v.erro_id
                            WHERE v.autor=? AND v.tipo<>'justificativa' AND e.situacao IN ('corrigido','fechado') AND COALESCE(e.fechado_por,'')<>?""", (eu, eu)).fetchone()[0]
-    fundos_ok = [dict(r) for r in con.execute("""SELECT f.codigo, f.titulo FROM fundo f WHERE f.codigo<>'F000'
+    fundos_ok = con.execute("""SELECT COUNT(*) FROM fundo f WHERE f.codigo<>'F000'
                    AND EXISTS (SELECT 1 FROM erro e WHERE substr(e.codigo,1,4)=f.codigo AND e.situacao IN ('corrigido','fechado'))
-                   AND NOT EXISTS (SELECT 1 FROM erro e WHERE substr(e.codigo,1,4)=f.codigo AND e.situacao IN ('aberto','em_correcao'))
-                   ORDER BY f.codigo""")]
+                   AND NOT EXISTS (SELECT 1 FROM erro e WHERE substr(e.codigo,1,4)=f.codigo AND e.situacao IN ('aberto','em_correcao'))""").fetchone()[0]
     def cq(chave, titulo, desc, feito, meta, coletiva=False):
         return {"chave": chave, "titulo": titulo, "descricao": desc, "obtida": feito >= meta, "feito": min(feito, meta), "meta": meta, "coletiva": coletiva}
-    conquistas = [
-        cq("primeira", "Primeira resolução validada", "Um problema resolvido com conclusão e evidência (ou aprovado na revisão).", res_v, 1),
-        cq("investigador", "Investigador documental", "Problemas concluídos com fonte ou evidência registrada.", com_fonte, 5),
-        cq("colaborador", "Colaborador", "Evidência sua ajudou outra pessoa a resolver.", apoio, 3),
-        cq("revisor", "Revisor cuidadoso", "Revisões concluídas (aprovadas na revisão por outra pessoa).", revisoes, 5),
-        cq("fundo", "Fundo organizado", "Marco coletivo: fundo que teve problemas e hoje não tem nenhum aberto.", len(fundos_ok), 1, True),
-    ]
-    meta = int(cfg(con, "problemas.meta_semana", "0") or 0) if str(cfg(con, "problemas.meta_semana", "0")).strip().isdigit() else 0
-    semana_ini = con.execute("SELECT date('now','weekday 1','-7 days')").fetchone()[0]
-    feitos_sem = con.execute("SELECT COUNT(DISTINCT erro_id) FROM erro_ponto WHERE motivo='resolucao' AND revertido_em IS NULL AND criado_em >= ?", (semana_ini,)).fetchone()[0]
-    crit_mes = con.execute("""SELECT COUNT(DISTINCT p.erro_id) FROM erro_ponto p JOIN erro e ON e.id=p.erro_id WHERE p.motivo='resolucao' AND p.revertido_em IS NULL
-                              AND e.gravidade='bloqueia' AND p.criado_em >= date('now','start of month')""").fetchone()[0]
-    ranking = None
-    ranking_ligado = cfg(con, "problemas.ranking_equipe", "0").strip() == "1"
-    if ranking_ligado:
-        nomes = _nomes(con)
-        ranking = [{"nome": nomes.get(r[0]) or r[0], "pontos": r[1], "eu": r[0] == eu}
-                   for r in con.execute("""SELECT pessoa, SUM(pontos) FROM erro_ponto WHERE revertido_em IS NULL AND criado_em >= date('now','start of month')
-                                           AND pessoa NOT IN (SELECT pessoa FROM erro_ponto p2 JOIN usuario uu ON uu.email=p2.pessoa
-                                                              JOIN erro_progresso_pref pp ON pp.usuario_id=uu.id AND pp.ocultar=1)
-                                           GROUP BY pessoa ORDER BY SUM(pontos) DESC LIMIT 10""")]
-    return {"ocultar": ocultar, "pontos": pts, "nivel": nivel(pts), "resolucoes_validadas": res_v, "conquistas": conquistas,
-            "meta": {"meta": meta, "feitos": feitos_sem, "inicio": semana_ini},
-            "coletivo": {"validadas_semana": feitos_sem, "criticos_validados_mes": crit_mes, "fundos_organizados": len(fundos_ok), "fundos": fundos_ok[:5]},
-            "ranking_ligado": ranking_ligado, "ranking": ranking,
-            "aviso_ranking": "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém."}
+    return [cq("primeira", "Primeira resolução validada", "Um problema corrigido com a frase do que foi feito (e, quando pedida, aprovado na revisão).", len(meus), 1),
+            cq("investigador", "Investigador documental", "Problemas resolvidos por você com fonte ou evidência registrada.", com_fonte, 5),
+            cq("colaborador", "Colaborador", "Evidência sua ajudou outra pessoa a resolver.", apoio, 3),
+            cq("revisor", "Revisor cuidadoso", "Revisões aprovadas por você (de resoluções de outra pessoa).", revisoes, 5),
+            cq("fundo", "Fundo organizado", "Marco coletivo: fundo que teve problemas e hoje não tem nenhum aberto.", fundos_ok, 1, True)]
+
+
+AVISO_RANKING = "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém."
 
 
 ROTULO_EVENTO = {"criado": "registrou", "fase": "mudou a fase", "evidencia": "adicionou evidência", "atribuido": "atribuiu", "duplicado_juntado": "juntou como duplicado",
                  "recebeu_duplicado": "recebeu um duplicado", "fechado_automatico": "fechou sozinho (o painel conferiu)", "editado": "editou", "ignorado": "fechou: não era problema",
-                 "mesclado": "mesclou mensagem repetida", "desfeito": "desfez", "pontos_estornados": "estornou os pontos (reaberto)",
+                 "mesclado": "mesclou mensagem repetida", "desfeito": "desfez", "tarefa_atribuida": "atribuiu", "tarefa_devolvida": "devolveu (sem responsável)",
                  "reaberto_automatico": "reabriu sozinho", "problema_seguiu_folha": "seguiu a folha (código novo)"}
 
 
@@ -813,50 +762,31 @@ def rota_por_fundo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         con.close()
 
 
-@router.get("/pessoas")
-def rota_pessoas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
-    """Quem pode receber um problema (operador, admin, master ativos)."""
-    con = connect()
-    try:
-        return [{"email": r[0], "nome": r[1]} for r in con.execute("SELECT email, nome FROM usuario WHERE ativo=1 AND email IS NOT NULL AND papel IN ('operador','admin','master') ORDER BY nome")]
-    finally:
-        con.close()
-
-
 @router.get("/progresso")
 def rota_progresso(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """O progresso da Home (UM sistema de pontos: meta da semana, nível, conquistas, quadro da equipe só se ligado) + as conquistas de
+    qualidade da Central (sem pontos) + a atividade recente dos problemas (do histórico)."""
+    from .home_trabalho import progresso as progresso_home
     con = connect()
     try:
-        out = progresso(con, u)
-        out["atividade"] = atividade(con)
-        return out
-    finally:
-        con.close()
-
-
-class Ocultar(BaseModel):
-    ocultar: bool
-
-
-@router.post("/progresso/ocultar")
-def rota_ocultar(d: Ocultar, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    con = connect()
-    try:
-        con.execute("INSERT INTO erro_progresso_pref (usuario_id, ocultar) VALUES (?,?) ON CONFLICT(usuario_id) DO UPDATE SET ocultar=excluded.ocultar", (u["id"], int(d.ocultar)))
-        con.commit()
-        return {"ok": True, "ocultar": d.ocultar}
+        jogo = progresso_home(con, u)
+        oculto = bool(jogo.get("oculto"))
+        return {"jogo": jogo, "conquistas_qualidade": [] if oculto or u.get("papel") == "leitura" or not jogo.get("ligado") else conquistas_qualidade(con, u),
+                "aviso_ranking": AVISO_RANKING, "atividade": atividade(con)}
     finally:
         con.close()
 
 
 class Atribuir(BaseModel):
     ids: list[int]
-    responsavel: str | None = None     # e-mail; vazio = tirar o responsável
+    usuario_id: int | None = None      # vazio = devolver (tirar o responsável)
 
 
 @router.post("/atribuir")
 def rota_atribuir(d: Atribuir, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Atribuir em lote (ou a um só): tudo ou nada, só problemas abertos, só para quem trabalha no painel. Histórico em cada um."""
+    """Atribuir em lote (ou um só) com a regra da Home (home_trabalho.atribuir_tarefa): operador pega para si ou devolve a sua; admin
+    atribui a qualquer pessoa que edita. Tudo ou nada; só problemas abertos. Histórico: tarefa_atribuida / tarefa_devolvida."""
+    from .home_trabalho import atribuir_tarefa
     ids = list(dict.fromkeys(int(i) for i in d.ids))
     if not ids:
         raise HTTPException(400, "Escolha pelo menos um problema")
@@ -864,22 +794,23 @@ def rota_atribuir(d: Atribuir, u: dict = Depends(auth.exige("operador"))) -> dic
         raise HTTPException(400, "No máximo 500 de uma vez")
     con = connect()
     try:
-        resp = (d.responsavel or "").strip() or None
-        if resp and not con.execute("SELECT 1 FROM usuario WHERE email=? AND ativo=1 AND papel IN ('operador','admin','master')", (resp,)).fetchone():
-            raise HTTPException(400, "Essa pessoa não pode receber problemas (conta inativa ou só de leitura)")
-        rows = con.execute(f"SELECT id, situacao, responsavel FROM erro WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        rows = con.execute(f"SELECT id, situacao, categoria FROM erro WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
         if len(rows) != len(ids):
             raise HTTPException(404, f"{len(ids) - len(rows)} dos problemas escolhidos não existem mais: atualize a lista")
         fech = [r["id"] for r in rows if r["situacao"] not in ("aberto", "em_correcao")]
         if fech:
             raise HTTPException(409, f"{len(fech)} dos escolhidos já estão fechados: reabra antes de atribuir")
+        con.execute("BEGIN IMMEDIATE")
         n = 0
-        for r in rows:
-            if (r["responsavel"] or None) == resp:
-                continue
-            con.execute("UPDATE erro SET responsavel=?, responsavel_em=datetime('now') WHERE id=?", (resp, r["id"]))
-            _evento(con, r["id"], "atribuido", u["email"], {"de": r["responsavel"], "para": resp})
-            n += 1
+        try:
+            for r in rows:
+                antes = con.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{r['id']}",)).fetchone()
+                atribuir_tarefa(con, f"erro:{r['id']}", d.usuario_id, u, TITULO_TIPO.get(r["categoria"]))
+                depois = con.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{r['id']}",)).fetchone()
+                n += (antes[0] if antes else None) != (depois[0] if depois else None)
+        except Exception:
+            con.rollback()
+            raise
         con.commit()
         return {"ok": True, "atualizados": n, "ids": ids}
     finally:

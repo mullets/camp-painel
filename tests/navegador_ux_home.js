@@ -89,11 +89,11 @@ async function abrirHome(page) {
     await P.waitForSelector('#ini-qualidade .qb-geral', { timeout: 8000 }).catch(() => {});
     await P.waitForTimeout(1500);
     const vis = sel => P.locator(sel).first().isVisible();
-    const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2')].map(h => h.textContent.trim())));
+    const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2, :scope > .ini-res > section > .ph h2')].map(h => h.textContent.trim())));
     chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Folhas conferidas por dia — últimas 2 semanas', 'Visitas ao site'])   /* redesenho §11 (05/11): o ritmo ganhou o título descritivo */,
       `UX-30 desfeito: coluna da esquerda com o ritmo depois do caminho e, 03/11 (pedido do Rafael), as visitas logo abaixo do ritmo: ${JSON.stringify(colunas[0])}`);
-    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Está tudo funcionando?', 'Hoje', 'Qualidade da base', 'Melhorias de hoje', 'Quanto do acervo já está no site']),
-      `UX-30 desfeito: coluna da direita completa (saúde, Hoje e as métricas abaixo): ${JSON.stringify(colunas[1])}`);
+    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Seu progresso', 'Qualidade da base', 'Quanto do acervo já está no site', 'Está tudo funcionando?', 'Melhorias de hoje', 'Hoje']),
+      `UX-30 desfeito + CAMP-HOME-UX (prioridade do documento de 22/11): coluna da direita completa (progresso, qualidade, publicação, sistemas, melhorias, Hoje): ${JSON.stringify(colunas[1])}`);
     const recolhido = await P.evaluate(() => ({ det: ['ini-qualidade', 'ini-melhorias', 'ini-ritmo', 'ini-t-site', 'ini-visitas'].filter(id => { const e = document.getElementById(id); return !e || !!e.closest('details'); }), numeros: !!document.getElementById('ini-numeros') }));
     chk(!recolhido.det.length && !recolhido.numeros, `UX-30 desfeito: nenhum bloco recolhido "Números do acervo" na Home: ${JSON.stringify(recolhido)}`);
     const visiveis = [];

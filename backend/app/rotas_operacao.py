@@ -93,6 +93,8 @@ def painel(ordem: str = "padrao", fila: str = "urgente", u: dict = Depends(auth.
     grupos = pd.tarefas(con, u["papel"], n, por_grupo=pd.FILA_MAX, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
     d["tarefas"] = pd.tarefas_resumidas(grupos)
     d["fila"] = pd.com_nome_do_fundo(con, pd.fila_da_home(grupos, u["papel"], fila))   # 19/11: nome do arquiteto ao lado do código
+    from .home_trabalho import anotar_fila   # CAMP-HOME-UX (campos novos, opcionais): responsável, "minha", miniatura e as abas da fila
+    anotar_fila(con, d["fila"], u)
     from .contagens import alinhar_precisa_de_voce   # 11/11: o menu, a saudação e "Para fazer" com o MESMO número
     alinhar_precisa_de_voce(con, n, u["papel"], u["id"], d["fila"])
     d["pendencias"]["pedem_acao"] = n["pedem_acao"]
@@ -1658,9 +1660,10 @@ def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
         campos.append("situacao=?"); vals.append(d.situacao)
         campos.append("fechado_por=?"); vals.append(ator if d.situacao in ("corrigido", "fechado", "ignorado") else None)   # UX-03: quem fechou
         campos.append("fase=NULL")   # CAMP-PROB-UX: rota antiga = a fase volta a ser deduzida da situação (nunca se contradizem)
-        if d.situacao in ("aberto", "em_correcao") and e["situacao"] not in ("aberto", "em_correcao"):
-            from .central_problemas import estornar_pontos
-            estornar_pontos(con, e["id"], ator)   # reabrir estorna os pontos da resolução
+        if d.situacao in ("corrigido", "fechado") and e["situacao"] in ("aberto", "em_correcao"):
+            from .central_problemas import precisa_revisao
+            if precisa_revisao(con, e["categoria"]):   # com a revisão por outra pessoa ligada, este tipo só fecha pela Central (enviar para revisão)
+                raise HTTPException(409, "Este tipo de problema precisa da revisão de outra pessoa: resolva pela tela Problemas (Enviar para revisão)")
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
@@ -1753,9 +1756,6 @@ def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dic
             if n:
                 voltaram += 1
                 _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
-                if a["situacao"] in ("aberto", "em_correcao") and r["situacao"] not in ("aberto", "em_correcao"):
-                    from .central_problemas import estornar_pontos
-                    estornar_pontos(con, a["id"], u["email"], "desfeito")
             else:
                 ficaram += 1
         con.execute("UPDATE erro_desfazer SET desfeito_em=datetime('now') WHERE id=?", (token,))

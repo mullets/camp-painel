@@ -76,11 +76,11 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     chk(c && !c.recolhida && /Entenda esta página/.test(c.txt), '§6: o "?" do cabeçalho traz a explicação inteira');
     await P.click('#v-painel [data-ajuda-fechar="painel"]'); await P.waitForTimeout(500);
     await P.click('#v-painel [data-ini-ajuda="fila"] > summary');
-    chk(/Mais urgente primeiro/.test(await P.innerText('#v-painel [data-ini-ajuda="fila"]')), '§6: ajuda curta da seção: "Como a fila é ordenada?" diz a regra');
+    chk(/Nota de 0 a 100/.test(await P.innerText('#v-painel [data-ini-ajuda="fila"]')), '§6: ajuda curta da seção: "Como a fila é ordenada?" diz a regra (CAMP-HOME-UX: a da Prioridade, o padrão)');
     await P.keyboard.press('Escape');
 
     // ---------- §5: subtítulo = contagem real ----------
-    const pa = (await api(P, '/api/painel')).json;
+    const pa = (await api(P, '/api/painel?fila=prioridade')).json;   // CAMP-HOME-UX: a ordem padrão da tela é a Prioridade
     const sub = await P.innerText('#ini-sub'), h1 = await P.innerText('#ini-saud'), data = await P.innerText('#v-painel .ini-data');
     const n = pa.fila.pedem_atencao;
     chk(/^(Bom dia|Boa tarde|Boa noite), Rafael\.$/.test(h1), `§5: título forte só com a saudação: "${h1}"`);
@@ -99,7 +99,7 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     const kc = ks.find(k => k.rota === 'filas/conferir'), kd = ks.find(k => k.rota === 'decisoes'), kh = ks.find(k => /conferidas? hoje/.test(k.l));
     chk(kc && +kc.v === pend.lotes_conferir && /lotes? para conferir/.test(kc.l), `§7: "lotes para conferir" = ${pend.lotes_conferir} (fonte única)`);
     chk(kd && +kd.v === pend.decisoes, `§7: "decisões pendentes" = ${pend.decisoes}`);
-    chk(kh && !kh.botao && (/^\d+$/.test(kh.v) || kh.v === 'Sem dados'), `§7: "folhas conferidas hoje" (não é lista: não é botão): "${kh && kh.v}"`);
+    chk(kh && kh.botao && !kh.rota && (/^\d+$/.test(kh.v) || kh.v === 'Sem dados'), `§7: "folhas conferidas hoje" não é lista: o botão leva ao gráfico de Resultados (CAMP-HOME-UX), não a uma lista: "${kh && kh.v}"`);
     chk(ks.every(k => !/\b(lote|decis|folha)/.test(k.l) || [/lote/, /decis/, /folha/].filter(r => r.test(k.l)).length === 1), '§7: cada indicador conta um tipo só (lotes, decisões ou folhas)');
     await P.click('#v-painel .ini-kpi[data-ini-rota="filas/conferir"]'); await P.waitForTimeout(1500);
     chk(/^filas\/conferir/.test(await P.evaluate(() => rotaAtual())) && await P.locator('#filas-body tr[data-fase]').count() === pend.lotes_conferir, '§7: clicar em "lotes para conferir" abre Material novo filtrado com as mesmas linhas');
@@ -120,16 +120,16 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     chk(['todas', 'conferir', 'publicar', 'responder', 'base'].every(id => fil.some(([f]) => f === id)) && fil.every(([f, v]) => esperado[f] === v), `§8: filtros Todas/Conferir/Publicar/Responder/Melhorar a base com os números do servidor: ${JSON.stringify(fil)}`);
     await P.click('#ini-tarefas [data-ini-filtro="conferir"]');
     const vis = await P.evaluate(() => [...document.querySelectorAll('#ini-lista .ini-task')].map(t => t.dataset.iniCat));
-    chk(vis.length === Math.min(8, pa.fila.itens.filter(i => i.filtro === 'conferir').length) && vis.every(f => f === 'conferir'), `§8: o filtro "Conferir" mostra só as linhas de conferir (${vis.length})`);
+    chk(vis.length === Math.min(5, pa.fila.itens.filter(i => i.filtro === 'conferir').length) && vis.every(f => f === 'conferir'), `§8: o filtro "Conferir" mostra só as linhas de conferir (${vis.length})`);
     await P.click('#ini-tarefas [data-ini-filtro="todas"]');
     // a linha: tipo, código, espera, Urgente + motivo, botão principal
     const l0 = await P.evaluate(() => { const t = document.querySelector('#ini-lista .ini-task'); return { tipo: t.querySelector('.ini-tipo').textContent, urg: !!t.querySelector('.ini-urg'), motivo: (t.querySelector('.ini-motivo') || {}).textContent || '', cod: (t.querySelector('.code') || {}).textContent || '', esp: (t.querySelector('.ini-espera') || {}).textContent || '', pri: !!t.querySelector('button.pri[data-ini-acao]'), alt: Math.round(t.getBoundingClientRect().height) }; });
     chk(l0.urg && l0.motivo.length > 5 && /Decis/.test(l0.tipo) && /^F\d{3}/.test(l0.cod) && /há/.test(l0.esp) && l0.pri && l0.alt >= 52, `§8: a 1ª linha (mais urgente) tem tipo, "Urgente" + motivo, código, espera e o botão principal: ${JSON.stringify(l0)}`);
     const ordemApi = pa.fila.itens.map(i => i.titulo), ordemTela = await P.evaluate(() => [...document.querySelectorAll('#ini-lista .ini-task .t > b')].map(b => b.textContent));
-    chk(JSON.stringify(ordemTela) === JSON.stringify(ordemApi.slice(0, ordemTela.length)), '§8: a tela segue a ordem do servidor ("mais urgente primeiro")');
+    chk(JSON.stringify(ordemTela) === JSON.stringify(ordemApi.slice(0, ordemTela.length)), '§8: a tela segue a ordem do servidor (CAMP-HOME-UX: "Prioridade")');
     chk(await P.locator('#ini-tarefas .ini-task:not(.ini-base) .ini-ignorar > summary').first().innerText() === '⋯' && !/Ignorar/.test(await P.innerText('#ini-tarefas')), '§8: "Ignorar ▾" virou o menu discreto "⋯"');
-    const nLinhas = pa.fila.itens.length;
-    if (nLinhas > 8) { await P.click('#ini-tarefas [data-ini-vertodos]'); chk(await P.locator('#ini-lista .ini-task').count() === nLinhas, `§8: "Ver todos os itens da fila" mostra todas as ${nLinhas} linhas`); await P.click('#ini-tarefas [data-ini-vertodos]'); }
+    const nLinhas = pa.fila.itens.filter(i => i.filtro !== 'base').length;   // "Todos" não inclui Melhorar a base
+    if (nLinhas > 5) { await P.click('#ini-tarefas [data-ini-vertodos]'); chk(await P.locator('#ini-lista .ini-task').count() === nLinhas, `§8: "Ver todos os itens da fila" mostra todas as ${nLinhas} linhas`); await P.click('#ini-tarefas [data-ini-vertodos]'); }
     // ordenação: a escolha vai ao servidor e fica lembrada
     const pedidos = []; P.on('request', r => { if (/\/api\/painel\?fila=/.test(r.url())) pedidos.push(r.url()); });
     await P.selectOption('#ini-ordem', 'antigo'); await P.waitForTimeout(1200);

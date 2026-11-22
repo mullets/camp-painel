@@ -411,6 +411,37 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   problema" / "N em atenção" / "N sem medida" / "tudo normal". Rodapé: "**Verificado às HH:MM**", **Verificar agora** (→ "Verificando…",
   "Verificado agora (HH:MM)") e **Ver detalhes dos sistemas →** (admin).
 
+## Home em três partes: Ação, Operação e Resultados (CAMP-HOME-UX, documento do Rafael de 22/11/2026)
+- A barra do topo (busca, área da página, clima, tarefas, estado das máquinas, menu da pessoa) e a faixa do sistema **não mudam**; o menu lateral também não.
+- **Cabeçalho**: a foto (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data; à direita o cartão **Meta da semana** ("**N%**",
+  "**Meta da semana · equipe**", "**N de M pontos validados**", barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
+- **Indicadores**: os mesmos 4; todos são botões; o "**?**" e a dica "**Como conta:** …" dizem a regra da contagem. **folhas conferidas hoje**
+  leva ao gráfico de Resultados.
+- **O que fazer agora**: abas **Minha fila** (o que está com você: atribuído, pego por você, ou problema que você relatou) · **Todos** ·
+  **Críticos** (nota 60 ou mais) · **Sem responsável**; embaixo, **Tipo**: **Todos os tipos · Decidir · Conferir · Publicar · Resolver ·
+  Responder · Melhorar a base**. **Ordenar**: **Prioridade** (o padrão) · Mais urgente primeiro · Mais antigo primeiro · Mais recente primeiro ·
+  Por tipo. No máximo 5 linhas e "**Ver todas as N tarefas**" (" da minha fila", " críticas", " sem responsável") / "**Mostrar só as 5 primeiras**".
+- **Prioridade** (selo na linha): **Crítico** · **Alto** · **Médio** · **Baixo**, com a frase "**Prioridade alta porque impede a publicação e
+  aguarda há 19 dias**" (crítica, alta, média, baixa). Nota de 0 a 100: gravidade (até 40), tempo parado (até 20, para de somar em 14 dias),
+  segura a etapa seguinte (até 20), prazo vencido ou risco público (até 20). A linha urgente mantém o **!** no selo.
+- **Responsável**: nome curto (ou "**Você**") com as iniciais; sem dono: "**Sem responsável**". No **⋯**: **Pegar para mim** · **Devolver (tirar
+  meu nome)** · **Atribuir a…** (admin) · **Tirar o responsável** (admin). Resultado: "Você ficou com: <título>." / "Atribuída a <nome>: …" /
+  "Sem responsável agora: …". Minha fila vazia: "**Nada está com você agora.** Pegue uma tarefa da fila: no “⋯” da linha, Pegar para mim." +
+  **Ver todas as N tarefas**. Críticos vazio: "Nenhuma tarefa crítica agora." Sem responsável vazio: "Todas as tarefas têm responsável."
+- **O caminho do material**: **gargalo** (amarelo) = o passo onde os lotes esperam há mais tempo, somando as horas de todos — selo
+  "**gargalo: espera há mais tempo**" e "**N lotes aguardando há até X dias**"; o passo com mais lotes, se não é o gargalo, diz "**maior volume**".
+  Passo zerado mostra **✓**.
+- **Resultados**: período **7 dias · 14 dias · 30 dias · 90 dias** para o ritmo (14 = "últimas 2 semanas") e as visitas (7, 30 e 90);
+  "**Frente aos N dias anteriores**" só quando o período anterior teve alguma folha conferida; **Ver relatório completo**.
+- **Seu progresso**: "**Nível N · <nome>**" (Primeiros passos · Olhar atento · Mão firme · Guardião do Acervo · Memória viva · Referência do
+  acervo), "**N / M XP**", **Suas conquistas** (marcos pessoais, nunca comparação), "**Próxima: …**", "N dias seguidos com trabalho validado"
+  (fato neutro, sem cobrança), **Como os pontos são contados?**, **Ocultar conquistas** / **Mostrar de novo**. Quadro **Equipe nesta semana**
+  só se um admin ligar. **Pontos validados**: só ações que continuam valendo (desfez, o ponto some); descartar decisão e "não era problema" não contam.
+- **Qualidade da base**: "**O que mais baixa o índice**" com as duas medidas mais baixas, "faltam N folhas" e o caminho (**Registrar os direitos
+  nos fundos →**, **Dar título às folhas →**, **Ver os projetos →**).
+- **Está tudo funcionando?**: tudo normal = "**Tudo funcionando · N sistemas normais**" (e "· N sem medida") com "**Ver cada sistema (…)**"
+  recolhido; com falha, só o que falha aberto e "**Ver N outros sistemas (…)**".
+
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
   "Alertas" (admin) e "Logs" (admin/master) somem para o operador, e o servidor recusa esses dados a ele (403).
