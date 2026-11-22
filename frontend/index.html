@@ -2122,109 +2122,168 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .fc-intro{margin:0 0 12px;padding:10px 12px;border-radius:var(--r-md);background:var(--green-soft);color:var(--ink)}.fc-campo{display:flex;gap:8px;align-items:center;margin:0 0 12px}.fc-campo input{font:inherit;padding:8px 10px;max-width:260px}.fc-todas{margin:0 0 12px}.fc-todas summary{cursor:pointer;color:var(--blue)}
 .fc-bts{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.fc-fim{text-align:center;padding:18px 0}.fc-medalha{font-size:2.6rem;margin:0;color:var(--amber)}
 
-/* CAMP-PROB-UX (22/11/2026): Central de Problemas. O topo, a faixa do sistema e o menu não mudam. */
-.cp-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:var(--gap-card);align-items:start}
-.cp-principal{min-width:0;display:flex;flex-direction:column;gap:var(--sp-4,16px);container-type:inline-size}
-.cp-lateral{display:flex;flex-direction:column;gap:var(--sp-4,16px);min-width:0}
-.cp-cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:12px}
-.cp-cartao{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit;min-width:0}
-.cp-cartao:hover,.cp-c-abrir:hover{border-color:var(--blue)}
-.cp-cartao:focus-visible,.cp-c-abrir:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.cp-c-rot{font-size:var(--fs-2xs);color:var(--ink2)}
-.cp-c-n{font-size:var(--fs-metric);line-height:1.1;font-variant-numeric:tabular-nums}
-.cp-cartao small{color:var(--ink3);font-size:var(--fs-2xs)}
-.cp-c-crit .cp-c-n{color:var(--red)}
-.cp-c-res{cursor:default}
-.cp-c-abrir{all:unset;display:flex;flex-direction:column;gap:2px;cursor:pointer;border:1px solid transparent;border-radius:var(--r-sm)}
-.cp-c-per{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
-.cp-c-per .btn{padding:1px 6px;font-size:var(--fs-2xs);min-height:0}
-.cp-abas-linha{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.cp-filtros{flex-wrap:wrap;gap:8px}
-.cp-filtros #err-q{flex:1 1 260px;min-width:0}
+/* CAMP-PROB-UX (22/11/2026): Central de Problemas. O topo, a faixa do sistema e o menu não mudam. Visual do mockup do Rafael, com os tokens do painel. */
+.cp-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--gap-card);align-items:start}
+.cp-principal{min-width:0;display:flex;flex-direction:column;gap:16px;container-type:inline-size}
+.cp-hdr{margin-bottom:0;flex-wrap:nowrap;align-items:flex-start}
+.cp-hdr .act{flex:0 0 auto}
+.cp-hdr h1{white-space:nowrap}
+.cp-lateral{display:flex;flex-direction:column;gap:14px;min-width:0}
+.cp-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;vertical-align:-3px}
+.cp-cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.cp-cartao{display:grid;grid-template-columns:1fr auto;grid-template-areas:"n ic" "rot rot";align-items:center;align-content:start;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.cp-cartao:hover{border-color:var(--blue)}
+.cp-cartao:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.cp-c-n{grid-area:n;font-size:var(--fs-metric);line-height:1.1;font-variant-numeric:tabular-nums}
+.cp-c-ic{grid-area:ic;width:26px;height:26px}
+.cp-c-rot{grid-area:rot;font-size:var(--fs-md);color:var(--ink2);margin-top:2px}
+.cp-cartao small{display:none}
+.cp-c-aberto{background:var(--red-soft);border-color:transparent}
+.cp-c-aberto .cp-c-n,.cp-c-aberto .cp-c-ic,.cp-c-crit .cp-c-n,.cp-c-crit .cp-c-ic{color:var(--red)}
+.cp-c-anal .cp-c-ic,.cp-c-rev .cp-c-ic{color:var(--blue)}
+.cp-c-res .cp-c-ic{color:var(--green)}
+.cp-lista-painel{border-radius:var(--r-md);padding:4px 0 0}
+.cp-abas-linha{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px}
+.cp-abas-linha .cp-ordem select{width:auto}
+.cp-abas{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:4px;display:inline-flex;gap:2px;flex-wrap:wrap;margin:0}
+.cp-aba{border:0;background:transparent;color:var(--ink);padding:7px 14px;border-radius:var(--r);font-size:var(--fs-md)}
+.cp-aba b{font-weight:500}
+.cp-abas .cp-aba{box-shadow:none;border-bottom:0}
+.cp-abas .cp-aba[aria-pressed="true"]{background:var(--blue);color:var(--on-blue,#fff);box-shadow:none}
+.cp-abas .cp-aba[aria-pressed="true"] b,.cp-abas .cp-aba b{color:inherit;background:transparent;border:0}
 .cp-ordem{display:flex;align-items:center;gap:6px;font-size:var(--fs-md);color:var(--ink2)}
+.cp-filtros{flex-wrap:wrap;gap:8px;border-top:1px solid var(--line)}
+.cp-filtros #err-q{flex:1 1 260px;min-width:0}
 .cp-filtros-mais{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:var(--surface2)}
 .cp-filtros-mais[hidden]{display:none}
 .cp-filtros-mais label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-2xs);color:var(--ink2)}
 .cp-filtros-mais select,.cp-filtros-mais input{min-width:0;width:100%}
 .cp-gaveta-topo,.cp-gaveta-fim{display:none}
-.cp-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 0}
+.cp-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 0}
+.cp-chip{font-size:var(--fs-2xs);padding:3px 10px}
+.cp-chip{border-radius:var(--r-pill)}
 .cp-chip[aria-pressed="true"]{background:var(--sel);color:var(--sel-ink);border-color:var(--blue)}
 .cp-ativos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 14px 0}
 .cp-ativo{display:inline-flex;align-items:center;gap:4px;background:var(--blue-soft);color:var(--blue);border-radius:var(--r-pill);padding:2px 4px 2px 10px;font-size:var(--fs-2xs)}
 .cp-ativo-x{all:unset;cursor:pointer;width:18px;height:18px;display:inline-grid;place-items:center;border-radius:50%}
 .cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
 .cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
-.cp-lista{display:flex;flex-direction:column;padding:10px 0 0}
-.cp-linha{display:grid;grid-template-columns:28px 26px minmax(0,1fr) auto;gap:10px;align-items:start;padding:12px 14px 12px 10px;border-top:1px solid var(--line);border-left:4px solid var(--line2);cursor:pointer}
-.cp-linha:hover{background:var(--hover)}
-.cp-linha.sel,.cp-linha.kb-atual{background:var(--sel)}
-.cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
-.cp-linha.sev-critico{border-left-color:var(--red)}
+.cp-lista{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:12px 14px 12px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
+.cp-linha:hover{border-color:var(--blue)}
+.cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
+.cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.cp-linha.sev-critico{border-left-color:var(--red);background:var(--red-soft)}
 .cp-linha.sev-medio{border-left-color:var(--amber)}
 .cp-linha.sev-baixo{border-left-color:var(--blue)}
-.cp-sev-ic{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-weight:700;font-size:var(--fs-2xs);margin-top:1px}
-.sev-critico .cp-sev-ic{background:var(--red);color:var(--on-red,#fff)}
-.sev-medio .cp-sev-ic{background:var(--amber-soft);color:var(--amber);border-radius:var(--r-sm)}
-.sev-baixo .cp-sev-ic{background:var(--blue-soft);color:var(--blue);font-style:italic;font-family:Georgia,serif}
-.cp-corpo{min-width:0;display:flex;flex-direction:column;gap:3px}
-.cp-tit b{font-size:var(--fs-base)}
+.cp-sev-ic{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;font-weight:800;font-size:var(--fs-lg)}
+.sev-critico .cp-sev-ic{background:var(--surface);color:var(--red);box-shadow:0 0 0 2px var(--red-soft)}
+.sev-medio .cp-sev-ic{background:var(--amber-soft);color:var(--amber)}
+.sev-baixo .cp-sev-ic{background:var(--blue-soft);color:var(--blue);font-family:Georgia,serif}
+.cp-corpo{min-width:0;display:flex;flex-direction:column;gap:4px}
+.cp-tit b{font-size:var(--fs-body)}
 .cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
-.cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow-wrap:anywhere}
+.cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-ctx .lnk{color:var(--ink2)}
+.cp-desc{overflow-wrap:anywhere}
 .cp-sep{color:var(--ink3);margin:0 2px}
-.cp-desc{margin:0;font-size:var(--fs-md);color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
-.cp-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2);margin-top:2px}
-.cp-chip-cod,.cp-chip-tipo{border:1px solid var(--line);border-radius:var(--r-pill);padding:1px 8px;background:var(--surface2);font-size:var(--fs-2xs)}
-.cp-sem{color:var(--ink3);font-style:italic}
-.cp-razao{color:var(--ink)}
+.cp-meta{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2)}
+.cp-chip-cod,.cp-chip-tipo{border:1px solid var(--line2);border-radius:var(--r-pill);padding:1px 10px;background:var(--surface);font-size:var(--fs-2xs);color:var(--ink);text-decoration:none}
+a.cp-chip-cod:hover{border-color:var(--blue)}
+.cp-razao{font-size:var(--fs-2xs);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-quando{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-2xs);color:var(--ink2);min-width:0}
+.cp-quando>span{display:flex;gap:6px;align-items:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-quando .cp-ic{width:15px;height:15px;color:var(--ink3)}
+.cp-sem{color:var(--ink3)}
+.cp-sev-tag{justify-self:center;border-radius:var(--r-pill);padding:4px 14px;font-size:var(--fs-md);font-weight:600;white-space:nowrap}
+.sev-critico .cp-sev-tag{background:var(--surface);color:var(--red);box-shadow:0 0 0 1px var(--red-soft)}
+.sev-medio .cp-sev-tag{background:var(--amber-soft);color:var(--amber)}
+.sev-baixo .cp-sev-tag{background:var(--blue-soft);color:var(--blue)}
 .cp-rapida{color:var(--green)}
 .cp-mesma-folha{color:var(--amber);font-weight:600}
-.cp-acoes{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-.cp-acoes .cp-cta{border-color:var(--blue);color:var(--blue);min-width:92px}
-.cp-acoes .mais-menu summary{padding:2px 10px}
-.cp-sev-tag{white-space:nowrap}
+.cp-acoes{display:flex;align-items:center;gap:8px}
+.cp-acoes .cp-cta{min-width:84px}
+.cp-acoes .cp-cta:not(.pri){border-color:var(--blue);color:var(--blue)}
+.cp-acoes .mais-menu summary{padding:4px 10px}
 .cp-esq{cursor:default}
 .cp-esq-l{height:12px;border-radius:var(--r-sm);background:var(--surface2);margin:4px 0;width:70%}
 .cp-esq-l.curto{width:40%}
-.cp-pag{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line)}
-.cp-pag .pg-nav{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-.cp-pag [aria-current="page"]{background:var(--sel);color:var(--sel-ink);border-color:var(--blue)}
+.cp-pag{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:6px 14px 14px}
+.cp-pag .pg-info{font-size:var(--fs-md);color:var(--ink2)}
+.cp-pag .pg-nav{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cp-pg{min-width:32px;justify-content:center}
+.cp-pag [aria-current="page"]{background:var(--blue);color:var(--on-blue,#fff);border-color:var(--blue)}
 .cp-reti{color:var(--ink3);padding:0 2px}
-.cp-por{font-size:var(--fs-2xs);color:var(--ink2);display:flex;gap:6px;align-items:center}
+.cp-por{font-size:var(--fs-2xs);color:var(--ink2);display:flex;gap:6px;align-items:center;margin-left:8px}
 .cp-bulk-resp{display:flex;gap:6px;align-items:center;font-size:var(--fs-2xs)}
 .cp-graficos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gap-card)}
-.cp-graf .pb{min-height:150px}
-.cp-donut-box{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-.cp-donut{width:150px;height:150px;flex:0 0 150px}
-.cp-donut circle{transform:rotate(0deg)}
+.cp-graf{border-radius:var(--r-md)}
+.cp-graf .pb{min-height:170px}
+.cp-sel-falso{border:1px solid var(--line2);border-radius:var(--r);padding:3px 10px}
+.cp-donut-box{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.cp-donut{width:160px;height:160px;flex:0 0 160px}
 .cp-donut-fundo{stroke:var(--surface2)}
-.cp-donut-n{font-size:7px;font-weight:700;text-anchor:middle;fill:var(--ink)}
-.cp-donut-l{font-size:3.2px;text-anchor:middle;fill:var(--ink2)}
-.cp-legenda{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:var(--fs-md);min-width:0;flex:1 1 160px}
-.cp-legenda li{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.cp-pt{display:inline-block;width:10px;height:10px;border-radius:var(--r-sm);margin-right:4px;vertical-align:middle}
-.cp-cor-0{stroke:#2f6fde;background:#2f6fde}.cp-cor-1{stroke:#d9534f;background:#d9534f}.cp-cor-2{stroke:#e0a100;background:#e0a100}.cp-cor-3{stroke:#2e9e6b;background:#2e9e6b}
-.cp-cor-4{stroke:#8a63d2;background:#8a63d2}.cp-cor-5{stroke:#1a9bb0;background:#1a9bb0}.cp-cor-6{stroke:#8d6e63;background:#8d6e63}.cp-cor-7{stroke:#7a8794;background:#7a8794}
-.cp-barras{width:100%;max-width:260px;height:auto;display:block}
-.cp-b-pess{fill:#2e9e6b;background:#2e9e6b}.cp-b-sist{fill:#9ccfb6;background:#9ccfb6}.cp-b-novo{fill:#7a8794;background:#7a8794}
-.cp-b-n{font-size:8px;text-anchor:middle;fill:var(--ink)}
-.cp-b-l{font-size:8px;text-anchor:middle;fill:var(--ink2)}
-.cp-b-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:var(--fs-2xs);color:var(--ink2);margin:8px 0 0}
-.cp-lat .pb{display:flex;flex-direction:column;gap:6px}
+.cp-donut-n{font-size:7.5px;font-weight:700;text-anchor:middle;fill:var(--ink)}
+.cp-donut-l{font-size:3.6px;text-anchor:middle;fill:var(--ink2)}
+.cp-legenda{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:var(--fs-md);min-width:0;flex:1 1 170px}
+.cp-legenda li{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.cp-legenda .lnk{color:var(--ink);text-decoration:none;text-align:left}
+.cp-pt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.cp-cor-0{stroke:#e5675d;background:#e5675d}.cp-cor-1{stroke:#f08a80;background:#f08a80}.cp-cor-2{stroke:#f2c94c;background:#f2c94c}.cp-cor-3{stroke:#a9b4c2;background:#a9b4c2}
+.cp-cor-4{stroke:#8ec9ea;background:#8ec9ea}.cp-cor-5{stroke:#7b9be0;background:#7b9be0}.cp-cor-6{stroke:#2e9e6b;background:#2e9e6b}.cp-cor-7{stroke:#8a63d2;background:#8a63d2}
+.cp-barras{width:100%;height:auto;display:block}
+.cp-b-pess{fill:#5fb760}
+.cp-b-grade{stroke:var(--line);stroke-width:.6}
+.cp-b-n{font-size:9px;font-weight:700;text-anchor:middle;fill:var(--ink)}
+.cp-b-l{font-size:8.5px;text-anchor:middle;fill:var(--ink2)}
+.cp-b-y{text-anchor:end}
+.cp-b-leg{font-size:var(--fs-2xs);color:var(--ink3);margin:6px 0 0}
+.cp-lat{padding:14px 16px;display:flex;flex-direction:column;gap:10px;border-radius:var(--r-md)}
 .cp-lat p{margin:0}
-.cp-nivel{font-size:var(--fs-base)}
+.cp-lat-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cp-lat-h h2{font-size:var(--fs-lg);margin:0;display:flex;align-items:center;gap:6px}
+.cp-lat-sub{font-weight:400;color:var(--ink2)}
+.cp-ic-t{width:20px;height:20px}
+.cp-lk{display:inline-flex;gap:4px;align-items:center;color:var(--blue);font-size:var(--fs-md);text-decoration:none;white-space:nowrap}
+.cp-lk .cp-ic{width:15px;height:15px}
+.cp-prog,.cp-meta-s{display:flex;gap:14px;align-items:center}
+.cp-hex{width:58px;height:62px;flex:0 0 58px}
+.cp-hex-f{fill:var(--green)}
+.cp-hex-i{fill:var(--green-soft)}
+.cp-hex-e{fill:var(--green)}
+.cp-alvo{width:40px;height:40px;color:var(--green);stroke-width:2.2}
+.cp-prog-c{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.cp-prog-l{display:flex;justify-content:space-between;gap:8px;align-items:flex-end}
+.cp-prog-l>span{display:flex;flex-direction:column}
+.cp-prog-l small{color:var(--ink2);font-size:var(--fs-md)}
+.cp-nivel{font-size:var(--fs-lg)}
+.cp-pts{text-align:right}
 .cp-pts b{font-size:var(--fs-lg)}
+.cp-meta-s .cp-prog-l>span{display:block}
+.cp-meta-n{white-space:nowrap;font-size:var(--fs-md);color:var(--ink2)}
+.cp-meta-n b{color:var(--green)}
 .cp-barra{width:100%;height:10px;accent-color:var(--green)}
-.cp-conq,.cp-ativ,.cp-rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.cp-conq li{display:flex;gap:8px;align-items:flex-start;color:var(--ink2)}
-.cp-conq li.ok{color:var(--ink)}
-.cp-conq small{display:block;color:var(--ink3);font-size:var(--fs-2xs)}
-.cp-conq-ic{width:20px;flex:0 0 20px;text-align:center;color:var(--ink3)}
-.cp-conq li.ok .cp-conq-ic{color:var(--green);font-weight:700}
-.cp-rank li{display:flex;justify-content:space-between;gap:8px}
-.cp-rank li.eu{font-weight:700}
+.cp-ocultar{align-self:flex-start}
+.cp-conq,.cp-ativ,.cp-rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.cp-conq li,.cp-ativ li{display:flex;gap:12px;align-items:center}
+.cp-conq li>span,.cp-ativ li>span:last-child{display:flex;flex-direction:column;min-width:0}
+.cp-conq small,.cp-ativ small{color:var(--ink2);font-size:var(--fs-2xs)}
+.cp-conq li:not(.ok){opacity:.7}
+.cp-badge{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)}
+.cp-badge .cp-ic{width:20px;height:20px;stroke-width:2.2}
+.cp-badge-0{background:var(--amber-soft);color:var(--amber)}
+.cp-badge-1{background:#ece4fb;color:#7b55c9}
+.cp-badge-2{background:var(--blue-soft);color:var(--blue)}
+.cp-badge.off{filter:grayscale(1)}
+.cp-rank li{display:flex;gap:10px;align-items:center}
+.cp-rank li>span:nth-child(2){flex:1}
+.cp-rank-n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font-size:var(--fs-2xs);font-weight:700}
 .cp-aviso-rank{border-left:3px solid var(--amber);padding-left:8px}
-.cp-ativ li{display:flex;flex-direction:column;gap:1px;font-size:var(--fs-md)}
-.cp-ativ .lnk{text-align:left}
+.cp-ativ-ic{width:30px;height:30px;flex:0 0 30px;border-radius:50%;display:grid;place-items:center;background:var(--surface2);color:var(--ink2)}
+.cp-ativ-ic.g{background:var(--green);color:var(--surface)}
+.cp-ativ-ic.b{background:var(--blue);color:var(--surface)}
+.cp-ativ-ic.a{background:var(--amber-soft);color:var(--amber)}
+.cp-ativ .lnk{text-align:left;color:var(--ink);text-decoration:none}
 .cp-sec{padding:12px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .cp-sec h3{margin:0;font-size:var(--fs-base)}
 .cp-sec h4{margin:4px 0 0;font-size:var(--fs-md)}
@@ -2254,29 +2313,35 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-modelo{border:1px solid var(--line);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:6px;margin:6px 0}
 .cp-modelo.off{opacity:.6}
 .cp-fundos td,.cp-fundos th{white-space:nowrap}
-@media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
-.with-drawer .cp-layout{grid-template-columns:minmax(0,1fr)}
-.with-drawer .cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+@container (max-width:720px){
+  .cp-linha{grid-template-columns:18px 40px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo acoes" "sel ic quando sev"}
+  .cp-linha .cp-sel{grid-area:sel}.cp-linha .cp-sev-ic{grid-area:ic}.cp-linha .cp-corpo{grid-area:corpo}.cp-linha .cp-acoes{grid-area:acoes}
+  .cp-linha .cp-quando{grid-area:quando;flex-direction:row;gap:14px}.cp-linha .cp-sev-tag{grid-area:sev;justify-self:end}
+}
 @container (max-width:560px){
-  .cp-linha{grid-template-columns:22px minmax(0,1fr);padding:12px 10px 12px 8px}
-  .cp-linha .cp-sel{grid-column:1;grid-row:1}
-  .cp-linha .cp-sev-ic{grid-column:1;grid-row:2}
-  .cp-linha .cp-corpo{grid-column:2;grid-row:1/3}
-  .cp-linha .cp-acoes{grid-column:1/-1;flex-direction:row;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+  .cp-linha{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"sel corpo" "ic corpo" "quando quando" "sev acoes";padding:12px 10px 12px 8px}
+  .cp-linha .cp-sev-ic{width:22px;height:22px;font-size:var(--fs-md)}
+  .cp-linha .cp-quando{flex-wrap:wrap}
+  .cp-linha .cp-sev-tag{justify-self:start}
+  .cp-linha .cp-acoes{justify-content:flex-end}
+  .cp-ctx{white-space:normal}
   .cp-graficos{grid-template-columns:minmax(0,1fr)}
 }
+@media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}}
+.with-drawer .cp-layout{grid-template-columns:minmax(0,1fr)}
+.with-drawer .cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 @media (max-width:720px){
+  .cp-hdr{flex-wrap:wrap}
+  .cp-hdr h1{white-space:normal}
   .cp-cartoes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cp-c-res{grid-column:1/-1}
-  .cp-graficos{grid-template-columns:minmax(0,1fr)}
   .cp-lateral{grid-template-columns:minmax(0,1fr)}
-  .cp-linha{grid-template-columns:22px minmax(0,1fr);padding:12px 10px 12px 8px}
-  .cp-linha .cp-sel{grid-column:1;grid-row:1}
-  .cp-linha .cp-sev-ic{grid-column:1;grid-row:2}
-  .cp-linha .cp-corpo{grid-column:2;grid-row:1/3}
-  .cp-linha .cp-acoes{grid-column:1/-1;flex-direction:row;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+  .cp-abas-linha{padding:10px}
+  .cp-abas{display:flex;width:100%}
+  .cp-aba{flex:1 1 auto;padding:6px 8px}
   .cp-ordem{width:100%}
   .cp-ordem select{flex:1}
+  .cp-lista{padding:10px}
   .cp-filtros-mais:not([hidden]){position:fixed;inset:0;z-index:62;overflow:auto;grid-template-columns:minmax(0,1fr);align-content:start;background:var(--surface);padding:16px;border:0}
   .cp-gaveta-topo{display:flex;justify-content:space-between;align-items:center}
   .cp-gaveta-fim{display:block;position:sticky;bottom:0;background:var(--surface);padding:8px 0}
@@ -2411,15 +2476,15 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 
   <!-- ERROS: Central de Problemas (CAMP-PROB-UX, 22/11/2026). O topo, a faixa do sistema e o menu não mudam. -->
   <section class="content" id="v-erros">
-    <div class="hdr" data-erros-hdr><div><h1>Problemas</h1><p class="sub" id="cp-sub">Identifique, analise e resolva pendências de catalogação. Autoria não confirmada não bloqueia: a folha sobe ao site com esse aviso.</p></div><div class="act"><details class="mais-menu cp-mais"><summary class="btn" aria-haspopup="menu">Mais ⋯</summary><div class="mais-lista" role="menu"><button type="button" role="menuitem" data-cp-por-fundo>Contadores por fundo</button><button type="button" role="menuitem" data-cp-modelos>Modelos de decisão</button><button type="button" role="menuitem" data-err-repetidos hidden>Mensagens repetidas…</button><button type="button" role="menuitem" id="err-limpeza" hidden>Limpeza geral…</button></div></details><button class="btn pri" data-pode="problema.resolver" onclick="relatarProblema()">Relatar problema</button></div></div>
     <div class="cp-layout">
       <div class="cp-principal">
+        <div class="hdr cp-hdr" data-erros-hdr><div><h1>Problemas</h1><p class="sub" id="cp-sub">Identifique, analise e resolva pendências de catalogação.</p></div><div class="act"><details class="mais-menu cp-mais"><summary class="btn" aria-haspopup="menu">Mais ⋯</summary><div class="mais-lista" role="menu"><button type="button" role="menuitem" data-cp-por-fundo>Contadores por fundo</button><button type="button" role="menuitem" data-cp-modelos>Modelos de decisão</button><button type="button" role="menuitem" data-err-repetidos hidden>Mensagens repetidas…</button><button type="button" role="menuitem" id="err-limpeza" hidden>Limpeza geral…</button></div></details><button class="btn pri" data-pode="problema.resolver" onclick="relatarProblema()">Relatar problema</button></div></div>
         <div class="cp-cartoes" id="cp-cartoes" role="group" aria-label="Resumo dos problemas"></div>
-        <div class="cp-abas-linha"><div class="abas-sit" id="err-abas" role="group" aria-label="Modo de trabalho"></div></div>
+        
         <div class="panel cp-lista-painel">
+          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div>
           <div class="filterbar cp-filtros"><input type="search" id="err-q" placeholder="Buscar título, nº, arquiteto, obra, fundo ou palavra… (tecla /)" aria-label="Buscar problemas" autocomplete="off">
             <button type="button" class="btn sm" id="cp-filtros-btn" aria-expanded="false" aria-controls="cp-filtros-mais">Filtros</button>
-            <label class="cp-ordem">Ordenar por <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label>
             <select id="cp-visoes" aria-label="Visões salvas" hidden></select><span class="cnt" id="err-cnt"></span></div>
           <div class="cp-filtros-mais" id="cp-filtros-mais" role="region" aria-label="Filtros" hidden>
             <div class="cp-gaveta-topo"><b>Filtros</b><button type="button" class="btn sm" data-cp-filtros-fechar>Fechar</button></div>
@@ -10046,6 +10111,9 @@ const CP_SEV_IC={critico:'!',medio:'▲',baixo:'i'};
 const CP_SEV_TAG={critico:'r',medio:'a',baixo:'b'};
 const CP_FILTROS=['q','fase','gravidade','categoria','origem','responsavel','fundo','projeto','de','ate','idade','chip'];
 const CP_PADRAO={aba:'prioridades',ordem:'prioridade',pagina:1,por:25};
+/* ícones (traço com currentColor: claro e escuro) */
+const CP_IC={alerta:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>',exclama:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/>',ampulheta:'<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',camadas:'<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',ok:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',pessoa:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',alvo:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',trofeu:'<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 21h6M10 17h4"/>',relogio:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',lapis:'<path d="M4 20h4L19 9l-4-4L4 16v4z"/>',mais:'<path d="M12 5v14M5 12h14"/>',seta:'<path d="M5 12h14M13 6l6 6-6 6"/>',estrela:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/>'};
+function cpIc(n,cls=''){return `<svg class="cp-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${CP_IC[n]||''}</svg>`}
 function cpVazio(){return Object.assign({},CP_PADRAO,Object.fromEntries(CP_FILTROS.map(k=>[k,''])))}
 let CP=cpVazio();
 var ERR_LISTA=[];let CP_POR_FOLHA={};let ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_SEQ=0,ERR_SEL_ULT=null,CP_RES=null,CP_TOTAL=0,CP_PAGINAS=1,CP_PESSOAS=null,CP_ABERTO=null,CP_PER='mes',CP_GRAF_EM=0,CP_VISOES=[];
@@ -10071,14 +10139,15 @@ function cpPessoaNome(id){const p=(CP_PESSOAS||[]).find(x=>String(x.id)===String
 function cpAdmin(){return !!(EU&&['admin','master'].includes(EU.papel))}
 
 /* ---- cartões: números confiáveis, cada um abre a lista correspondente; nada de percentual sem base ---- */
-function cpCartoesHTML(r){const c=r&&r.cartoes;if(!c)return '';const per={hoje:'hoje',semana:'em 7 dias',mes:'em 30 dias'};
-  const card=(k,rot,v,sub,cls='')=>`<button type="button" class="cp-cartao ${cls}" data-cp-cartao="${k}" aria-label="${escHtml(rot+': '+fmtN(v)+(sub?'. '+sub:''))}. Abrir a lista"><span class="cp-c-rot">${escHtml(rot)}</span><b class="cp-c-n">${fmtN(v)}</b>${sub?`<small>${escHtml(sub)}</small>`:''}</button>`;
-  return card('em_aberto','Em aberto',c.em_aberto,`${fmtN(c.pedem_acao)} pedem ação · ${fmtN(c.avisos)} ${c.avisos===1?'aviso':'avisos'}`)
-    +card('criticos','Críticos',c.criticos,'bloqueiam a publicação','cp-c-crit')
-    +card('em_analise','Em análise',c.em_analise,'triagem, análise, aguardando informação')
-    +card('aguardando_revisao','Aguardando revisão',c.aguardando_revisao,'dependem de validação')
-    +`<div class="cp-cartao cp-c-res"><button type="button" class="cp-c-abrir" data-cp-cartao="resolvidos" aria-label="${escHtml(`Resolvidos ${per[CP_PER]}: ${fmtN(c.resolvidos[CP_PER])}. Abrir a lista`)}"><span class="cp-c-rot">Resolvidos ${escHtml(per[CP_PER])}</span><b class="cp-c-n">${fmtN(c.resolvidos[CP_PER])}</b>${CP_PER==='mes'&&c.resolvidos_sistema_mes?`<small>${fmtN(c.resolvidos_sistema_mes)} pelo sistema (o painel conferiu)</small>`:''}</button><span class="cp-c-per" role="group" aria-label="Período">${[['hoje','Hoje'],['semana','Semana'],['mes','30 dias']].map(([k,t])=>`<button type="button" class="btn sm" data-cp-per="${k}" aria-pressed="${CP_PER===k}">${t}</button>`).join('')}</span></div>`}
-function cpAbasHTML(r){const n=r&&r.abas;return CP_ABAS.map(([k,t,d])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${CP.aba===k}" title="${escHtml(d)}">${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
+function cpCartoesHTML(r){const c=r&&r.cartoes;if(!c)return '';
+  /* mockup: número grande, rótulo embaixo e o ícone colorido à direita; cada cartão abre a lista filtrada */
+  const card=(k,rot,v,ic,cls,sub)=>`<button type="button" class="cp-cartao ${cls}" data-cp-cartao="${k}" title="${escHtml(sub||'')}" aria-label="${escHtml(rot+': '+fmtN(v)+(sub?'. '+sub:''))}. Abrir a lista"><b class="cp-c-n">${fmtN(v)}</b>${cpIc(ic,'cp-c-ic')}<span class="cp-c-rot">${escHtml(rot)}</span>${sub?`<small>${escHtml(sub)}</small>`:''}</button>`;
+  return card('em_aberto','Problemas em aberto',c.em_aberto,'alerta','cp-c-aberto',`${fmtN(c.pedem_acao)} pedem ação · ${fmtN(c.avisos)} ${c.avisos===1?'aviso':'avisos'}`)
+    +card('criticos','Críticos',c.criticos,'exclama','cp-c-crit','bloqueiam a publicação')
+    +card('em_analise','Em análise',c.em_analise,'ampulheta','cp-c-anal','triagem, análise, aguardando informação')
+    +card('aguardando_revisao','Aguardando conferência',c.aguardando_revisao,'camadas','cp-c-rev','aguardando revisão de outra pessoa')
+    +card('resolvidos',`Resolvidos (${{hoje:'hoje',semana:'7 dias',mes:'30 dias'}[CP_PER]})`,c.resolvidos[CP_PER],'ok','cp-c-res',CP_PER==='mes'&&c.resolvidos_sistema_mes?`${fmtN(c.resolvidos_sistema_mes)} pelo sistema (o painel conferiu)`:'')}
+function cpAbasHTML(r){const n=r&&r.abas;return CP_ABAS.map(([k,t,d])=>`<button class="btn sm cp-aba" data-err-sit="${k}" aria-pressed="${CP.aba===k}" title="${escHtml(d)}">${t}${n?` <b>(${fmtN(n[k]||0)})</b>`:''}</button>`).join('')}
 function cpChipsHTML(r){const n=(r&&r.chips)||{},on=cpChips();return CP_CHIPS.filter(([k])=>!(CP.aba==='concluidos'&&['minha_revisao','rapidos','talvez'].includes(k))&&!(CP.aba==='prioridades'&&k==='avisos')).map(([k,t])=>`<button type="button" class="btn sm cp-chip" data-cp-chip="${k}" aria-pressed="${on.has(k)}">${t}${n[k]!=null?` <b>${fmtN(n[k])}</b>`:''}</button>`).join('')}
 function cpAtivos(){const L=[],op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
   if(CP.q)L.push(['q',`Busca: "${CP.q}"`]);if(CP.projeto)L.push(['projeto','Projeto: '+CP.projeto]);if(CP.fundo)L.push(['fundo','Fundo: '+op('cp-fundo',CP.fundo)]);
@@ -10099,22 +10168,27 @@ function cpOndeHTML(e){const p=[];if(e.fundo_codigo)p.push(`<a class="lnk" href=
   return p.join(' <span class="cp-sep" aria-hidden="true">›</span> ')||`<span class="code">${escHtml(e.codigo)}</span>`}
 function cpCodigoCurto(e){const c=e.projeto_codigo||e.fundo_codigo||e.codigo;return String(c).replace('-',' · ')}
 function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.severidade||'medio',pr=e.prioridade||{};
-  const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?'<span class="cp-resp cp-sem">Não atribuído</span>':'');
+  const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?'<span class="cp-resp cp-sem">Sem responsável</span>':'<span class="cp-resp cp-sem">—</span>');
+  const ctxTit=e.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo)}</a>`:e.fundo_codigo?`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair>${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`:'';
+  const cod=e.folha&&e.folha_existe&&e.tipo==='comum'?`<a class="cp-chip-cod code" href="#item/${escHtml(e.folha)}" data-err-sair title="Abrir a folha ${escHtml(e.folha)}">${escHtml(cpCodigoCurto(e))}</a>`:`<span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span>`;
+  const pri=ab&&!e.responsavel_id||e.fase==='aguardando_revisao';   /* o botão cheio (azul) é para o que ninguém pegou ou espera revisão; o resto, contorno */
   return `<div class="cp-linha sev-${sev}${CP_ABERTO===e.id?' sel':''}" role="listitem" data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}"${e.folha?` data-err-folha="${escHtml(e.folha)}"`:''}>
     <span class="cp-sel">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.id)}">`:''}</span>
     <span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(e.titulo)}</b> <small class="cp-id">nº ${escHtml(e.id)}</small></div>
-      <div class="cp-ctx">${cpOndeHTML(e)}</div>
-      <p class="cp-desc">${escHtml(e.descricao)}</p>
+      <div class="cp-ctx">${ctxTit}${ctxTit?' · ':''}<span class="cp-desc">${escHtml(e.descricao)}</span></div>
       ${e.resolvido_sozinho&&ab?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}
-      <div class="cp-meta"><span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span><span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span><span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span><span class="cp-idade">${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span>${resp}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml((pr.motivos||[]).join(' · '))}">${escHtml(pr.razao)}</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div></div>
-    <div class="cp-acoes"><span class="tag ${CP_SEV_TAG[sev]} cp-sev-tag">${escHtml(e.severidade_rotulo)}</span><button type="button" class="btn sm cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
+      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div>
+      ${ab&&pr.razao?`<div class="cp-razao" title="Nota ${escHtml(pr.nota)} de 100">${escHtml(pr.razao)}</div>`:''}</div>
+    <div class="cp-quando"><span>${cpIc('cal')}${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span><span>${cpIc('pessoa')}${resp}</span></div>
+    <span class="cp-sev-tag">${escHtml(e.severidade_rotulo)}</span>
+    <div class="cp-acoes"><button type="button" class="btn sm ${pri?'pri ':''}cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
       <details class="mais-menu cp-linha-mais"><summary class="btn sm" aria-haspopup="menu" aria-label="Mais ações do problema ${escHtml(e.id)}">⋯</summary><div class="mais-lista" role="menu">${res&&ab&&!e.responsavel_id?`<button type="button" role="menuitem" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}<button type="button" role="menuitem" data-cp-link="${escHtml(e.id)}">Copiar link</button>${e.projeto_codigo?`<button type="button" role="menuitem" data-cp-proj="${escHtml(e.projeto_codigo)}">Só este projeto</button>`:''}</div></details></div></div>`}
 function cpEsqueleto(n=5){return Array.from({length:n},()=>'<div class="cp-linha cp-esq" aria-hidden="true"><span></span><span class="cp-sev-ic"></span><div class="cp-corpo"><div class="cp-esq-l"></div><div class="cp-esq-l curto"></div></div></div>').join('')}
-function cpPaginasHTML(){const n=CP_PAGINAS,a=CP.pagina,ini=CP_TOTAL?(a-1)*CP.por+1:0,fim=Math.min(CP_TOTAL,a*CP.por);if(!CP_TOTAL)return '';
-  const ps=new Set([1,n,a-1,a,a+1].filter(x=>x>=1&&x<=n)),L=[...ps].sort((x,y)=>x-y);let h='',ult=0;
-  L.forEach(x=>{if(x-ult>1)h+='<span class="cp-reti" aria-hidden="true">…</span>';h+=`<button type="button" class="btn sm" data-cp-pag="${x}"${x===a?' aria-current="page" aria-pressed="true"':''} aria-label="Página ${x}">${x}</button>`;ult=x});
-  return `<span class="pg-info">Mostrando ${fmtN(ini)}–${fmtN(fim)} de ${fmtN(CP_TOTAL)}</span><span class="pg-nav"><button type="button" class="btn sm" data-cp-pag="${a-1}"${a<=1?' disabled':''} aria-label="Página anterior">‹</button>${h}<button type="button" class="btn sm" data-cp-pag="${a+1}"${a>=n?' disabled':''} aria-label="Próxima página">›</button></span><label class="cp-por">Por página <select id="cp-por">${[25,50,100].map(x=>`<option${x===CP.por?' selected':''}>${x}</option>`).join('')}</select></label>`}
+function cpPaginasHTML(){const n=CP_PAGINAS,a=CP.pagina;if(!CP_TOTAL)return '';const ini=(a-1)*CP.por+1,fim=Math.min(CP_TOTAL,a*CP.por);
+  const ps=new Set([1,2,3,4,5].filter(x=>x<=n));[a-1,a,a+1,n].forEach(x=>{if(x>=1&&x<=n)ps.add(x)});const L=[...ps].sort((x,y)=>x-y);let h='',ult=0;
+  L.forEach(x=>{if(x-ult>1)h+='<span class="cp-reti" aria-hidden="true">…</span>';h+=`<button type="button" class="btn sm cp-pg" data-cp-pag="${x}"${x===a?' aria-current="page" aria-pressed="true"':''} aria-label="Página ${x}">${x}</button>`;ult=x});
+  return `<span class="pg-info">Mostrando ${fmtN(ini)}–${fmtN(fim)} de ${fmtN(CP_TOTAL)} problemas</span><span class="pg-nav"><button type="button" class="btn sm cp-pg" data-cp-pag="${a-1}"${a<=1?' disabled':''} aria-label="Página anterior">←</button>${h}<button type="button" class="btn sm cp-pg" data-cp-pag="${a+1}"${a>=n?' disabled':''} aria-label="Próxima página">→</button><label class="cp-por">Por página <select id="cp-por">${[25,50,100].map(x=>`<option${x===CP.por?' selected':''}>${x}</option>`).join('')}</select></label></span>`}
 function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
   document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
   cpRenderAtivos();cpSincronizarCampos();
@@ -10126,7 +10200,7 @@ function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
   tb.setAttribute('aria-busy','false');tb.dataset.render=(+tb.dataset.render||0)+1;   /* contador de desenhos (os testes esperam por ele) */
   const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=CP_TOTAL?qtd(CP_TOTAL,'problema','problemas'):'';
   const m=document.getElementById('err-mais');if(m){m.hidden=!CP_TOTAL;m.innerHTML=cpPaginasHTML()}
-  const sub=document.getElementById('cp-sub');if(sub&&CP_RES&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${qtd(c.em_aberto,'item precisa','itens precisam')} de análise, conferência ou decisão. Autoria não confirmada não bloqueia: a folha sobe ao site com esse aviso.`}
+  const sub=document.getElementById('cp-sub');if(sub&&CP_RES&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${fmtN(c.em_aberto)} ${c.em_aberto===1?'item que precisa':'itens que precisam'} de análise, conferência ou decisão.`}
   errAtualizarSelecao()}
 function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).map(e=>e.id));[...ERR_SEL].forEach(i=>{if(!ids.has(i))ERR_SEL.delete(i)});
   const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);
@@ -10164,23 +10238,31 @@ async function cpCarregarGraficos(){if(Date.now()-CP_GRAF_EM<30000)return;CP_GRA
   let g;try{g=await API('/api/problemas/graficos')}catch(e){a.innerHTML=b.innerHTML=estadoErroHTML({titulo:'Não consegui carregar o gráfico.',texto:e.message});return}
   const tot=g.total_abertos||0;let acc=0;
   const fatias=g.por_tipo.map((t,i)=>{const pct=tot?t.n/tot*100:0,f={...t,pct,ini:acc,cor:i%8};acc+=pct;return f});
-  a.innerHTML=`<div class="ph"><h2>Problemas por tipo</h2><small class="help">abertos agora</small></div><div class="pb cp-donut-box">${tot?`<svg class="cp-donut" viewBox="0 0 42 42" role="img" aria-label="${escHtml(fatias.map(f=>`${f.rotulo}: ${f.n}`).join('; '))}"><circle class="cp-donut-fundo" cx="21" cy="21" r="15.915" fill="none" stroke-width="6"></circle>${fatias.map(f=>`<circle class="cp-cor-${f.cor}" cx="21" cy="21" r="15.915" fill="none" stroke-width="6" stroke-dasharray="${f.pct.toFixed(3)} ${(100-f.pct).toFixed(3)}" stroke-dashoffset="${(25-f.ini).toFixed(3)}"></circle>`).join('')}<text x="21" y="21" class="cp-donut-n">${escHtml(fmtN(tot))}</text><text x="21" y="26" class="cp-donut-l">abertos</text></svg>
-    <ul class="cp-legenda">${fatias.map(f=>`<li><button type="button" class="lnk" data-cp-tipo="${escHtml(f.categoria)}"><span class="cp-pt cp-cor-${f.cor}" aria-hidden="true"></span>${escHtml(f.rotulo)}</button> <b>${Math.round(f.pct)}%</b> <small class="help">${fmtN(f.n)}</small></li>`).join('')}</ul>`:vazioHTML('Nenhum problema aberto.','Quando houver, a divisão por tipo aparece aqui.')}</div>`;
-  const S=g.semanas||[],mx=Math.max(1,...S.map(s=>Math.max(s.resolvidos,s.novos))),H=80,W=46;
-  b.innerHTML=`<div class="ph"><h2>Evolução de resolução</h2><small class="help">últimas 4 semanas</small></div><div class="pb">${S.some(s=>s.resolvidos||s.novos)?`<svg class="cp-barras" viewBox="0 0 ${S.length*W+10} ${H+30}" role="img" aria-label="${escHtml(S.map(s=>`Semana de ${fmtData(s.inicio)}: ${s.por_pessoas} resolvidos por pessoas, ${s.pelo_sistema} pelo sistema, ${s.novos} novos`).join('; '))}">${S.map((s,i)=>{const x=10+i*W,hp=s.por_pessoas/mx*H,hs=s.pelo_sistema/mx*H,hn=s.novos/mx*H;return `<rect class="cp-b-pess" x="${x}" y="${(H-hp).toFixed(1)}" width="16" height="${hp.toFixed(1)}"></rect><rect class="cp-b-sist" x="${x}" y="${(H-hp-hs).toFixed(1)}" width="16" height="${hs.toFixed(1)}"></rect><rect class="cp-b-novo" x="${x+19}" y="${(H-hn).toFixed(1)}" width="8" height="${hn.toFixed(1)}"></rect><text class="cp-b-n" x="${x+8}" y="${Math.max(9,H-hp-hs-3).toFixed(1)}">${s.resolvidos}</text><text class="cp-b-l" x="${x+12}" y="${H+14}">${escHtml(fmtData(s.inicio).slice(0,5))}</text>`}).join('')}</svg>
-    <p class="cp-b-leg"><span><span class="cp-pt cp-b-pess" aria-hidden="true"></span>resolvidos por pessoas</span><span><span class="cp-pt cp-b-sist" aria-hidden="true"></span>pelo sistema (o painel conferiu)</span><span><span class="cp-pt cp-b-novo" aria-hidden="true"></span>novos</span></p>`:vazioHTML('Nada resolvido nem registrado nas últimas 4 semanas.','As barras aparecem quando houver movimento.')}</div>`}
+  a.innerHTML=`<div class="ph"><h2>Problemas por tipo</h2><small class="help">abertos agora</small></div><div class="pb cp-donut-box">${tot?`<svg class="cp-donut" viewBox="0 0 42 42" role="img" aria-label="${escHtml(fatias.map(f=>`${f.rotulo}: ${f.n}`).join('; '))}"><circle class="cp-donut-fundo" cx="21" cy="21" r="15.915" fill="none" stroke-width="7"></circle>${fatias.map(f=>`<circle class="cp-cor-${f.cor}" cx="21" cy="21" r="15.915" fill="none" stroke-width="7" stroke-dasharray="${f.pct.toFixed(3)} ${(100-f.pct).toFixed(3)}" stroke-dashoffset="${(25-f.ini).toFixed(3)}"></circle>`).join('')}<text x="21" y="21.5" class="cp-donut-n">${escHtml(fmtN(tot))}</text><text x="21" y="26.5" class="cp-donut-l">total</text></svg>
+    <ul class="cp-legenda">${fatias.map(f=>`<li><button type="button" class="lnk" data-cp-tipo="${escHtml(f.categoria)}" title="${escHtml(fmtN(f.n))} abertos"><span class="cp-pt cp-cor-${f.cor}" aria-hidden="true"></span>${escHtml(f.rotulo)}</button><b>${Math.round(f.pct)}%</b></li>`).join('')}</ul>`:vazioHTML('Nenhum problema aberto.','Quando houver, a divisão por tipo aparece aqui.')}</div>`;
+  const S=g.semanas||[],mx=Math.max(1,...S.map(s=>s.resolvidos)),H=110,W=78,X0=26,esc=Math.ceil(mx/4)||1,top=esc*4;
+  const dm=d=>{const x=new Date(d+'T12:00:00');return x.getDate()+' '+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()]};
+  b.innerHTML=`<div class="ph"><h2>Evolução de resolução</h2><small class="help cp-sel-falso">Últimas 4 semanas</small></div><div class="pb">${S.some(s=>s.resolvidos)?`<svg class="cp-barras" viewBox="0 0 ${X0+S.length*W} ${H+34}" role="img" aria-label="${escHtml(S.map(s=>`Semana de ${dm(s.inicio)}: ${s.resolvidos} resolvidos (${s.pelo_sistema} pelo sistema), ${s.novos} novos`).join('; '))}">${[0,1,2,3,4].map(k=>`<text class="cp-b-l cp-b-y" x="${X0-6}" y="${(10+H-k*H/4+3).toFixed(1)}">${k*esc}</text><line class="cp-b-grade" x1="${X0}" x2="${X0+S.length*W}" y1="${(10+H-k*H/4).toFixed(1)}" y2="${(10+H-k*H/4).toFixed(1)}"></line>`).join('')}${S.map((s,i)=>{const x=X0+i*W+12,h=s.resolvidos/top*H,fimS=new Date(s.fim+'T12:00:00');fimS.setDate(fimS.getDate()-1);return `<rect class="cp-b-pess" x="${x}" y="${(10+H-h).toFixed(1)}" width="${W-24}" height="${h.toFixed(1)}" rx="2"></rect><text class="cp-b-n" x="${x+(W-24)/2}" y="${(10+H-h-4).toFixed(1)}">${s.resolvidos}</text><text class="cp-b-l" x="${x+(W-24)/2}" y="${H+28}">${escHtml(dm(s.inicio)+' – '+dm(fimS.toISOString().slice(0,10)))}</text>`}).join('')}</svg>
+    <p class="cp-b-leg">Resolvidos por semana (${fmtN(S.reduce((t,s)=>t+s.pelo_sistema,0))} pelo sistema, quando o painel conferiu sozinho). Novos no período: ${fmtN(S.reduce((t,s)=>t+s.novos,0))}.</p>`:vazioHTML('Nada resolvido nas últimas 4 semanas.','As barras aparecem quando houver resoluções.')}</div>`}
 /* ---- coluna da direita: progresso (só resolução validada), meta coletiva, conquistas, ranking (só se ligado), atividade recente ---- */
+const CP_HEX='<svg class="cp-hex" viewBox="0 0 60 64" aria-hidden="true"><path class="cp-hex-f" d="M30 3 55 17v30L30 61 5 47V17z"/><path class="cp-hex-i" d="M30 11 48 21v22L30 53 12 43V21z"/><path class="cp-hex-e" d="m30 20 3.4 7 7.6 1.1-5.5 5.3 1.3 7.6L30 37.4 23.2 41l1.3-7.6L19 28.1l7.6-1.1z"/></svg>';
+function cpSemanaTxt(desde){const d=new Date(String(desde||'').replace(' ','T')+'Z');if(isNaN(d))return '';d.setHours(d.getHours()-3);const f=new Date(d);f.setDate(f.getDate()+6);const m=x=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()];return `${d.getDate()}${m(d)!==m(f)?' '+m(d):''} – ${f.getDate()} ${m(f)}`}
+const CP_ATIV_IC={ok:['ok','g'],lapis:['lapis','b'],pessoa:['pessoa','b'],mais:['mais','a'],relogio:['relogio','']};
 async function cpCarregarLateral(){const el=document.getElementById('cp-lateral');if(!el)return;let d;try{d=await API('/api/problemas/progresso')}catch(e){el.innerHTML=`<div class="panel">${estadoErroHTML({titulo:'Não consegui carregar o progresso.',texto:e.message})}</div>`;return}
-  /* UM sistema de pontos: o da Home (GET /api/painel/progresso, recontado do estado: desfez, o ponto some). Aqui só se mostra e se acrescentam as conquistas de qualidade (sem pontos). */
-  const j=d.jogo||{},eu=j.eu,sem=j.semana||{};
-  const prog=!j.ligado?'':j.oculto?`<div class="panel cp-lat"><div class="ph"><h2>Seu progresso na resolução</h2></div><div class="pb"><p class="help">Você ocultou o seu progresso e as suas conquistas (vale também na Home).</p><button type="button" class="btn sm" data-cp-ocultar="0">Mostrar de novo</button></div></div>`
-    :eu?`<div class="panel cp-lat"><div class="ph"><h2>Seu progresso na resolução</h2></div><div class="pb"><p class="cp-nivel"><b>Nível ${escHtml(eu.nivel)}</b> · ${escHtml(eu.nome)}</p><p class="cp-pts"><b>${fmtN(eu.xp)}</b> pontos</p>${eu.ate?`<progress class="cp-barra" max="${eu.ate-eu.de}" value="${Math.max(0,eu.xp-eu.de)}" aria-label="Até o nível ${eu.nivel+1}"></progress><small class="help">${fmtN(Math.max(0,eu.ate-eu.xp))} até o nível ${eu.nivel+1}</small>`:''}<p class="help">Os mesmos pontos da Home: só ações validadas que continuam valendo (problema corrigido com a frase do que foi feito: ${fmtN((j.pontos||{}).problema_resolvido||0)}; que bloqueava: ${fmtN((j.pontos||{}).problema_critico_resolvido||0)}). Reabriu, o ponto some.</p><button type="button" class="btn sm lnk" data-cp-ocultar="1">Ocultar minhas conquistas</button></div></div>`:'';
-  const meta=j.ligado?`<div class="panel cp-lat"><div class="ph"><h2>Meta da semana</h2><small class="help">da equipe</small></div><div class="pb"><p><b>${fmtN(sem.feito||0)}</b> de ${fmtN(sem.meta||0)} pontos validados</p><progress class="cp-barra" max="${sem.meta||1}" value="${Math.min(sem.feito||0,sem.meta||0)}" aria-label="Meta da semana"></progress><small class="help">${fmtN((sem.por_tipo||{}).problema_resolvido||0)} problemas corrigidos e ${fmtN((sem.por_tipo||{}).problema_critico_resolvido||0)} que bloqueavam, nesta semana. A meta é a mesma da Home.</small></div></div>`:'';
-  const cq=d.conquistas_qualidade||[];
-  const conq=cq.length||(eu&&(eu.conquistas||[]).length)?`<div class="panel cp-lat"><div class="ph"><h2>Conquistas</h2></div><div class="pb"><ul class="cp-conq">${cq.map(c=>`<li class="${c.obtida?'ok':''}"><span class="cp-conq-ic" aria-hidden="true">${c.obtida?'✓':'○'}</span><span><b>${escHtml(c.titulo)}</b>${c.coletiva?' <span class="tag">coletiva</span>':''}<small>${escHtml(c.descricao)}${c.obtida?'':` · ${fmtN(c.feito)} de ${fmtN(c.meta)}`}</small></span></li>`).join('')}${(eu&&eu.conquistas||[]).map(c=>`<li class="ok"><span class="cp-conq-ic" aria-hidden="true">✓</span><span><b>${escHtml(c.rotulo)}</b><small>da Home</small></span></li>`).join('')}</ul></div></div>`:'';
-  const rank=Array.isArray(j.equipe)?`<div class="panel cp-lat"><div class="ph"><h2>Ranking da equipe (semana)</h2></div><div class="pb"><p class="help cp-aviso-rank">${escHtml(d.aviso_ranking)}</p>${j.equipe.length?`<ol class="cp-rank">${j.equipe.map(r=>`<li><span>${escHtml(r.nome)}</span><b>${fmtN(r.pontos)}</b></li>`).join('')}</ol>`:'<p class="help">Ninguém pontuou nesta semana.</p>'}</div></div>`:'';
-  const at=`<div class="panel cp-lat"><div class="ph"><h2>Atividade recente</h2></div><div class="pb">${(d.atividade||[]).length?`<ul class="cp-ativ">${d.atividade.map(a=>`<li>${a.erro_id?`<button type="button" class="lnk" data-cp-abrir="${escHtml(a.erro_id)}">`:'<span>'}<b>${escHtml(a.ator||'—')}</b> ${escHtml(a.texto)}${a.erro_id?` · nº ${escHtml(a.erro_id)}</button>`:'</span>'}<small class="help">${escHtml(fmtDataHora(a.quando))}</small></li>`).join('')}</ul>`:'<p class="help">Nada registrado ainda.</p>'}</div></div>`;
+  /* UM sistema de pontos: o da Home (recontado do estado: desfez, o ponto some). Aqui só se mostra; as conquistas de qualidade da Central não dão pontos. */
+  const j=d.jogo||{},eu=j.eu,sem=j.semana||{},adm=EU&&['admin','master'].includes(EU.papel);
+  const lk=(href,t)=>`<a class="cp-lk" href="${href}">${escHtml(t)} ${cpIc('seta')}</a>`;
+  const prog=!j.ligado?'':j.oculto?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Seu progresso na resolução</h2></div><p class="help">Você ocultou o seu progresso e as suas conquistas (vale também na Home).</p><button type="button" class="btn sm" data-cp-ocultar="0">Mostrar de novo</button></div>`
+    :eu?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Seu progresso na resolução</h2>${lk('#painel','Ver metas')}</div><div class="cp-prog">${CP_HEX}<div class="cp-prog-c"><div class="cp-prog-l"><span><b class="cp-nivel">Nível ${escHtml(eu.nivel)}</b><small>${escHtml(eu.nome)}</small></span><span class="cp-pts"><b>${fmtN(eu.xp)} pts</b><small>${eu.ate?`para o nível ${eu.nivel+1}`:'nível máximo'}</small></span></div>${eu.ate?`<progress class="cp-barra" max="${eu.ate-eu.de}" value="${Math.max(0,eu.xp-eu.de)}" aria-label="Até o nível ${eu.nivel+1}: faltam ${fmtN(Math.max(0,eu.ate-eu.xp))} pontos"></progress>`:''}</div></div><button type="button" class="btn sm lnk cp-ocultar" data-cp-ocultar="1">Ocultar minhas conquistas</button></div>`:'';
+  const pct=sem.meta?Math.min(100,Math.round(100*(sem.feito||0)/sem.meta)):0;
+  const meta=j.ligado?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('alvo','cp-ic-t')} Meta da semana</h2><small class="help">${escHtml(cpSemanaTxt(sem.desde))}</small></div><div class="cp-meta-s">${cpIc('alvo','cp-alvo')}<div class="cp-prog-c"><div class="cp-prog-l"><span>Fazer <b>${fmtN(sem.meta||0)} pontos</b></span><span class="cp-meta-n"><b>${fmtN(sem.feito||0)}</b> / ${fmtN(sem.meta||0)} (${pct}%)</span></div><progress class="cp-barra" max="${sem.meta||1}" value="${Math.min(sem.feito||0,sem.meta||0)}" aria-label="Meta da semana"></progress><small class="help" title="A meta é da equipe e a mesma da Home: só ações validadas que continuam valendo">${fmtN((sem.por_tipo||{}).problema_resolvido||0)} problemas corrigidos · ${fmtN((sem.por_tipo||{}).problema_critico_resolvido||0)} que bloqueavam</small></div></div></div>`:'';
+  const cq=(d.conquistas_qualidade||[]),ganhas=cq.filter(c=>c.obtida),falta=cq.filter(c=>!c.obtida),home=(eu&&eu.conquistas||[]);
+  const badge=(i,ok)=>`<span class="cp-badge cp-badge-${i%3}${ok?'':' off'}" aria-hidden="true">${cpIc(['estrela','camadas','ok'][i%3])}</span>`;
+  const conq=j.ligado&&!j.oculto&&(cq.length||home.length)?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Conquistas recentes</h2>${lk('#painel','Ver todas')}</div><ul class="cp-conq">${[...ganhas.map(c=>({t:c.titulo,s:c.coletiva?'marco coletivo':c.descricao,ok:1})),...home.slice(-2).map(c=>({t:c.rotulo,s:'da Home',ok:1})),...falta.map(c=>({t:c.titulo,s:`${fmtN(c.feito)} de ${fmtN(c.meta)} · ${c.descricao}`,ok:0}))].slice(0,4).map((c,i)=>`<li class="${c.ok?'ok':''}">${badge(i,c.ok)}<span><b>${escHtml(c.t)}</b><small>${escHtml(c.s)}</small></span></li>`).join('')}</ul></div>`:'';
+  const rank=Array.isArray(j.equipe)?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('trofeu','cp-ic-t')} Ranking da equipe <span class="cp-lat-sub">(semana)</span></h2></div><p class="help cp-aviso-rank">${escHtml(d.aviso_ranking)}</p>${j.equipe.length?`<ol class="cp-rank">${j.equipe.slice(0,5).map((r,i)=>`<li><span class="cp-rank-n">${i+1}</span><span>${escHtml(r.nome)}</span><b>${fmtN(r.pontos)} pts</b></li>`).join('')}</ol>`:'<p class="help">Ninguém pontuou nesta semana.</p>'}</div>`:'';
+  const at=`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('relogio','cp-ic-t')} Atividade recente</h2></div>${(d.atividade||[]).length?`<ul class="cp-ativ">${d.atividade.slice(0,6).map(a=>{const ic=CP_ATIV_IC[a.icone]||CP_ATIV_IC.relogio;return `<li><span class="cp-ativ-ic ${ic[1]}" aria-hidden="true">${cpIc(ic[0])}</span><span>${a.erro_id?`<button type="button" class="lnk" data-cp-abrir="${escHtml(a.erro_id)}"><b>${escHtml(a.titulo||a.texto)}</b></button>`:`<b>${escHtml(a.titulo||a.texto)}</b>`}<small>${escHtml([a.ator,a.codigo,cpDiasHoras(a.quando)].filter(Boolean).join(' · '))}</small></span></li>`}).join('')}</ul>`:'<p class="help">Nada registrado ainda.</p>'}${adm?lk('#auditoria','Ver histórico de atividades'):''}</div>`;
   el.innerHTML=prog+meta+conq+rank+at}
+function cpDiasHoras(ts){const t=Date.parse(String(ts||'').replace(' ','T')+'Z');if(isNaN(t))return '';const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?`há ${m} min`:m<1440?`há ${Math.round(m/60)} h`:`há ${qtd(Math.round(m/1440),'dia','dias')}`}
 async function cpCarregarVisoes(){const s=document.getElementById('cp-visoes');if(!s)return;try{CP_VISOES=await API('/api/problemas/visoes')}catch(_){CP_VISOES=[]}
   s.hidden=!CP_VISOES.length;const atual=cpQS(CP,false);s.innerHTML=`<option value="">Visões salvas (${fmtN(CP_VISOES.length)})</option>`+CP_VISOES.map(v=>`<option value="${escHtml(v.id)}"${v.params===atual?' selected':''}>${escHtml(v.nome)}</option>`).join('')+(CP_VISOES.some(v=>v.params===atual)?'<option value="apagar">Apagar esta visão</option>':'')}
 /* ---- painel lateral de resolução ---- */
