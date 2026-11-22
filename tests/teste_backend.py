@@ -15471,8 +15471,7 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
-        # CAMP-PROB-RAPIDO (22/11/2026): o Desfazer das ações rápidas pede 10 s (o.ms); sem o.ms continua 8 s no máximo. Nenhum fica preso.
-        ver("todo toast fecha sozinho (8 s; 10 s só quando pedido, o Desfazer das ações rápidas) e entra no histórico (guardarAviso)", "Math.min(o.ms||(o.acao?8000:2600),10000)" in html and "t.textContent=m;guardarAviso(m);" in html)
+        ver("todo toast fecha em no máximo 8 s (Math.min(…, 8000)) e entra no histórico (guardarAviso)", "Math.min(o.ms||(o.acao?8000:2600),8000)" in html and "t.textContent=m;guardarAviso(m);" in html)
         ver("o histórico abre pelo menu do avatar (Tarefas e avisos recentes) e lista os avisos desta sessão", 'data-who="avisos">Tarefas e avisos recentes<' in html and "a==='avisos')abrirTarefas()" in html and "data-avisos-hist" in html)
         ver("chip de tarefa concluída com sucesso fecha sozinho em 8 s; a que falhou fica", "N.every(t=>t.estado==='ok')&&!document.hidden)CHIP_FECHAR=setTimeout(" in html and "marcarTarefasVistas()},8000)" in html)
         ver("números carregando = esqueleto (num-skel): contador das listas, máquinas do topo e abas de Fundos", ".num-skel{" in html and "cnt.innerHTML=NUM_SKEL" in html and "${medindo?NUM_SKEL:lig} de ${capt.length}" in html and "if(FUNDOS_API==null)e.innerHTML=NUM_SKEL" in html)

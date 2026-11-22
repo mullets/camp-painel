@@ -3710,7 +3710,7 @@ function guardarAviso(m){if(!m)return;TOAST_HIST.unshift({em:new Date().toISOStr
 function avisosHistoricoHTML(){return TOAST_HIST.length?`<h3 class="hoje-h">Avisos desta sessão</h3><ul class="toast-hist">${TOAST_HIST.map(a=>`<li><small>${escHtml(fmtDataHora(a.em))}</small>${escHtml(a.m)}</li>`).join('')}</ul>`:''}
 let tt;function toast(m,o={}){const t=document.getElementById('toast');t.textContent=m;guardarAviso(m);t.classList.toggle('com-acao',!!o.acao);   // H4: o.acao={rotulo,fn} ("Desfazer"), fica 8 s
   if(o.acao){const b=document.createElement('button');b.type='button';b.className='toast-acao';b.textContent=o.acao.rotulo||'Desfazer';b.onclick=()=>{clearTimeout(tt);t.classList.remove('on','com-acao');b.remove();o.acao.fn()};t.appendChild(b)}
-  t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on','com-acao'),Math.min(o.ms||(o.acao?8000:2600),10000))}   // CAMP-PROB-RAPIDO: o Desfazer das ações rápidas fica 10 s
+  t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on','com-acao'),Math.min(o.ms||(o.acao?8000:2600),8000))}
 const th=document.getElementById('theme');th.addEventListener('change',()=>{document.documentElement.dataset.theme=th.value;try{localStorage.setItem('camp.theme',th.value)}catch(e){}});
 try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documentElement.dataset.theme=t}}catch(e){}
 
@@ -10647,7 +10647,7 @@ function cpAtualizarNumeros(){clearTimeout(CP_NUM_T);CP_NUM_T=setTimeout(async()
   const sub=document.getElementById('cp-sub');if(sub&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${fmtN(c.em_aberto)} ${c.em_aberto===1?'item que precisa':'itens que precisam'} de análise, conferência ou decisão.`}}catch(_){}
   atualizarPendencias();cpCarregarLateral()},150)}
 function cpToastRapido(r,mover){const pul=(r.pulados||[]).length?` · ${qtd(r.pulados.length,'ficou','ficaram')} de fora: ${r.pulados[0].motivo}`:'';
-  toast((r.mensagem||'Feito')+pul,r.desfazer?{ms:10000,acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
+  toast((r.mensagem||'Feito')+pul,r.desfazer?{acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
 async function cpRapida(ids,acao,extra={},b){if(b)b.disabled=true;
   try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:ids.map(Number),acao,...extra})});cpTirarLinhas(r.resolvidos||[]);cpToastRapido(r,false);return r}
   catch(err){toast(err.message);if(b)b.disabled=false;return null}}

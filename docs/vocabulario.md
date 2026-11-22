@@ -264,7 +264,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   campo + **Salvar**, **Não é problema…** ("Não é problema porque…": **O aviso não muda nada na folha** · **A folha já está certa** · **É o mesmo caso de
   outro problema já tratado**). Mover: "Mover a folha para F0xx-P0yyy · nome? (simulação: nada mudou ainda)", **Mover agora**, **Cancelar**. Avisos:
   "1 folha confirmada neste projeto · problema resolvido", "Folha movida para …", "Marcada como cópia", "Anotado: são folhas diferentes", "Dado salvo na
-  folha", "Fechado: não é problema", com **Desfazer** (10 s); "… ficaram de fora: <motivo>"; desfazer o mover: **Voltar a folha para o projeto de antes?**,
+  folha", "Fechado: não é problema", com **Desfazer** (8 s, o teto dos avisos); "… ficaram de fora: <motivo>"; desfazer o mover: **Voltar a folha para o projeto de antes?**,
   **Voltar a folha**. Grupo: "<projeto> · N folhas podem ser de outro projeto" (ou "N folhas parecem repetidas", "N problemas: <título>"), "o carimbo combina
   com …", "o mais antigo há N dias", **Todas são deste projeto** ("Sim, todas são deste projeto"), **Mover todas para…**, **Ver uma a uma** / **Recolher**;
   caixa **Agrupar**. **Resolver em sequência**: "N de M · K resolvidos", **Sair (Esc)**, "Abrir no painel (resolver com evidência)", "Fim da lista".
