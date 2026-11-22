@@ -98,12 +98,13 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     chk(ks.length >= 3 && ks.length <= 4, `§7: ${ks.length} indicadores (3 ou 4)`);
     chk(new Set(ks.map(k => k.alt)).size === 1 && ks.every(k => k.fs >= 24), `§7: mesma altura e número grande (${ks.map(k => k.alt + 'px/' + k.fs).join(', ')})`);
     const kc = ks.find(k => k.rota === 'filas/conferir'), kd = ks.find(k => k.rota === 'decisoes'), kh = ks.find(k => /conferidas? hoje/.test(k.l));
-    chk(kc && +kc.v === pend.lotes_conferir && /lotes? para conferir/.test(kc.l), `§7: "lotes para conferir" = ${pend.lotes_conferir} (fonte única)`);
+    // CAMP-HOME-UX (decisão do Rafael): o número grande são as folhas; a linha de baixo, "em N lotes"
+    chk(kc && +kc.v.replace(/\D/g, '') === pend.folhas_conferir && /folhas? para conferir/.test(kc.l), `§7: "folhas para conferir" = ${pend.folhas_conferir} (fonte única)`);
     chk(kd && +kd.v === pend.decisoes, `§7: "decisões pendentes" = ${pend.decisoes}`);
     chk(kh && kh.botao && !kh.rota && (/^\d+$/.test(kh.v) || kh.v === 'Sem dados'), `§7: "folhas conferidas hoje" não é lista: o botão leva ao gráfico de Resultados (CAMP-HOME-UX), não a uma lista: "${kh && kh.v}"`);
     chk(ks.every(k => !/\b(lote|decis|folha)/.test(k.l) || [/lote/, /decis/, /folha/].filter(r => r.test(k.l)).length === 1), '§7: cada indicador conta um tipo só (lotes, decisões ou folhas)');
     await P.click('#v-painel .ini-kpi[data-ini-rota="filas/conferir"]'); await P.waitForTimeout(1500);
-    chk(/^filas\/conferir/.test(await P.evaluate(() => rotaAtual())) && await P.locator('#filas-body tr[data-fase]').count() === pend.lotes_conferir, '§7: clicar em "lotes para conferir" abre Material novo filtrado com as mesmas linhas');
+    chk(/^filas\/conferir/.test(await P.evaluate(() => rotaAtual())) && await P.locator('#filas-body tr[data-fase]').count() === pend.lotes_conferir, '§7: clicar em "folhas para conferir" abre Material novo filtrado com as mesmas linhas');
     await abrirHome(P);
     await P.click('#v-painel .ini-kpi[data-ini-rota="decisoes"]'); await P.waitForTimeout(1500);
     chk(/^decisoes/.test(await P.evaluate(() => rotaAtual())) && await P.locator('#dec-body tr[data-abrir]').count() === pend.decisoes, '§7: clicar em "decisões pendentes" abre Decisões com as mesmas linhas');

@@ -6,7 +6,7 @@
 //  - cada linha com prioridade + o porquê, miniatura, responsável e UM botão principal;
 //  - gargalo do caminho pela espera acumulada (amarelo, com "aguardando há");
 //  - sistemas: uma linha verde quando tudo está normal; o que falha aparece aberto;
-//  - nível e conquistas com "Ocultar conquistas"; nenhum quadro da equipe por padrão;
+//  - nível e conquistas com "Ocultar conquistas"; o Ranking da equipe (mês) ligado por padrão (decisão do Rafael, 22/11/2026);
 //  - a barra do topo é a MESMA do main (marcação idêntica, mesmos ids); 390 px sem rolagem lateral; nenhum erro de JavaScript.
 // CAMP-HOME-UX maquete (22/11/2026, "tá faltando um monte de elemento"): a mesma Home no desenho da maquete do Rafael — "Entenda esta página"
 //  fechada numa linha; indicadores com ícone; linha da fila curta ("Há 19 dias", a frase da prioridade na dica); caminho em 7 cartões LADO A
@@ -174,7 +174,7 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
 
     // ---------- progresso e conquistas ----------
     chk(/Meta da semana/.test(await P.innerText('#ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-meta')), 'meta coletiva da semana no alto ("de 100 pontos validados")');
-    chk(/Nível 1/.test(await P.innerText('#ini-jogo')) && /XP/.test(await P.innerText('#ini-jogo')) && !(await P.$('#ini-jogo .ini-equipe')), 'nível pessoal com XP; nenhum quadro da equipe por padrão');
+    chk(/Nível 1/.test(await P.innerText('#ini-jogo')) && /XP/.test(await P.innerText('#ini-jogo')) && !!(await P.$('#ini-jogo #ini-ranking')), 'nível pessoal com XP; Ranking da equipe (mês) ligado por padrão');
     await P.click('#ini-jogo .ini-conq-todas > summary'); await P.click('#ini-jogo [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
     chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !/Nível 1/.test(await P.innerText('#ini-jogo')), '"Ocultar conquistas" esconde o nível e as conquistas');
     await P.click('#ini-jogo [data-ini-conquistas="0"]'); await P.waitForTimeout(1200);

@@ -58,10 +58,11 @@ MODOS_RAPIDOS |= {"amigo_duplicado"}   # CAMP-AMIGO-DUP 21/11/2026: e-mail repet
 MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doação paga com a doação de origem; Conferir Amigos das doações pagas (site falso; contrato 1.30, migração 240; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
-MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking desligado; migração 242; linha própria)
+MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking da equipe ligado por padrão desde a 243; migração 242; linha própria)
 
-MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking desligado (linha própria)
+MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking da equipe ligado por padrão (linha própria)
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
+MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -12235,7 +12236,7 @@ def filho(modo):
         # CAMP-PROB-UX (22/11/2026, documento do Rafael "Central de Problemas"): fases com campos obrigatórios, reabrir com justificativa,
         # filtros combinados (Críticos + Sem responsável), contadores sem contar duas vezes, atribuição em lote (tudo ou nada, com a regra da
         # Home: tarefa_responsavel), juntar duplicado preservando o histórico, pontos SÓ de resolução validada pelo sistema único da Home
-        # (recontados do estado: reabriu, some), ranking desligado por padrão, revisão por outra pessoa (desligada por padrão) e os problemas
+        # (recontados do estado: reabriu, some), ranking da equipe (ligado por padrão desde a 243), revisão por outra pessoa (desligada por padrão) e os problemas
         # automáticos de antes continuando na lista e fechando sozinhos (pelo sistema).
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -12375,9 +12376,9 @@ def filho(modo):
         ver("duplicado: as evidências vão para o que fica (marcando de onde vieram) e o histórico dos dois aparece", any(v.get("origem_erro_id") == e_dup for v in Dm["evidencias"])
             and any(h.get("do_duplicado") == e_dup for h in Dm["historico"]) and any(h["tipo"] == "recebeu_duplicado" for h in Dm["historico"]) and [d["id"] for d in Dm["duplicados"]] == [e_dup], "")
         ver("duplicado de si mesmo é recusado", fase(ana, e_av, fase="duplicado", referencia=e_av).status_code == 400, "")
-        # 7) revisão por outra pessoa (desligada por padrão) e ranking (desligado por padrão)
-        ver("padrões: revisão por outra pessoa e ranking desligados", ana.get("/api/problemas/resumo").json()["revisao_outra_pessoa"] is False
-            and "equipe" not in ana.get("/api/problemas/progresso").json()["jogo"], "")
+        # 7) revisão por outra pessoa (desligada por padrão) e ranking (LIGADO por padrão: decisão do Rafael, migração 243)
+        ver("padrões: revisão por outra pessoa desligada, ranking da equipe ligado", ana.get("/api/problemas/resumo").json()["revisao_outra_pessoa"] is False
+            and "equipe" in ana.get("/api/problemas/progresso").json()["jogo"], "")
         c.execute("UPDATE configuracao SET valor='1' WHERE chave='problemas.revisao_outra_pessoa'"); c.commit()
         ver("revisão ligada: a rota antiga também não fecha o tipo sensível (409)", ana.patch(f"/api/erros/{e_aut}", json={"situacao": "corrigido", "resolucao": "pela rota antiga"}).status_code == 409, "")
         fase(ana, e_aut, fase="em_analise")
@@ -15380,7 +15381,7 @@ def filho(modo):
         for l in res: print(l)
     elif modo == "home_trabalho":
         # CAMP-HOME-UX (22/11/2026, documento do Rafael): prioridade 0–100 explicável (§8), responsável e "Minha fila", meta da semana,
-        # pontos SÓ de eventos validados (e que somem quando desfeitos), conquistas ocultáveis, ranking desligado por padrão, gargalo do caminho
+        # pontos SÓ de eventos validados (e que somem quando desfeitos), conquistas ocultáveis, ranking da equipe (ligado por padrão desde a 243), gargalo do caminho
         # pela espera acumulada e a comparação do ritmo com o período anterior.
         init_db(); _aplicar_migracoes_real()
         from app import auth, pendencias as pd, home_trabalho as ht
@@ -15453,7 +15454,7 @@ def filho(modo):
         # ----- pontos validados e reversíveis -----
         xp = lambda x: (x.get_json() if hasattr(x, "get_json") else x.json()).get("eu", {}).get("xp")  # noqa: E731
         pg0 = op.get("/api/painel/progresso").json()
-        ver("progresso: meta padrão 100, nada feito, ranking AUSENTE por padrão", pg0["semana"]["meta"] == 100 and pg0["semana"]["feito"] == 0 and "equipe" not in pg0 and pg0["eu"]["xp"] == 0, str(pg0.get("semana")))
+        ver("progresso: meta padrão 100, nada feito, ranking da equipe LIGADO por padrão (vazio)", pg0["semana"]["meta"] == 100 and pg0["semana"]["feito"] == 0 and pg0.get("equipe") == [] and pg0["eu"]["xp"] == 0, str(pg0.get("semana")))
         cod = "F026-P0001-1972-S01-D00001"
         op.post(f"/api/itens/{cod}/revisao", json={"estado": "conferida"})
         p1 = op.get("/api/painel/progresso").json()
@@ -15505,6 +15506,88 @@ def filho(modo):
         c.execute("UPDATE item SET revisao='conferida', revisado_por='op@camp.arq.br', revisado_em=datetime('now','-20 days') WHERE codigo='F026-P0001-1972-S01-D00003'"); c.commit()
         rt = pd.ritmo(c, 14)
         ver("ritmo: folhas conferidas nos 14 dias anteriores (para a variação; a tela só compara com base)", rt["anterior_conferidas"] == 1 and rt["periodo_dias"] == 14, str(rt.get("anterior_conferidas")))
+        for l in res: print(l)
+    elif modo == "ranking_ligado":
+        # CAMP-HOME-UX (decisões do Rafael, 22/11/2026): Ranking da equipe (mês) LIGADO por padrão (migração 243 vira só o padrão intocado),
+        # um admin desliga (PUT /api/painel/ranking), o ranking é do MÊS (só pontos validados) e os cartões da Home têm folhas E lotes
+        # (folhas_aprovar / folhas_publicar / folhas_esperam_admin, opcionais).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, pendencias as pd, home_trabalho as ht
+        from app.db import aplicar_migracoes as _mig
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from datetime import datetime as _dt
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        val = lambda: tuple(c.execute("SELECT valor, atualizado_por FROM configuracao WHERE chave='jogo.ranking_equipe'").fetchone() or (None, None))  # noqa: E731
+        M = "243_ranking_equipe_ligado.sql"
+        ver("instalação nova: jogo.ranking_equipe = '1' (ligado) e o texto diz mês", val()[0] == "1"
+            and "mês" in c.execute("SELECT descricao FROM configuracao WHERE chave='jogo.ranking_equipe'").fetchone()[0], str(val()))
+        def rerodar(prep):
+            c.execute("DELETE FROM migracao WHERE nome=?", (M,)); prep(); c.commit(); _mig(); return val()
+        v1 = rerodar(lambda: c.execute("UPDATE configuracao SET valor='0', atualizado_por=NULL WHERE chave='jogo.ranking_equipe'"))
+        ver("banco antigo com o padrão intocado da 241 ('0', ninguém mexeu): a 243 liga", v1[0] == "1", str(v1))
+        v2 = rerodar(lambda: c.execute("UPDATE configuracao SET valor='0', atualizado_por='adm@camp.arq.br' WHERE chave='jogo.ranking_equipe'"))
+        ver("um admin que já desligou de propósito: a 243 NÃO religa", v2 == ("0", "adm@camp.arq.br"), str(v2))
+        v3 = rerodar(lambda: c.execute("DELETE FROM configuracao WHERE chave='jogo.ranking_equipe'"))
+        ver("banco sem a chave: a 243 cria ligada", v3[0] == "1", str(v3))
+        arq_m = RAIZ / "db" / "migrations" / M
+        sql = arq_m.read_text(encoding="utf-8") if arq_m.exists() else ""
+        ver("a migração 243 existe", bool(sql), str(arq_m))
+        c.execute("INSERT OR IGNORE INTO configuracao (chave, valor) VALUES ('jogo.ranking_equipe', '0')")
+        c.execute("UPDATE configuracao SET valor='0', atualizado_por='adm@camp.arq.br' WHERE chave='jogo.ranking_equipe'")
+        c.executescript(sql); c.executescript(sql)
+        ver("idempotente: rodar o SQL duas vezes não muda o que um admin escolheu nem duplica a chave", val()[0] == "0"
+            and c.execute("SELECT COUNT(*) FROM configuracao WHERE chave='jogo.ranking_equipe'").fetchone()[0] == 1, str(val()))
+        c.execute("UPDATE configuracao SET valor='1', atualizado_por=NULL WHERE chave='jogo.ranking_equipe'"); c.commit()
+        ver("inicio_mes_utc: dia 1, 00:00 de São Paulo, em UTC", ht.inicio_mes_utc(_dt(2026, 11, 22, 10)) == "2026-11-01 03:00:00", ht.inicio_mes_utc(_dt(2026, 11, 22, 10)))
+        # ----- dados: folhas conferidas por pessoas (no mês e no mês passado), um lote para aprovar e um para conferir -----
+        for em, nome, papel in (("adm@camp.arq.br", "Ana Admin", "admin"), ("op@camp.arq.br", "Otto Operador", "operador"), ("le@camp.arq.br", "Lia Leitura", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1),('F026',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0002','F026',2,'Ibirá',1975)")
+        l_apr = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('LA','F026-P0001','/a','revisao')").lastrowid
+        l_conf = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('LC','F026-P0002','/c','revisao')").lastrowid
+        mes = ht.inicio_mes_utc()
+        antes_mes = (_dt.strptime(mes, "%Y-%m-%d %H:%M:%S") - __import__("datetime").timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S")
+        for n_, (por, quando) in enumerate((("op@camp.arq.br", mes), ("op@camp.arq.br", mes), ("adm@camp.arq.br", mes), ("adm@camp.arq.br", antes_mes),
+                                             ("adm@camp.arq.br", antes_mes), ("adm@camp.arq.br", antes_mes)), 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,lote_id,revisao,revisado_por,revisado_em,origem) VALUES (?,?,?,?,?,?,'conferida',?,?,'campvision')",
+                      (f"F026-P0001-1972-S01-D0000{n_}", "F026-P0001", "S01", n_, f"Planta {n_}", l_apr, por, quando))
+        for n_ in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,lote_id,revisao,origem) VALUES (?,?,?,?,?,?,'pendente','campvision')",
+                      (f"F026-P0002-1975-S01-D0000{n_}", "F026-P0002", "S01", n_, f"Corte {n_}", l_conf))
+        c.commit()
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        pg = op.get("/api/painel/progresso").json()
+        ver("ligado por padrão: o progresso traz o Ranking da equipe do MÊS (posição = ordem, nome, pontos validados) e o aviso",
+            pg.get("equipe") == [{"nome": "Otto Operador", "pontos": 2}, {"nome": "Ana Admin", "pontos": 1}] and pg.get("equipe_periodo") == "mes"
+            and pg.get("equipe_desde") == mes and "não serve para avaliar desempenho" in pg.get("aviso_ranking", ""), str({k: pg.get(k) for k in ("equipe", "equipe_periodo", "equipe_desde")}))
+        ver("o mês passado não entra no ranking (Ana tem 3 folhas de antes do dia 1)", next(x for x in pg["equipe"] if x["nome"] == "Ana Admin")["pontos"] == 1, str(pg["equipe"]))
+        pp = op.get("/api/problemas/progresso").json()
+        ver("Problemas mostra o MESMO ranking (o da Home) e o aviso de que não serve para avaliar desempenho", pp["jogo"].get("equipe") == pg["equipe"]
+            and "não serve para avaliar desempenho" in pp["aviso_ranking"], str(pp["jogo"].get("equipe")))
+        ver("quem só lê não vê nomes no ranking", "equipe" not in le.get("/api/painel/progresso").json() and "equipe" not in le.get("/api/problemas/progresso").json()["jogo"])
+        # ----- um admin desliga (Configurações) -----
+        r_op, r_le = op.put("/api/painel/ranking", json={"ligado": False}), le.put("/api/painel/ranking", json={"ligado": False})
+        r_ad = adm.put("/api/painel/ranking", json={"ligado": False})
+        ver("desligar: operador e leitura não podem (403); admin (não master) pode", (r_op.status_code, r_le.status_code, r_ad.status_code) == (403, 403, 200), f"{r_op.status_code} {r_le.status_code} {r_ad.status_code}")
+        ver("desligado: o ranking some da Home e de Problemas; fica gravado quem desligou e no Histórico", "equipe" not in op.get("/api/painel/progresso").json()
+            and "equipe" not in op.get("/api/problemas/progresso").json()["jogo"] and val() == ("0", "adm@camp.arq.br")
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='config' AND codigo='jogo.ranking_equipe' AND ator='adm@camp.arq.br'").fetchone()[0] == 1, str(val()))
+        v4 = rerodar(lambda: None)
+        ver("e a 243 rodando de novo não religa o que o admin desligou", v4[0] == "0", str(v4))
+        ver("religar (admin): volta", adm.put("/api/painel/ranking", json={"ligado": True}).status_code == 200 and "equipe" in op.get("/api/painel/progresso").json())
+        # ----- folhas E lotes nos números da Home -----
+        n = op.get("/api/painel").json()["pendencias"]
+        ver("pendências trazem as folhas dos lotes que esperam um admin (campos novos): 1 lote para aprovar com 6 folhas",
+            n.get("lotes_aprovar") == 1 and n.get("folhas_aprovar") == 6 and n.get("folhas_publicar") == 0 and n.get("folhas_esperam_admin") == 6 and n.get("esperam_admin") == 1,
+            str({k: n.get(k) for k in ("lotes_aprovar", "folhas_aprovar", "lotes_publicar", "folhas_publicar", "esperam_admin", "folhas_esperam_admin")}))
+        ver("Para conferir: 2 folhas em 1 lote (os dois números vêm da mesma rota)", n.get("folhas_conferir") == 2 and n.get("lotes_conferir") == 1, f"{n.get('folhas_conferir')} {n.get('lotes_conferir')}")
         for l in res: print(l)
     elif modo == "home_maquete":
         # CAMP-HOME-UX (maquete do Rafael, 22/11/2026): "Quanto do acervo já está no site" em donut (no site · a publicar · em preparo) e
@@ -20854,6 +20937,7 @@ else:
         ok("identificacao_original" in [r[1] for r in c.execute("PRAGMA table_info(projeto)")], "coluna identificacao_original adicionada")
         ok(c.execute("SELECT valor FROM configuracao WHERE chave='qnap.ip'").fetchone()[0] == "192.168.15.30", "IP do QNAP preenchido pela migração 023")
         ok(c.execute("SELECT count(*) FROM configuracao WHERE chave='estacao.token'").fetchone()[0] == 1, "chave estacao.token criada")
+        ok(c.execute("SELECT valor FROM configuracao WHERE chave='jogo.ranking_equipe'").fetchone()[0] == "1", "banco antigo: Ranking da equipe ligado pela migração 243 (CAMP-HOME-UX)")
         jpg = {r[0][-1]: r[1] for r in c.execute("SELECT codigo, arquivo_jpg FROM item ORDER BY codigo")}
         ok(jpg["1"] == "https://camp.arq.br/u/a-scaled.jpg", "migração 028: ID de anexo trocado pelo endereço real quando o espelho tem")
         ok(jpg["2"] is None and jpg["3"] is None, "migração 028: ID sem URL conhecida e HTML viram vazio (a tela usa o documento do site)")
@@ -22373,7 +22457,7 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
-print("CAMP-PROB-UX: Central de Problemas (fases, campos obrigatórios, filtros, atribuir, duplicado, pontos só validados, ranking desligado)")
+print("CAMP-PROB-UX: Central de Problemas (fases, campos obrigatórios, filtros, atribuir, duplicado, pontos só validados, ranking da equipe ligado)")
 rc, out = rodar("central_problemas", f"{tmp}/central_problemas.db")
 if rc != 0: ok(False, f"teste central_problemas não rodou -> {out[-1500:]}")
 else:
@@ -22468,6 +22552,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home UX: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-HOME-UX decisões: ranking da equipe (mês) ligado por padrão, migração 243 só vira o padrão, admin desliga; folhas e lotes nos números")
+rc, out = rodar("ranking_ligado", f"{tmp}/ranking_ligado.db")
+if rc != 0: ok(False, f"teste ranking_ligado não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ranking/números: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("CAMP-HOME-UX maquete: donut do site (no site · a publicar · em preparo) e melhorias de hoje")
 rc, out = rodar("home_maquete", f"{tmp}/home_maquete.db")
