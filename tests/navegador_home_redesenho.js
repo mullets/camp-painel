@@ -18,6 +18,10 @@
 // CAMP-HOME-UX (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): sem nível, XP, título, medalha, selo
 //  nem cor de jogo. A coluna da direita tem o cartão branco "Seu trabalho" (pontos validados na semana e no mês + a meta da equipe na barra
 //  padrão), "Marcos" em texto (com data) e o ranking numa tabela simples; o topo não muda.
+// CAMP-HOME-UX (Rafael, 22/11/2026, apontando o cartão "Marcos": "aqui sim pode ficar gamificado como estava antes, com ícones e emojis"):
+//  o "Marcos" é a ÚNICA exceção ao tom sério: os totais viram 4 selos grandes coloridos (escudo verde, hexágono roxo, círculo azul, escudo
+//  dourado) com número e rótulo; cada marco tem um emoji do seu tipo num selinho colorido; "Próximo marco" com 🎯 e uma barra. "Seu trabalho"
+//  e o ranking continuam sem emoji, selo ou figura.
 // Uso (servidor PRÓPRIO, porta 8931):
 //   CAMP_DB_PATH=/dev/shm/t/h.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/dev/shm/t/h.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8931)
@@ -56,6 +60,14 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
   // mais trabalho na fila (para passar de 5 linhas) e um lote parado há 19 dias em Conferir (o gargalo pela espera)
   py("for n in ('Pesquisadora A','Editora B','Museu C'):\n  con.execute(\"INSERT INTO solicitacao (solicitante,finalidade,situacao) VALUES (?, 'pesquisa','aguarda_resposta')\", (n,))");
   py("con.execute(\"UPDATE lista_processamento SET etapa_desde=datetime('now','-19 days') WHERE id IN (SELECT l.id FROM lista_processamento l JOIN item i ON i.lote_id=l.id WHERE i.revisao='pendente' AND l.aprovado_em IS NULL)\")");
+  // marcos do Rafael (o cartão "Marcos" precisa de marcos para mostrar os emoji): 12 folhas conferidas por ele há 10–12 dias (folhas NOVAS,
+  // já conferidas: a fila não muda) e uma decisão nova já respondida por ele → "Primeira folha conferida", "10 folhas conferidas", "Primeira decisão respondida"
+  py("r=con.execute('SELECT * FROM item LIMIT 1');cols=[d[0] for d in r.description];base=dict(zip(cols,r.fetchone()))\n"
+    + "for k in range(12):\n  x=dict(base);x['codigo']=base['codigo'][:-5]+'%05d'%(90+k);x['sequencial']=90+k;x['revisao']='conferida';x['revisado_por']='rafael@camp.arq.br';x['revisado_em']=\"%s\"%con.execute(\"SELECT datetime('now',?)\",('-%d days'%(10+k%3),)).fetchone()[0];x['lote_id']=None;x['md5']=None;x['phash']=None\n"
+    + "  con.execute('INSERT INTO item (%s) VALUES (%s)'%(','.join(x),','.join('?'*len(x))),list(x.values()))\n"
+    + "d=dict(zip([c[1] for c in con.execute('PRAGMA table_info(decisao)')],[None]*20));r=con.execute('SELECT * FROM decisao LIMIT 1');d=dict(zip([c[0] for c in r.description],r.fetchone()));d.pop('id')\n"
+    + "d.update(chave=(d.get('chave') or 'x')+'-marcos',situacao='resolvida',escolha='aceitar',resolvida_por='rafael@camp.arq.br',resolvida_em=con.execute(\"SELECT datetime('now','-9 days')\").fetchone()[0])\n"
+    + "con.execute('INSERT INTO decisao (%s) VALUES (%s)'%(','.join(d),','.join('?'*len(d))),list(d.values()))");
   const browser = await chromium.launch({ executablePath: CHROME });
   const erros = [];
   try {
@@ -122,10 +134,20 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
         passos, ok: [...document.querySelectorAll('#ini-caminho .ini-passo')].map(l => [l.classList.contains('zero'), !!l.querySelector('.ini-passo-ok svg')]),
         donut: (() => { const d = document.querySelector('#ini-cobertura [data-cob="folhas"].ini-donut-row'); return d ? { pct: +d.dataset.pct, txt: d.querySelector('.ini-cob-pct').textContent, n: d.querySelector('.ini-cob-n').textContent, leg: [...d.querySelectorAll('.ini-donut-leg li')].map(x => x.textContent.trim()), arcos: d.querySelectorAll('circle.ini-donut-s').length } : null; })(),
         trab: (() => { const t = document.querySelector('#ini-jogo #ini-trabalho'); return t ? { txt: t.innerText.replace(/\s+/g, ' '), dd: [...t.querySelectorAll('.trab-n dd')].map(x => x.textContent.trim()) } : null; })(),
-        marcos: (() => { const m = document.querySelector('#ini-jogo #ini-marcos'); return m ? { tit: m.querySelector('h3').textContent, tot: (m.querySelector('.marcos-tot') || {}).textContent || '', li: [...m.querySelectorAll(':scope > .marcos-l li')].map(x => x.innerText.replace(/\s+/g, ' ')), arte: m.querySelectorAll('svg, img, [class*="selo"], [class*="badge"], [class*="ic"]').length, ocultar: (m.querySelector('[data-ini-conquistas="1"]') || {}).textContent || '' } : null; })(),
+        marcos: (() => { const m = document.querySelector('#ini-jogo #ini-marcos'); if (!m) return null;
+          const EMO = /\p{Extended_Pictographic}/u, prox = m.querySelector('.marcos-prox');
+          return { tit: m.querySelector('h3').textContent, ocultar: (m.querySelector('[data-ini-conquistas="1"]') || {}).textContent || '', como: !!m.querySelector('.ini-marcos-todos > summary') && /Como os pontos são contados/.test(m.querySelector('.ini-marcos-todos > summary').textContent),
+            selos: [...m.querySelectorAll(':scope > .marcos-selos > li.marcos-selo')].map(x => { const ic = x.querySelector('.marcos-selo-ic svg'), f = ic && ic.querySelector('.f');
+              return { cls: [...x.classList].find(c => c.startsWith('s-')) || '', n: +((x.querySelector('b') || {}).textContent || '').replace(/\D/g, ''), rot: x.innerText.replace(/\s+/g, ' ').trim(), svg: !!ic, cor: f ? getComputedStyle(f).fill : '', w: Math.round(ic ? ic.getBoundingClientRect().width : 0) }; }),
+            li: [...m.querySelectorAll(':scope > .marcos-l li')].map(x => { const ic = x.querySelector('.marco-ic');
+              return { txt: x.innerText.replace(/\s+/g, ' ').trim(), tipo: x.dataset.marcoTipo || '', emo: ic ? ic.textContent.trim() : '', temEmo: !!ic && EMO.test(ic.textContent), fundo: ic ? getComputedStyle(ic).backgroundColor : '', d: (x.querySelector('.marco-d') || {}).textContent || '' }; }),
+            prox: prox ? { txt: prox.innerText.replace(/\s+/g, ' ').trim(), alvo: (prox.querySelector('.marcos-alvo') || {}).textContent || '', w: +((prox.querySelector('.ini-bar i') || { dataset: {} }).dataset.w || -1), larg: Math.round((prox.querySelector('.ini-bar i') || { getBoundingClientRect: () => ({ width: -1 }) }).getBoundingClientRect().width) } : null }; })(),
+        sobrio: (() => { const EMO = /\p{Extended_Pictographic}/u, t = document.querySelector('#ini-jogo #ini-trabalho'), r = document.querySelector('#ini-jogo #ini-ranking');
+          const fig = el => el ? [...el.querySelectorAll('svg, img, [class*="selo"], [class*="badge"], .marco-ic, .marcos-alvo')].filter(x => !x.closest('.ini-meta-mais, .rank-q')).length : -1;
+          return { trabEmo: t ? EMO.test(t.innerText) : null, rankEmo: r ? EMO.test(r.innerText) : null, trabFig: fig(t), rankFig: fig(r) }; })(),
         rank: (() => { const r = document.querySelector('#ini-jogo #ini-ranking'); return r ? { tit: r.querySelector('h3').textContent.replace(/\s+/g, ' ').trim(), tabela: !!r.querySelector('table.rank-tab') || /Ninguém pontuou neste mês ainda/.test(r.textContent), arte: r.querySelectorAll('svg:not(.rank-q svg), img, [class*="medal"], [class*="trof"]').length,
           cores: [...new Set([...r.querySelectorAll('tbody td')].map(td => getComputedStyle(td).backgroundColor))] } : null; })(),
-        arte: [...document.querySelectorAll('#ini-jogo svg, #ini-jogo img')].filter(x => !x.closest('.ini-meta-mais, .rank-q')).length,
+        arte: [...document.querySelectorAll('#ini-jogo svg, #ini-jogo img')].filter(x => !x.closest('.ini-meta-mais, .rank-q, #ini-marcos')).length,
         jogoTxt: document.getElementById('ini-jogo').innerText,
         mh: document.querySelector('#ini-melhorias #ini-mh-hoje') ? document.querySelector('#ini-melhorias #ini-mh-hoje').innerText : null,
         ordemNaAba: !!document.querySelector('#ini-tarefas .ini-abas-linha #ini-ordem'),
@@ -144,8 +166,23 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     chk(mq.trab && /Pontos validados nesta semana/.test(mq.trab.txt) && /no mês/.test(mq.trab.txt) && mq.trab.dd.length === 2 && +mq.trab.dd[0].replace(/\D/g, '') === sem0 && +mq.trab.dd[1].replace(/\D/g, '') === pg0.eu.pontos_mes,
       `"Seu trabalho" mostra os pontos validados da semana e do mês (do servidor) ${JSON.stringify([mq.trab, sem0, pg0.eu.pontos_mes])}`);
     const marcosEsp = (pg0.eu.conquistas || []).filter(c => c.id !== 'semana_consistente');
-    chk(mq.marcos && mq.marcos.tit === 'Marcos' && mq.marcos.arte === 0 && mq.marcos.ocultar === 'Ocultar' && mq.marcos.tot.startsWith(`${ct.folha_conferida.toLocaleString('pt-BR')} folha`) && new RegExp(`${ct.lote_aprovado} lotes? aprovados?`).test(mq.marcos.tot)
-      && mq.marcos.li.length === Math.min(4, marcosEsp.length) && mq.marcos.li.every(l => /\d{2}\/\d{2}$/.test(l)), `"Marcos" em texto, sem ícone, com os totais e as datas ${JSON.stringify(mq.marcos)}`);
+    // "Marcos" é a única exceção ao tom sério (Rafael, 22/11/2026): selos grandes nos totais, emoji por marco, 🎯 + barra no próximo marco
+    const mm = mq.marcos || {}, sel = mm.selos || [], probl = (+ct.problema_resolvido || 0) + (+ct.problema_critico_resolvido || 0);
+    chk(mq.marcos && mm.tit === 'Marcos' && mm.ocultar === 'Ocultar' && mm.como, `"Marcos" mantém "Ocultar" e "Como os pontos são contados?" ${JSON.stringify([mm.tit, mm.ocultar, mm.como])}`);
+    chk(sel.length === 4 && JSON.stringify(sel.map(x => x.cls)) === JSON.stringify(['s-folha', 's-lote', 's-decisao', 's-problema']) && sel.every(x => x.svg && x.w >= 36)
+      && sel[0].n === ct.folha_conferida && /folhas? conferidas?/.test(sel[0].rot) && sel[1].n === ct.lote_aprovado && /lotes? aprovados?/.test(sel[1].rot)
+      && sel[2].n === (+ct.decisao_resolvida || 0) && /decis/.test(sel[2].rot) && sel[3].n === probl && /problemas? corrigidos?/.test(sel[3].rot),
+      `totais em 4 selos grandes (folhas · lotes · decisões · problemas corrigidos) com número e rótulo ${JSON.stringify(sel)}`);
+    const coresSel = new Set(sel.filter(x => x.n).map(x => x.cor));
+    chk(coresSel.size === sel.filter(x => x.n).length && sel.filter(x => x.n).length >= 2, `cada selo com número tem a sua cor (${JSON.stringify(sel.map(x => [x.cls, x.cor]))})`);
+    const EMO_TIPO = { primeira: '⭐', folha: '🏅', lote: '📦', decisao: '✅', problema: '🛠️' };
+    chk(mm.li && mm.li.length === Math.min(4, marcosEsp.length) && mm.li.length >= 2 && mm.li.every(l => l.temEmo && EMO_TIPO[l.tipo] === l.emo && /^\d{2}\/\d{2}$/.test(l.d)),
+      `cada marco com o emoji do seu tipo e a data ${JSON.stringify(mm.li)}`);
+    chk(new Set((mm.li || []).map(l => l.tipo)).size === new Set((mm.li || []).map(l => l.fundo)).size, `selinho de cor diferente por tipo de marco ${JSON.stringify((mm.li || []).map(l => [l.tipo, l.fundo]))}`);
+    const px = pg0.eu.proxima;
+    chk(px ? (mm.prox && mm.prox.alvo === '🎯' && mm.prox.txt.includes(`Próximo marco: ${px.rotulo}`) && Math.abs(mm.prox.w - Math.min(100, 100 * px.feito / px.de)) < 0.01 && mm.prox.larg > 0) : !mm.prox,
+      `"Próximo marco" com 🎯 e a barra de progresso (${JSON.stringify([mm.prox, px])})`);
+    chk(mq.sobrio && mq.sobrio.trabEmo === false && mq.sobrio.rankEmo === false && mq.sobrio.trabFig === 0 && mq.sobrio.rankFig === 0, `"Seu trabalho" e o ranking continuam sem emoji nem selo ${JSON.stringify(mq.sobrio)}`);
     chk(mq.rank && mq.rank.tit === 'Pontos validados no mês · equipe' && mq.rank.tabela && mq.rank.arte === 0 && mq.rank.cores.length <= 1, `ranking numa tabela simples, sem medalha nem cor de pódio ${JSON.stringify(mq.rank)}`);
     chk(mq.arte === 0 && !/\bXP\b|Nível|Guardião|Primeiros passos|conquista|sequência/i.test(mq.jogoTxt), `coluna da direita sem arte de jogo e sem "XP"/"Nível"/"Guardião" (${mq.arte} figuras; ${JSON.stringify(mq.jogoTxt.slice(0, 200))})`);
     const fhoje = (pg0.hoje || {}).folha_conferida || 0;

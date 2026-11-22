@@ -2,6 +2,8 @@
 // Central de Problemas": os cartões abrem a lista filtrada; abas e filtros rápidos funcionam e ficam no endereço; abrir e fechar o painel
 // lateral mantém a posição e os filtros; resolver atualiza os contadores; o topo (usuário, situação, temperatura) não muda; no celular
 // (390 px) nada passa da largura e o painel vira tela cheia; "/" busca; link permanente abre o problema; nenhum erro de JavaScript.
+// CAMP-HOME-UX (Rafael, 22/11/2026: "aqui sim pode ficar gamificado como estava antes, com ícones e emojis"): o cartão "Marcos" é a
+// única exceção ao tom sério (selos grandes nos totais e um emoji por marco); "Seu trabalho", o ranking e o resto seguem sóbrios.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/x/cp.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/x/cp.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8940)
@@ -133,12 +135,19 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     // tom sério (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): "Seu trabalho" (pontos da semana e do mês +
     // meta da equipe), "Marcos" em texto, ranking em tabela e "Atividade recente" com ícone neutro; nada de nível, XP, selo, hexágono ou troféu
     const lat = await page.$eval('#cp-lateral', el => { const t = s => [...el.querySelectorAll('.cp-lat-h h2')].map(h => h.textContent.replace(/\s+/g, ' ').trim()); const ic = [...el.querySelectorAll('.cp-ativ-ic')];
-      return { tit: t(), txt: el.innerText, trab: (el.querySelector('#cp-trabalho') || {}).innerText || '', marcos: el.querySelector('#cp-marcos') ? { arte: el.querySelectorAll('#cp-marcos svg, #cp-marcos img, #cp-marcos [class*="badge"]').length, tot: (el.querySelector('#cp-marcos .marcos-tot') || {}).textContent || '' } : null,
+      return { tit: t(), txt: el.innerText, trab: (el.querySelector('#cp-trabalho') || {}).innerText || '', marcos: el.querySelector('#cp-marcos') ? { selos: [...el.querySelectorAll('#cp-marcos .marcos-selos > li.marcos-selo')].map(x => [[...x.classList].find(c => c.startsWith('s-')), !!x.querySelector('svg .f'), x.innerText.replace(/\s+/g, ' ').trim()]),
+          li: [...el.querySelectorAll('#cp-marcos .marcos-l li')].map(x => [x.dataset.marcoTipo || '', ((x.querySelector('.marco-ic') || {}).textContent || '').trim()]), ocultar: !!el.querySelector('#cp-marcos [data-cp-ocultar="1"]') } : null,
+        sobrio: ['#cp-trabalho', '#cp-ranking'].map(q => { const x = el.querySelector(q); return x ? [/\p{Extended_Pictographic}/u.test(x.innerText), x.querySelectorAll('svg:not(.rank-q svg):not(.cp-lk svg), img, [class*="selo"], .marco-ic').length] : null; }),
         arte: el.querySelectorAll('.cp-hex, .cp-badge, svg.cp-hex, .cp-lat-h h2 svg').length, tabela: !!el.querySelector('#cp-ranking table.rank-tab'), barra: !!el.querySelector('#cp-trabalho #cp-meta .ini-bar i'),
         icCores: [...new Set(ic.map(x => getComputedStyle(x).backgroundColor))], icTinta: [...new Set(ic.map(x => getComputedStyle(x).color))] }; });
     chk(JSON.stringify(lat.tit.slice(0, 4)) === JSON.stringify(['Seu trabalho', 'Marcos', 'Pontos validados no mês · equipe', 'Atividade recente']), `coluna da direita: Seu trabalho · Marcos · ranking · Atividade recente ${JSON.stringify(lat.tit)}`);
     chk(/Pontos validados nesta semana/.test(lat.trab) && /no mês/.test(lat.trab) && /Meta da semana/.test(lat.trab) && /de \d+ pontos validados \(\d+%\)/.test(lat.trab) && lat.barra, `"Seu trabalho": pontos da semana e do mês e a meta da equipe na barra padrão ${JSON.stringify(lat.trab)}`);
-    chk(lat.marcos && lat.marcos.arte === 0 && /folhas? conferidas? · \d+ lotes? aprovados?/.test(lat.marcos.tot), `"Marcos" em texto, sem selo nem ícone ${JSON.stringify(lat.marcos)}`);
+    const lm = lat.marcos || {};
+    chk(lat.marcos && lm.ocultar && JSON.stringify((lm.selos || []).map(x => x[0])) === JSON.stringify(['s-folha', 's-lote', 's-decisao', 's-problema']) && lm.selos.every(x => x[1])
+      && /folhas? conferidas?/.test(lm.selos[0][2]) && /lotes? aprovados?/.test(lm.selos[1][2]) && /decis/.test(lm.selos[2][2]) && /problemas? corrigidos?/.test(lm.selos[3][2]),
+      `"Marcos": os totais em 4 selos grandes coloridos (folhas · lotes · decisões · problemas) ${JSON.stringify(lm.selos)}`);
+    chk((lm.li || []).length >= 2 && lm.li.every(([t, e]) => t && /\p{Extended_Pictographic}/u.test(e)), `"Marcos": cada marco com o emoji do seu tipo ${JSON.stringify(lm.li)}`);
+    chk(lat.sobrio.every(x => x && x[0] === false && x[1] === 0), `"Seu trabalho" e o ranking seguem sem emoji nem selo ${JSON.stringify(lat.sobrio)}`);
     chk(lat.arte === 0 && lat.tabela && !/\bXP\b|Nível|Guardião|Catalogador|Conquistas recentes|Seu progresso/i.test(lat.txt), `sem nível, XP, selo, hexágono nem troféu; ranking numa tabela (${lat.arte} figuras)`);
     chk(lat.icCores.length <= 1 && lat.icTinta.length <= 1, `atividade recente: ícone só para o tipo, em cor neutra ${JSON.stringify([lat.icCores, lat.icTinta])}`);
     py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','0')\")");

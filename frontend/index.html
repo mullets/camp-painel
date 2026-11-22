@@ -1724,7 +1724,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .ini-vazio-c b{color:var(--ink);font-size:var(--fs-sm)}.ini-vazio-c p{margin:2px 0 0}.ini-vazio-c code{display:block;margin-top:4px;font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink3)}
 .ini-vazio-c .act{margin:0;flex-wrap:wrap;justify-content:flex-end}.ini-vazio-t{min-width:0}
 .ini-vazio-ic{width:26px;height:26px;color:var(--ink3)}.ini-vazio-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
-/* coluna da direita: "Seu trabalho", "Marcos" e o ranking em cartões brancos iguais aos outros (tom sério: sem nível, medalha, selo nem cor de jogo) */
+/* coluna da direita: "Seu trabalho", "Marcos" e o ranking em cartões brancos iguais aos outros (tom sério: sem nível, medalha, selo nem cor de jogo; "Marcos" é a única exceção, logo abaixo) */
 #v-painel .ini-jogo-p{display:grid;gap:18px}#v-painel .ini-jogo-corpo{display:grid;gap:18px}
 .ini-conq-h{display:flex;align-items:center;justify-content:space-between;gap:8px}.ini-conq-h .ini-jogo-h{margin:0;font-size:var(--fs-sec);font-weight:700}
 .ini-trab,.ini-marcos{display:grid;gap:10px}
@@ -1733,9 +1733,29 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .ini-meta-l1{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 8px;margin:0}.ini-meta-t{font-weight:600;font-size:var(--fs-md);color:var(--ink)}.ini-meta-t small{font-weight:400;color:var(--ink2);font-size:var(--fs-md)}
 .ini-meta-n{font-size:var(--fs-md);color:var(--ink2);font-variant-numeric:tabular-nums}.ini-meta-n b{color:var(--ink);font-weight:600}
 .ini-meta .ini-bar.ini-meta-bar{margin:2px 0}.ini-meta-mais{justify-self:end}.ini-meta-mais .mais-lista{right:0;left:auto}
+/* "Marcos" é a única exceção ao tom sério (Rafael, 22/11/2026: "aqui sim pode ficar gamificado como estava antes, com ícones e emojis"):
+   selos coloridos nos totais (escudo verde, hexágono roxo, círculo azul, escudo dourado), um emoji em cada marco e 🎯 + barra no próximo marco */
+.ini-marcos,#cp-marcos{--marcos-roxo:#6B4FBB;--marcos-ouro:#E0A93A;--marcos-azul:#2F6FD0}
+:root[data-theme="dark"] .ini-marcos,:root[data-theme="dark"] #cp-marcos{--marcos-roxo:#A08BE6;--marcos-ouro:#E8B64F;--marcos-azul:#7FA6E6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ini-marcos,:root:not([data-theme="light"]) #cp-marcos{--marcos-roxo:#A08BE6;--marcos-ouro:#E8B64F;--marcos-azul:#7FA6E6}}
 .marcos-tot{margin:0;font-size:var(--fs-md);color:var(--ink);font-variant-numeric:tabular-nums}
-.marcos-l{list-style:none;margin:0;padding:0;display:grid;gap:4px}.marcos-l li{display:flex;justify-content:space-between;gap:8px;font-size:var(--fs-sm2);color:var(--ink);padding-top:4px;border-top:1px solid var(--line2)}
+.marcos-selos{list-style:none;margin:2px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:center}
+.marcos-selo{display:grid;justify-items:center;align-content:start;gap:4px;font-size:var(--fs-2xs);color:var(--ink2);line-height:1.25}
+.marcos-selo b{display:block;color:var(--ink);font-size:var(--fs-lg);font-weight:700;font-variant-numeric:tabular-nums}
+.marcos-selo-ic svg{width:44px;height:44px;display:block;filter:drop-shadow(0 1px 1px rgba(16,24,40,.18))}
+.marcos-selo-ic .w{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.marcos-selo-ic .w.wf{fill:#fff;stroke-width:1}
+.marcos-selo.s-folha .f{fill:var(--green)}.marcos-selo.s-lote .f{fill:var(--marcos-roxo)}.marcos-selo.s-decisao .f{fill:var(--marcos-azul)}.marcos-selo.s-problema .f{fill:var(--marcos-ouro)}
+.marcos-selo.zero .f{fill:var(--line)}.marcos-selo.zero .marcos-selo-ic{opacity:.8}
+.marcos-l{list-style:none;margin:0;padding:0;display:grid;gap:4px}.marcos-l li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;font-size:var(--fs-sm2);color:var(--ink);padding-top:5px;border-top:1px solid var(--line2)}
 .marcos-l small{color:var(--ink2);font-size:var(--fs-2xs)}.marco-d{color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.marco-ic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:var(--fs-base);line-height:1;background:var(--surface2);border:1px solid var(--line2)}
+.marco-ic.t-primeira{background:#FFF4D6;border-color:#F3C95C}.marco-ic.t-folha{background:var(--green-soft);border-color:var(--green)}.marco-ic.t-lote{background:#EEE9FA;border-color:var(--marcos-roxo)}
+.marco-ic.t-decisao{background:var(--blue-soft);border-color:var(--marcos-azul)}.marco-ic.t-problema,.marco-ic.t-revisao,.marco-ic.t-apoio{background:var(--amber-soft);border-color:var(--marcos-ouro)}.marco-ic.t-fundo{background:var(--green-soft);border-color:var(--green)}
+:root[data-theme="dark"] .marco-ic.t-primeira,:root[data-theme="dark"] .marco-ic.t-lote{background:var(--surface2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .marco-ic.t-primeira,:root:not([data-theme="light"]) .marco-ic.t-lote{background:var(--surface2)}}
+.marcos-l .marco-falta .marco-ic{filter:grayscale(1);opacity:.55}
+.marcos-prox{display:grid;gap:2px}.marcos-prox .ini-nota{margin:0;display:flex;align-items:center;gap:6px}.marcos-alvo{font-size:var(--fs-base);line-height:1}
+.marcos-prox .ini-bar{margin:2px 0 0;height:8px;border-radius:var(--r-pill)}.marcos-prox .ini-bar i{background:linear-gradient(90deg,var(--green),var(--marcos-ouro));border-radius:var(--r-pill)}
 .ini-marcos-todos>summary{list-style:none;cursor:pointer}.ini-marcos-todos>summary::-webkit-details-marker{display:none}.ini-marcos-todos .mais-lista{right:0;left:auto;min-width:280px}
 .ini-trab .ini-link,.ini-marcos .ini-link,.ini-equipe .ini-link{color:var(--blue);background:none;border:0;padding:0;font:inherit;font-size:var(--fs-sm);cursor:pointer;text-decoration:underline;text-underline-offset:3px;justify-self:start}
 .ini-trab summary.ini-link,.ini-marcos summary.ini-link{list-style:none}.ini-trab summary.ini-link::-webkit-details-marker,.ini-marcos summary.ini-link::-webkit-details-marker{display:none}
@@ -8949,7 +8969,7 @@ let PAINEL_PG=null;
 function iniBarraHTML(v,max,rot,cls){const w=max?Math.min(100,100*v/max):0;return `<div class="ini-bar${cls?' '+cls:''}" role="img" aria-label="${escHtml(rot)}"><i data-w="${w.toFixed(2)}"></i></div>`}
 /* CAMP-HOME-UX (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): a coluna da direita só mostra fatos,
    em cartões brancos iguais aos outros. "Seu trabalho": pontos validados da pessoa na semana e no mês e a meta da semana da equipe numa
-   barra simples (a barra padrão do painel), com "Como conta?" e, para admin, a nova meta. "Marcos": texto com data, sem ícone. Ranking:
+   barra simples (a barra padrão do painel), com "Como conta?" e, para admin, a nova meta. "Marcos" (a única exceção: selos e emoji, decisão do Rafael 22/11). Ranking:
    tabela simples (posição, nome, pontos). Nada de nível, XP, título, medalha, selo, estrela ou cor de jogo (padroes.md §15; check_ui). */
 function iniMetaHTML(pg,op){if(!pg||!pg.ligado||!pg.semana)return '';op=op||{};
   const s=pg.semana,adm=op.form!==false&&EU&&['admin','master'].includes(EU.papel),pts=qtd(s.feito,'ponto','pontos');
@@ -8964,9 +8984,27 @@ function trabalhoNumerosHTML(e){const sem=+(e.pontos_semana!=null?e.pontos_seman
 /* os marcos: fatos com a data em que foram alcançados ("Primeira folha conferida · 12/11"); a sequência de dias não entra */
 function marcoData(q){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(q||''));return m?`${m[3]}/${m[2]}`:''}
 function marcosDe(e){return (e&&e.conquistas||[]).filter(c=>c.id!=='semana_consistente')}
-function marcoLiHTML(rot,data,sub){return `<li><span class="marco-t">${escHtml(rot)}${sub?` <small>· ${escHtml(sub)}</small>`:''}</span>${data?`<span class="marco-d">${escHtml(data)}</span>`:''}</li>`}
 function marcosTotaisTxt(ct){const p=[qtd(+ct.folha_conferida||0,'folha conferida','folhas conferidas'),qtd(+ct.lote_aprovado||0,'lote aprovado','lotes aprovados')];
   if(+ct.decisao_resolvida)p.push(qtd(+ct.decisao_resolvida,'decisão respondida','decisões respondidas'));const pr=(+ct.problema_resolvido||0)+(+ct.problema_critico_resolvido||0);if(pr)p.push(qtd(pr,'problema corrigido','problemas corrigidos'));return p.join(' · ')}
+/* MARCOS-ICONES-INICIO — "Marcos" é a ÚNICA exceção ao tom sério (decisão do Rafael, 22/11/2026: "aqui sim pode ficar gamificado como estava
+   antes, com ícones e emojis"). Só neste trecho moram emoji e arte de selo; check_ui.py aceita aqui só funções/constantes marco* / MARCOS_*
+   e continua barrando emoji e selo no resto da interface ("Seu trabalho", ranking, tudo o mais segue sóbrio; padroes.md §15). */
+const MARCOS_SELO={escudo:'<path class="f" d="M24 3 6 9.5v12C6 33 13.6 41.6 24 45c10.4-3.4 18-12 18-23.5v-12z"/>',hexa:'<path class="f" d="M24 3 42.2 13.5v21L24 45 5.8 34.5v-21z"/>',circ:'<circle class="f" cx="24" cy="24" r="21"/>'};
+const MARCOS_SELO_IC={check:'<path class="w" d="m16 24.5 5.5 5.5L32.5 19"/>',camadas:'<path class="w" d="M24 14 13 19.5 24 25l11-5.5z"/><path class="w" d="m13 24.5 11 5.5 11-5.5"/><path class="w" d="m13 29 11 5.5L35 29"/>',
+  rumo:'<path class="w" d="M24 35V24m0 0-8-9m8 9 8-9"/><path class="w" d="m14 18 2-3 3 1m15 2-2-3-3 1"/>',raio:'<path class="w wf" d="M26.5 11 16 26.5h7.5L21.5 37 32 21.5h-7.5z"/>'};
+const MARCOS_TIPO={folha_1:'primeira',decisao_1:'primeira',primeira:'primeira',lote_1:'lote',problema_1:'problema',critico_1:'problema',investigador:'problema',revisor:'revisao',colaborador:'apoio',fundo:'fundo'};
+const MARCOS_EMOJI={primeira:'⭐',folha:'🏅',lote:'📦',decisao:'✅',problema:'🛠️',revisao:'🔍',apoio:'🤝',fundo:'🏛️'};
+function marcosTipo(id){const s=String(id||'');return MARCOS_TIPO[s]||(/^folha/.test(s)?'folha':/^lote/.test(s)?'lote':/^decisao/.test(s)?'decisao':/^(problema|critico)/.test(s)?'problema':'folha')}
+function marcoIcHTML(tipo){return `<span class="marco-ic t-${escHtml(tipo)}" aria-hidden="true">${MARCOS_EMOJI[tipo]||MARCOS_EMOJI.folha}</span>`}
+function marcoLiHTML(rot,data,sub,tipo){return `<li class="marco-li" data-marco-tipo="${escHtml(tipo||'folha')}">${marcoIcHTML(tipo||'folha')}<span class="marco-t">${escHtml(rot)}${sub?` <small>· ${escHtml(sub)}</small>`:''}</span>${data?`<span class="marco-d">${escHtml(data)}</span>`:''}</li>`}
+function marcoFaltaLiHTML(c){const t=marcosTipo(c.chave);return `<li class="marco-li marco-falta" data-marco-tipo="${escHtml(t)}">${marcoIcHTML(t)}<span class="marco-t">${escHtml(c.titulo)}</span><span class="marco-d">${fmtN(c.feito)} de ${fmtN(c.meta)}</span></li>`}
+function marcosSeloSVG(forma,ic){return `<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${MARCOS_SELO[forma]}${MARCOS_SELO_IC[ic]}</svg>`}
+/* a linha de totais vira os selos grandes de antes: escudo verde (folhas), hexágono roxo (lotes), círculo azul (decisões), escudo dourado (problemas) */
+function marcosTotaisHTML(ct){const pr=(+ct.problema_resolvido||0)+(+ct.problema_critico_resolvido||0);
+  const selo=(cls,forma,ic,n,um,varios)=>`<li class="marcos-selo ${cls}${n?'':' zero'}"><span class="marcos-selo-ic">${marcosSeloSVG(forma,ic)}</span><span class="marcos-selo-t"><b>${fmtN(n)}</b> ${escHtml(n===1?um:varios)}</span></li>`;
+  return `<ul class="marcos-selos marcos-tot" aria-label="${escHtml(marcosTotaisTxt(ct))}">${selo('s-folha','escudo','check',+ct.folha_conferida||0,'folha conferida','folhas conferidas')}${selo('s-lote','hexa','camadas',+ct.lote_aprovado||0,'lote aprovado','lotes aprovados')}${selo('s-decisao','circ','rumo',+ct.decisao_resolvida||0,'decisão','decisões')}${selo('s-problema','escudo','raio',pr,'problema corrigido','problemas corrigidos')}</ul>`}
+function marcosProximoHTML(p){if(!p)return '';return `<div class="marcos-prox"><p class="ini-nota"><span class="marcos-alvo" aria-hidden="true">🎯</span><span>Próximo marco: ${escHtml(p.rotulo)} (${fmtN(p.feito)} de ${fmtN(p.de)}).</span></p>${iniBarraHTML(+p.feito||0,+p.de||0,`Próximo marco: ${fmtN(p.feito)} de ${fmtN(p.de)}`,'marcos-bar')}</div>`}
+/* MARCOS-ICONES-FIM */
 function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb ini-jogo-load"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado)return '';
   const meta=iniMetaHTML(pg),cab='<div class="ini-conq-h"><h3 class="ini-jogo-h">Seu trabalho</h3></div>';
   if(EU&&EU.papel==='leitura')return `<div class="pb ini-trab" id="ini-trabalho">${meta}<p class="ini-nota">Os pontos e os marcos são de quem edita o painel. A meta da semana é da equipe toda.</p></div>${iniEquipeHTML(pg)}`;
@@ -8974,11 +9012,11 @@ function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb ini-jogo-load"
   const e=pg.eu;if(!e)return '';const mc=marcosDe(e);
   return `<div class="pb ini-trab" id="ini-trabalho">${cab}${trabalhoNumerosHTML(e)}${meta}</div>
     <div class="pb ini-marcos" id="ini-marcos"><div class="ini-conq-h"><h3 class="ini-jogo-h">Marcos</h3><button type="button" class="ini-link" data-ini-conquistas="1" aria-label="Ocultar os seus pontos e marcos (só para você)">Ocultar</button></div>
-      <p class="marcos-tot">${escHtml(marcosTotaisTxt(e.contagens||{}))}</p>
-      ${mc.length?`<ul class="marcos-l">${mc.slice(-4).reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando))).join('')}</ul>`:'<p class="ini-nota">Nenhum marco ainda. O primeiro vem com a primeira folha conferida.</p>'}
-      ${e.proxima?`<p class="ini-nota">Próximo marco: ${escHtml(e.proxima.rotulo)} (${fmtN(e.proxima.feito)} de ${fmtN(e.proxima.de)}).</p>`:''}
+      ${marcosTotaisHTML(e.contagens||{})}
+      ${mc.length?`<ul class="marcos-l">${mc.slice(-4).reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando),'',marcosTipo(c.id))).join('')}</ul>`:'<p class="ini-nota">Nenhum marco ainda. O primeiro vem com a primeira folha conferida.</p>'}
+      ${marcosProximoHTML(e.proxima)}
       <details class="mais-menu ini-marcos-todos"><summary class="ini-link">Como os pontos são contados?</summary><div class="mais-lista ini-ajuda-txt" role="note">
-      ${mc.length>4?`<ul class="marcos-l">${mc.slice().reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando))).join('')}</ul>`:''}
+      ${mc.length>4?`<ul class="marcos-l">${mc.slice().reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando),'',marcosTipo(c.id))).join('')}</ul>`:''}
       <p>${escHtml(pg.regra)}</p>${iniPontosTabelaHTML(pg)}<p>Os marcos são seus; ninguém é comparado com ninguém. "Ocultar" esconde só para você.</p></div></details></div>${iniEquipeHTML(pg)}`}
 /* CAMP-HOME-UX (decisão do Rafael, 22/11/2026): o MESMO Ranking da equipe (mês) na Home e em Problemas, numa tabela simples: posição, nome e
    pontos validados no mês (desfez, o ponto some). Ligado por padrão; um admin desliga em Configurações. O "?" diz que não serve para avaliar desempenho. */
@@ -10767,7 +10805,7 @@ async function cpCarregarGraficos(){if(Date.now()-CP_GRAF_EM<30000)return;CP_GRA
   const dm=d=>{const x=new Date(d+'T12:00:00');return x.getDate()+' '+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()]};
   b.innerHTML=`<div class="ph"><h2>Evolução de resolução</h2><small class="help cp-sel-falso">Últimas 4 semanas</small></div><div class="pb">${S.some(s=>s.resolvidos)?`<svg class="cp-barras" viewBox="0 0 ${X0+S.length*W} ${H+34}" role="img" aria-label="${escHtml(S.map(s=>`Semana de ${dm(s.inicio)}: ${s.resolvidos} resolvidos (${s.pelo_sistema} pelo sistema), ${s.novos} novos`).join('; '))}">${[0,1,2,3,4].map(k=>`<text class="cp-b-l cp-b-y" x="${X0-6}" y="${(10+H-k*H/4+3).toFixed(1)}">${k*esc}</text><line class="cp-b-grade" x1="${X0}" x2="${X0+S.length*W}" y1="${(10+H-k*H/4).toFixed(1)}" y2="${(10+H-k*H/4).toFixed(1)}"></line>`).join('')}${S.map((s,i)=>{const x=X0+i*W+12,h=s.resolvidos/top*H,fimS=new Date(s.fim+'T12:00:00');fimS.setDate(fimS.getDate()-1);return `<rect class="cp-b-pess" x="${x}" y="${(10+H-h).toFixed(1)}" width="${W-24}" height="${h.toFixed(1)}" rx="2"></rect><text class="cp-b-n" x="${x+(W-24)/2}" y="${(10+H-h-4).toFixed(1)}">${s.resolvidos}</text><text class="cp-b-l" x="${x+(W-24)/2}" y="${H+28}">${escHtml(dm(s.inicio)+' – '+dm(fimS.toISOString().slice(0,10)))}</text>`}).join('')}</svg>
     <p class="cp-b-leg">Resolvidos por semana (${fmtN(S.reduce((t,s)=>t+s.pelo_sistema,0))} pelo sistema, quando o painel conferiu sozinho). Novos no período: ${fmtN(S.reduce((t,s)=>t+s.novos,0))}.</p>`:vazioHTML('Nada resolvido nas últimas 4 semanas.','As barras aparecem quando houver resoluções.')}</div>`}
-/* ---- coluna da direita: "Seu trabalho" (pontos da semana e do mês + meta da equipe), "Marcos" (texto), Ranking da equipe (mês; ligado por padrão),
+/* ---- coluna da direita: "Seu trabalho" (pontos da semana e do mês + meta da equipe), "Marcos" (selos e emoji: a única exceção), Ranking da equipe (mês; ligado por padrão),
    atividade recente. Tom sério (Rafael, 22/11/2026): sem nível, XP, selo, hexágono, estrela ou troféu; ícone só onde diz o tipo, em cor neutra. ---- */
 function cpSemanaTxt(desde){const d=new Date(String(desde||'').replace(' ','T')+'Z');if(isNaN(d))return '';d.setHours(d.getHours()-3);const f=new Date(d);f.setDate(f.getDate()+6);const m=x=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()];return `${d.getDate()}${m(d)!==m(f)?' '+m(d):''} – ${f.getDate()} ${m(f)}`}
 const CP_ATIV_IC={ok:['ok','g'],lapis:['lapis','b'],pessoa:['pessoa','b'],mais:['mais','a'],relogio:['relogio','']};
@@ -10781,10 +10819,10 @@ async function cpCarregarLateral(){const el=document.getElementById('cp-lateral'
     j.oculto?`${meta}<p class="help">Você ocultou os seus pontos e marcos (vale também na Home).</p><button type="button" class="btn sm" data-cp-ocultar="0">Mostrar de novo</button>`
     :eu?`${trabalhoNumerosHTML(eu)}${meta}`:meta}${equipe}</div></div>`;
   const cq=(d.conquistas_qualidade||[]),ganhas=cq.filter(c=>c.obtida),falta=cq.filter(c=>!c.obtida),home=marcosDe(eu);
-  const linhas=[...ganhas.map(c=>marcoLiHTML(c.titulo,'',c.coletiva?'marco coletivo':'')),...home.slice(-2).reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando),'da Home')),
-    ...falta.map(c=>`<li class="marco-falta"><span class="marco-t">${escHtml(c.titulo)}</span><span class="marco-d">${fmtN(c.feito)} de ${fmtN(c.meta)}</span></li>`)].slice(0,5);
+  const linhas=[...ganhas.map(c=>marcoLiHTML(c.titulo,'',c.coletiva?'marco coletivo':'',marcosTipo(c.chave))),...home.slice(-2).reverse().map(c=>marcoLiHTML(c.rotulo,marcoData(c.quando),'da Home',marcosTipo(c.id))),
+    ...falta.map(marcoFaltaLiHTML)].slice(0,5);
   const marcos=j.ligado&&!j.oculto&&eu?`<div class="panel cp-lat" id="cp-marcos"><div class="cp-lat-h"><h2>Marcos</h2><button type="button" class="btn sm lnk cp-ocultar" data-cp-ocultar="1" aria-label="Ocultar os seus pontos e marcos (só para você)">Ocultar</button></div>
-    <p class="marcos-tot">${escHtml(marcosTotaisTxt(eu.contagens||{}))}</p>${linhas.length?`<ul class="marcos-l">${linhas.join('')}</ul>`:'<p class="help">Nenhum marco ainda.</p>'}</div>`:'';
+    ${marcosTotaisHTML(eu.contagens||{})}${linhas.length?`<ul class="marcos-l">${linhas.join('')}</ul>`:'<p class="help">Nenhum marco ainda.</p>'}</div>`:'';
   const rank=Array.isArray(j.equipe)?`<div class="panel cp-lat" id="cp-ranking"><div class="cp-lat-h"><h2>${RANKING_TIT}</h2>${rankingQHTML(j.aviso_ranking||d.aviso_ranking)}</div>${rankingListaHTML(j.equipe)}</div>`:'';
   const at=`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Atividade recente</h2></div>${(d.atividade||[]).length?`<ul class="cp-ativ">${d.atividade.slice(0,6).map(a=>{const ic=CP_ATIV_IC[a.icone]||CP_ATIV_IC.relogio;return `<li><span class="cp-ativ-ic ${ic[1]}" aria-hidden="true">${cpIc(ic[0])}</span><span>${a.erro_id?`<button type="button" class="lnk" data-cp-abrir="${escHtml(a.erro_id)}"><b>${escHtml(a.titulo||a.texto)}</b></button>`:`<b>${escHtml(a.titulo||a.texto)}</b>`}<small>${escHtml([a.ator,a.codigo,cpDiasHoras(a.quando)].filter(Boolean).join(' · '))}</small></span></li>`}).join('')}</ul>`:'<p class="help">Nada registrado ainda.</p>'}${adm?lk('#auditoria','Ver histórico de atividades'):''}</div>`;
   el.innerHTML=trab+marcos+rank+at;vmPosicionar(el)}

@@ -6,7 +6,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "frontend" / "index.html"
+# --html OUTRO.html: confere outro arquivo no lugar do index.html (o teste tests/teste_check_ui_tom.py usa uma cópia com emoji plantado)
+if "--html" in sys.argv:
+    HTML = Path(sys.argv[sys.argv.index("--html") + 1]).resolve()
 text = HTML.read_text(encoding="utf-8")
+
+
+def _rel(arq):
+    try:
+        return arq.relative_to(ROOT)
+    except ValueError:
+        return arq
 
 required_css = [
     ".dash-v2{", ".dash-hero{", ".machine-status{", ".system-banner{",
@@ -90,7 +100,7 @@ PROIBIDAS = [
 # situação não voltam como etiqueta (chip) na tela: a situação vem de situacaoTag() (docs/vocabulario.md "Situação")
 SITUACAO_ANTIGA = r'<span class="tag[^"]*">\s*(?:Em leitura|Na fila|Lendo|Importar folhas|Importar|Conferir(?: \$\{[^}]*\})?|Aprovar(?: lote)?|Publicar|Publicada|Erro(?: no CAMP Vision)?|aguardando importação|em revisão|pronta para aprovar)\s*</span>'
 for m in re.finditer(SITUACAO_ANTIGA, text):
-    errors.append(f"situação: etiqueta antiga '{m.group(0)[:60]}' em {HTML.relative_to(ROOT)}:{text.count(chr(10), 0, m.start()) + 1} — use situacaoTag() (CAMP-146)")
+    errors.append(f"situação: etiqueta antiga '{m.group(0)[:60]}' em {_rel(HTML)}:{text.count(chr(10), 0, m.start()) + 1} — use situacaoTag() (CAMP-146)")
 if "const SITUACOES={chegando:['b','Chegando'],conferir:['a','Para conferir'],pronto:['g','Pronto para publicar'],no_site:['g','No site'],problema:['r','Com problema']}" not in text:
     errors.append("situação: o mapa SITUACOES (as 5 situações do CAMP-146) sumiu ou mudou de nome sem atualizar docs/vocabulario.md")
 for antigo in ("'CAMP Vision lendo',n(", "'Publicadas',n(", "fundos travados por direitos", "publicação bloqueada até existir termo"):
@@ -109,26 +119,75 @@ for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
     for padrao, dica in PROIBIDAS:
         for m in re.finditer(padrao, conteudo, re.I):
             linha = conteudo.count("\n", 0, m.start()) + 1
-            errors.append(f"vocabulário: '{m.group(0)}' em {arq.relative_to(ROOT)}:{linha} — {dica}")
+            errors.append(f"vocabulário: '{m.group(0)}' em {_rel(arq)}:{linha} — {dica}")
 
 # --- CAMP-HOME-UX (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): tom sério e profissional.
 # Nada de nível/título de jogo, XP, medalha, selo, troféu, emoji ou comemoração na interface (docs/padroes.md §15, docs/vocabulario.md
 # "Tom"). Os comentários do código ficam de fora (podem citar a regra); o que vale é o que chega à tela.
-_sem_coment = re.sub(r"/\*.*?\*/|<!--.*?-->", " ", text, flags=re.S)
-_sem_coment = re.sub(r"(?m)^\s*//.*$", " ", _sem_coment)
-for _pad, _dica in ((r"Guardião do Acervo|Primeiros passos|Olhar atento|Mão firme|Memória viva|Referência do acervo", "título de nível de jogo"),
-                    (r"(?<![\w-])XP(?![\w-])", "XP (use 'pontos validados')"),
-                    (r"Nível (?:\d+|\$\{[^}]*\})\s*·", "'Nível N · …' (sem níveis na tela: 'Seu trabalho')"),
-                    (r"Suas conquistas|Conquistas recentes|Seu progresso na resolução|dias? de sequência", "nome antigo da gamificação (use 'Seu trabalho' / 'Marcos')"),
-                    (r"Parabéns|[Cc]onfete|confetti", "comemoração (confirmação discreta, sem festa)"),
-                    (r"INI_MEDALHA|INI_SELO|ini-medalha|ini-selo|ini-nivel-card|cp-badge|CP_HEX|cp-hex|fc-medalha|cpIc\('trofeu'", "arte de medalha, selo, hexágono ou troféu"),
-                    (r"[A-Za-zÀ-ú]!['\"`<]", "frase com exclamação (tom sério: ponto final)"),
-                    ("[\U0001F000-\U0001FAFF⌚⌛⏩-⏳⏸-⏺☔☕♈-♓♿⚓⚡⚪⚫⚽⚾"
-                     "⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓-❕❗➕-➗"
-                     "➰➿⬛⬜⭐⭕️]", "emoji (use texto, ✓/✕/! ou um ícone de traço neutro)")):
-    for m in re.finditer(_pad, _sem_coment):
-        _ln = _sem_coment.count("\n", 0, m.start()) + 1
-        errors.append(f"tom: '{m.group(0)}' na interface ({HTML.relative_to(ROOT)}:{_ln}) — {_dica}; sem elementos infantis ou de jogo (padroes.md §15)")
+# ÚNICA EXCEÇÃO (Rafael, 22/11/2026, apontando o cartão "Marcos": "aqui sim pode ficar gamificado como estava antes, com ícones e emojis"):
+# emoji e arte de selo são aceitos SÓ entre os comentários MARCOS-ICONES-INICIO e MARCOS-ICONES-FIM, uma vez só no arquivo, num trecho curto
+# que só declara funções/constantes marco*/MARCOS_*. Todo o resto (inclusive nível, XP, "Parabéns", exclamação) vale também lá dentro.
+TOM_MARCA_INI, TOM_MARCA_FIM, TOM_MAX_LINHAS = "MARCOS-ICONES-INICIO", "MARCOS-ICONES-FIM", 30
+TOM_NOME_MARCOS = re.compile(r"(?:marcos?[A-Z]\w*|MARCOS?_\w+)")
+_TOM_GERAL = ((r"Guardião do Acervo|Primeiros passos|Olhar atento|Mão firme|Memória viva|Referência do acervo", "título de nível de jogo"),
+              (r"(?<![\w-])XP(?![\w-])", "XP (use 'pontos validados')"),
+              (r"Nível (?:\d+|\$\{[^}]*\})\s*·", "'Nível N · …' (sem níveis na tela: 'Seu trabalho')"),
+              (r"Suas conquistas|Conquistas recentes|Seu progresso na resolução|dias? de sequência", "nome antigo da gamificação (use 'Seu trabalho' / 'Marcos')"),
+              (r"Parabéns|[Cc]onfete|confetti", "comemoração (confirmação discreta, sem festa)"),
+              (r"[A-Za-zÀ-ú]!['\"`<]", "frase com exclamação (tom sério: ponto final)"))
+_TOM_SO_MARCOS = ((r"INI_MEDALHA|INI_SELO|ini-medalha|ini-selo|ini-nivel-card|cp-badge|CP_HEX|cp-hex|fc-medalha|cpIc\('trofeu'|MARCOS_SELO|marcosSeloSVG\(|MARCOS_EMOJI",
+                   "arte de medalha, selo, hexágono ou troféu (só no cartão Marcos)"),
+                  ("[\U0001F000-\U0001FAFF⌚⌛⏩-⏳⏸-⏺☔☕♈-♓♿⚓⚡⚪⚫⚽⚾"
+                   "⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓-❕❗➕-➗"
+                   "➰➿⬛⬜⭐⭕️]", "emoji (use texto, ✓/✕/! ou um ícone de traço neutro; só o cartão Marcos tem emoji)"))
+
+
+def _tom_sem_coment(t):
+    t = re.sub(r"/\*.*?\*/|<!--.*?-->", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)   # mantém as linhas no lugar
+    return re.sub(r"(?m)^\s*//.*$", " ", t)
+
+
+def erros_tom(t, nome="index.html"):
+    """Erros de tom do texto t. O trecho MARCOS-ICONES (se houver um só, curto e só com marco*/MARCOS_*) pode ter emoji e selo."""
+    out, livre = [], t
+    ni, nf = t.count(TOM_MARCA_INI), t.count(TOM_MARCA_FIM)
+    if ni or nf:
+        a, b = t.find(TOM_MARCA_INI), t.find(TOM_MARCA_FIM)
+        if ni != 1 or nf != 1 or b < a:
+            out.append(f"tom: o trecho de exceção dos Marcos tem de aparecer uma vez só ({TOM_MARCA_INI} {ni}×, {TOM_MARCA_FIM} {nf}×) em {nome}")
+        else:
+            trecho = t[a:b]
+            ln0 = t.count("\n", 0, a) + 1
+            if trecho.count("\n") > TOM_MAX_LINHAS:
+                out.append(f"tom: o trecho de exceção dos Marcos ({nome}:{ln0}) passou de {TOM_MAX_LINHAS} linhas: a exceção é só o cartão Marcos")
+            corpo = t[t.rfind("/*", 0, a):b] if t.rfind("/*", 0, a) > t.rfind("*/", 0, a) else trecho   # a marca fica num comentário: começa nele
+            ln1 = t.count("\n", 0, b - len(corpo)) + 1
+            for m in re.finditer(r"(?m)^(?:async\s+)?(?:function\s+([\w$]+)|(?:const|let|var)\s+([\w$]+)|([\w$.]+)\s*[(=])", _tom_sem_coment(corpo)):
+                nm = m.group(1) or m.group(2) or m.group(3)
+                if not TOM_NOME_MARCOS.fullmatch(nm or ""):
+                    out.append(f"tom: '{nm}' dentro do trecho de exceção dos Marcos ({nome}:{ln1 + corpo.count(chr(10), 0, m.start())}): ali só cabem funções/constantes marco*/MARCOS_*")
+            livre = t[:a] + re.sub(r"[^\n]", " ", trecho) + t[b:]
+    for fonte, pads in ((t, _TOM_GERAL), (livre, _TOM_SO_MARCOS)):
+        sc = _tom_sem_coment(fonte)
+        for _pad, _dica in pads:
+            for m in re.finditer(_pad, sc):
+                out.append(f"tom: '{m.group(0)}' na interface ({nome}:{sc.count(chr(10), 0, m.start()) + 1}) — {_dica}; sem elementos infantis ou de jogo (padroes.md §15)")
+    return out
+
+
+# autoteste da exceção (roda sempre): emoji/selo só passam dentro do trecho dos Marcos; fora dele, ou com outra função lá dentro, falham
+_ok = "/* MARCOS-ICONES-INICIO */\nconst MARCOS_EMOJI={folha:'\U0001F3C5'};\nfunction marcoIcHTML(t){return `<span>⭐</span>`}\n/* MARCOS-ICONES-FIM */\n"
+for _caso, _txt, _espera in (("emoji só nos Marcos", "function ok(){return 'Seu trabalho'}\n" + _ok, 0),
+                             ("emoji fora dos Marcos", _ok + "function rankingHTML(){return '<b>\U0001F3C6 1º</b>'}\n", 1),
+                             ("selo fora dos Marcos", _ok + "function trabHTML(){return marcosSeloSVG('escudo','check')}\n", 1),
+                             ("outra função no trecho dos Marcos", _ok.replace("function marcoIcHTML", "function rankingIcHTML"), 1),
+                             ("trecho repetido", _ok + _ok, 1),
+                             ("XP dentro dos Marcos", _ok.replace("<span>⭐", "<span>⭐ 10 XP"), 1),
+                             ("sem trecho, emoji em qualquer lugar", "function seuTrabalhoHTML(){return '✅ ok'}\n", 1)):
+    _n = len(erros_tom(_txt, "autoteste"))
+    if (_n == 0) != (_espera == 0):
+        errors.append(f"tom: autoteste da exceção dos Marcos falhou em '{_caso}' ({_n} erro(s))")
+errors.extend(erros_tom(text, str(_rel(HTML))))
 
 # --- atalhos do menu: a tabela NAV_ATALHOS segue a ORDEM VISUAL do menu (dígitos 1-9 em sequência; UX-28: letras podem vir entre eles) ---
 mapa = re.search(r"const NAV_ATALHOS=\{([^}]*)\}", text)
@@ -179,4 +238,4 @@ if errors:
         print(" -", e)
     sys.exit(1)
 
-print(f"UI CHECK OK · {len(required_css)} seletores · {len(required_dom)} estruturas · {inline} estilos inline · vocabulário único ok · atalhos ok")
+print(f"UI CHECK OK · {len(required_css)} seletores · {len(required_dom)} estruturas · {inline} estilos inline · vocabulário único ok · atalhos ok · tom ok (exceção só nos Marcos)")
