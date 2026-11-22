@@ -9,7 +9,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const { execFileSync } = require('child_process');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8948';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const DB = process.env.CAMP_DB_PATH;
 if (!DB) { console.error('defina CAMP_DB_PATH (o banco do servidor de teste)'); process.exit(2); }
 const problemas = [], linhas = [];

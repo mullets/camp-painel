@@ -36,6 +36,9 @@ for n in (20, 21):
   const erros = [], falhas = [];
   const ESPERADO = u => /\/api\/auth\/eu$|\/favicon\.ico$|exemplo\.test/.test(u);
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  // as imagens da semente apontam para exemplo.test (não existe): sem resposta, o onerror troca a <img> por "sem imagem" num momento que
+  // depende da rede, e a verificação da imagem da cópia passava ou falhava ao acaso. Aqui elas recebem um PNG de 1 px (determinístico).
+  await ctx.route('https://exemplo.test/**', r => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') }));
   const page = await ctx.newPage();
   page.on('console', m => { if (m.type() === 'error' && !ESPERADO(((m.location() || {}).url || ''))) erros.push(m.text()); });
   page.on('pageerror', e => erros.push('pageerror: ' + e.message));

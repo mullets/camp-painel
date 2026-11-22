@@ -5,7 +5,7 @@
 const fs = require('fs');
 let pw; try { pw = require('playwright'); } catch (_) { pw = require('/opt/node22/lib/node_modules/playwright'); }
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8765';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const SHOTS = process.env.SHOTS || '';
 const problemas = [], linhas = [];
 const chk = (ok, m) => { linhas.push(`${ok ? 'ok   ' : 'ERRO '} ${m}`); if (!ok) problemas.push(m); };

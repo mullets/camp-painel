@@ -13,7 +13,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const { execFileSync } = require('child_process');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8998';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const DB = process.env.CAMP_DB_PATH;
 const problemas = [], linhas = [];
 const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg + (ok || !det ? '' : ' -> ' + det)); if (!ok) problemas.push(msg); };

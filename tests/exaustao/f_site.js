@@ -166,7 +166,7 @@ T.rodar(async () => {
   fs.writeFileSync(FALHA + '_imagem', '1');
   {
     const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
-    const br2 = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+    const br2 = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium' });
     const p2 = await (await br2.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
     const errJs = []; p2.on('pageerror', e => errJs.push(e.message));
     await p2.goto(T.BASE + '/'); await p2.fill('#lg-email', 'rafael@camp.arq.br'); await p2.fill('#lg-senha', 'senha-bem-longa-123'); await p2.press('#lg-senha', 'Enter');
