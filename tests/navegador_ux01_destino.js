@@ -92,6 +92,12 @@ const idDe = P => +py(`print(con.execute("SELECT id FROM lista_processamento WHE
     chk(!(await page.isDisabled('#vd-ok')) && /é deste projeto/i.test(await page.textContent('#vd-ok')), 'escolher "É deste projeto" acende o botão com o que ele faz');
     await page.click('#vd-ok'); await page.waitForTimeout(400);
     chk(/justificativa/i.test(await page.textContent('#vd-res')), 'sem justificativa não grava (a tela pede)');
+    // 22/11 (Rafael: "clico em confirmar e nada faz"): o aviso ficava abaixo do botão, fora da tela da gaveta
+    const av = await page.evaluate(() => { const r = document.getElementById('vd-res'), b = document.getElementById('vd-ok'), t = document.getElementById('vd-just');
+      const rr = r.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      return { acima: rr.bottom <= rb.top + 1, visivel: rr.top >= 0 && rr.bottom <= innerHeight && rr.height > 0, invalido: t.getAttribute('aria-invalid') === 'true', foco: document.activeElement === t }; });
+    chk(av.acima && av.visivel, 'o aviso da justificativa aparece acima do botão e à vista: ' + JSON.stringify(av));
+    chk(av.invalido && av.foco, 'o campo da justificativa fica marcado e recebe o cursor: ' + JSON.stringify(av));
     await page.fill('#vd-just', 'Conferi o carimbo: é a Cia. Santo Amaro');
     await page.click('#vd-ok');
     await page.waitForFunction(() => { const b = document.querySelector('#vd-ok'); return !b || !b.offsetParent || !document.querySelector('.main.with-drawer'); }, null, { timeout: 10000 }); await page.waitForTimeout(800);
