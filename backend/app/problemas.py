@@ -19,6 +19,7 @@ ATOR_AUTOMATICO = "painel (automático)"
 # da retirada ("Devolver à revisão"). A marca na resolução serve para reabrir se a folha entrar no painel.
 MOTIVO_FORA = "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."
 ORIGENS_AUTOMATICAS = ("campvision", "revisao")
+MOTIVO_VOLTA = "Desfazer da ação rápida"          # CAMP-PROB-RAPIDO: motivo do mover que devolve a folha (o problema reaberto não fecha sozinho por ele)
 _FOLHA = re.compile(r"^F\d{3}-P\d{4}-.+-D\d+$")
 _PROJ = re.compile(r"^F\d{3}-P\d{4}")
 
@@ -104,7 +105,9 @@ def contexto(con, erros: list) -> dict:
             ctx["retiradas"].add(r[0])
         for r in con.execute(f"SELECT codigo, codigo_anterior FROM item WHERE codigo_anterior IN ({q})", parte):
             ctx["por_anterior"][r["codigo_anterior"]] = r["codigo"]
-        for r in con.execute(f"SELECT codigo, tipo, max(quando) AS quando FROM evento WHERE entidade='item' AND tipo IN ('folha_movida','duplicata_marcada') AND codigo IN ({q}) GROUP BY codigo, tipo", parte):
+        # CAMP-PROB-RAPIDO: a folha que VOLTOU pelo Desfazer de uma ação rápida não fecha de novo o problema que o Desfazer reabriu
+        for r in con.execute(f"""SELECT codigo, tipo, max(quando) AS quando FROM evento WHERE entidade='item' AND tipo IN ('folha_movida','duplicata_marcada') AND codigo IN ({q})
+                                 AND NOT (tipo='folha_movida' AND COALESCE(detalhe,'') LIKE '%"motivo": "{MOTIVO_VOLTA}%') GROUP BY codigo, tipo""", parte):
             ctx["eventos"][(r["codigo"], r["tipo"])] = r["quando"]
         for r in con.execute(f"""SELECT i.codigo, i.duplicata_de, (SELECT max(quando) FROM evento v WHERE v.entidade='item' AND v.tipo='duplicata_marcada' AND v.codigo=i.codigo) AS quando
                                  FROM item i WHERE i.duplicata_de IN ({q})""", parte):

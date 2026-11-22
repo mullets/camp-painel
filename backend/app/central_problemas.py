@@ -314,7 +314,9 @@ def _escondidos(con, u: dict) -> list[int]:
 ORDENS = {"prioridade", "recentes", "antigos", "atualizados"}
 
 
-def listar(con, f: Filtros, u: dict, ordem: str = "prioridade", pagina: int = 1, por_pagina: int = 25) -> dict:
+def listar(con, f: Filtros, u: dict, ordem: str = "prioridade", pagina: int = 1, por_pagina: int = 25, agrupar: bool = False, rapido: bool = False) -> dict:
+    """`agrupar` (CAMP-PROB-RAPIDO): o mesmo projeto + o mesmo tipo viram UMA linha (a página conta linhas; `total` continua contando
+    problemas). `rapido`: as decisões rápidas da linha (problemas_rapido.anotar); o CSV não pede (só a tela)."""
     if ordem not in ORDENS:
         raise HTTPException(400, "Ordem inválida")
     por_pagina = max(5, min(200, por_pagina)); pagina = max(1, pagina)
@@ -323,7 +325,8 @@ def listar(con, f: Filtros, u: dict, ordem: str = "prioridade", pagina: int = 1,
     chips = {c.strip() for c in (f.chip or "").split(",")}
     if f.aba == "concluidos" and ordem == "prioridade":
         ordem = "recentes"
-    pyth = ordem == "prioridade" or "talvez" in chips
+    agrupar = agrupar and f.aba != "concluidos"
+    pyth = ordem == "prioridade" or "talvez" in chips or agrupar
     if not pyth:
         o = {"recentes": "COALESCE(resolvido_em, criado_em) DESC, id DESC" if f.aba == "concluidos" else "criado_em DESC, id DESC",
              "antigos": "criado_em ASC, id ASC", "atualizados": "COALESCE(fase_em, resolvido_em, criado_em) DESC, id DESC"}[ordem]
@@ -339,7 +342,23 @@ def listar(con, f: Filtros, u: dict, ordem: str = "prioridade", pagina: int = 1,
         else:
             todos.sort(key=lambda x: x.get("criado_em") or "", reverse=ordem != "antigos")
         total = len(todos)
+        if agrupar:
+            from .problemas_rapido import _Sugestoes, agrupar_linhas, anotar, rapido_do_grupo
+            linhas = agrupar_linhas(todos)
+            itens = linhas[(pagina - 1) * por_pagina: pagina * por_pagina]
+            soltos = [x for x in itens if not x.get("grupo")]
+            membros = [m for g in itens if g.get("grupo") for m in g["membros"]]
+            sug = _Sugestoes(con)
+            anotar(con, soltos + membros, u, sug)
+            for g in itens:
+                if g.get("grupo"):
+                    rapido_do_grupo(g, u)
+            return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "paginas": max(1, -(-len(linhas) // por_pagina)), "ordem": ordem,
+                    "itens": itens, "agrupado": True, "linhas": len(linhas), "grupos": sum(1 for x in linhas if x.get("grupo"))}
         itens = todos[(pagina - 1) * por_pagina: pagina * por_pagina]
+    if rapido:
+        from .problemas_rapido import anotar
+        anotar(con, itens, u)
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "paginas": max(1, -(-total // por_pagina)), "ordem": ordem, "itens": itens}
 
 
@@ -474,7 +493,8 @@ class MudarFase(BaseModel):
     evidencia: str | None = None        # uma evidência junto (texto ou link)
 
 
-def mudar_fase(con, eid: int, d: MudarFase, u: dict) -> dict:
+def mudar_fase(con, eid: int, d: MudarFase, u: dict, extra: dict | None = None) -> dict:
+    """`extra` (CAMP-PROB-RAPIDO): campos a mais no evento 'fase' (ex.: a ação rápida e o modelo usado)."""
     e = _erro(con, eid)
     atual = fase_efetiva(e["situacao"], e["fase"], e["duplicado_de"], e["resolucao"])
     alvo = d.fase
@@ -491,7 +511,7 @@ def mudar_fase(con, eid: int, d: MudarFase, u: dict) -> dict:
     ev = evidencias(con, eid)
     fontes = [x for x in ev if x["tipo"] != "justificativa"]
     sets, vals = [], []
-    det = {"de": atual, "para": alvo}
+    det = {"de": atual, "para": alvo, **(extra or {})}
     if alvo in ("resolvido", "aguardando_revisao"):
         if alvo == "resolvido" and atual == "aguardando_revisao" and not conc:
             conc = e["resolucao"] or ""
@@ -688,9 +708,19 @@ from .home_trabalho import AVISO_RANKING  # noqa: E402 — o mesmo aviso do Rank
 
 
 ROTULO_EVENTO = {"criado": "registrou", "fase": "mudou a fase", "evidencia": "adicionou evidência", "atribuido": "atribuiu", "duplicado_juntado": "juntou como duplicado",
-                 "recebeu_duplicado": "recebeu um duplicado", "fechado_automatico": "fechou sozinho (o painel conferiu)", "editado": "editou", "ignorado": "fechou: não era problema",
-                 "mesclado": "mesclou mensagem repetida", "desfeito": "desfez", "tarefa_atribuida": "atribuiu", "tarefa_devolvida": "devolveu (sem responsável)",
-                 "reaberto_automatico": "reabriu sozinho", "problema_seguiu_folha": "seguiu a folha (código novo)"}
+                 "recebeu_duplicado": "recebeu um duplicado", "fechado_automatico": "fechou sozinho (o painel conferiu)", "editado": "mudou a situação", "ignorado": "fechou: não era problema",
+                 "mesclado": "juntou a mensagem repetida", "desfeito": "desfez", "tarefa_atribuida": "atribuiu", "tarefa_devolvida": "devolveu (sem responsável)",
+                 "reaberto_automatico": "reabriu sozinho (a folha voltou ao painel)", "problema_seguiu_folha": "seguiu a folha (código novo)",
+                 "fechado_na_conferencia": "resolveu na conferência", "problema_reclassificado": "passou a aviso (aviso técnico menor)"}
+# CAMP-PROB-RAPIDO: o título de cada evento na "Atividade recente" (nunca o código interno, como "Fechado_na_conferencia")
+TITULO_EVENTO = {"fechado_automatico": "Resolvido pelo sistema", "evidencia": "Evidência adicionada", "criado": "Problema registrado",
+                 "fechado_na_conferencia": "Resolvido na conferência", "ignorado": "Fechado: não era problema", "mesclado": "Mensagem repetida juntada",
+                 "desfeito": "Ação desfeita", "reaberto_automatico": "Reaberto sozinho", "problema_seguiu_folha": "Seguiu a folha",
+                 "problema_reclassificado": "Passou a aviso", "duplicado_juntado": "Juntado como duplicado", "recebeu_duplicado": "Recebeu um duplicado",
+                 "editado": "Situação mudada", "atribuido": "Responsável mudado"}
+ICONE_EVENTO = {"fechado_automatico": "ok", "fechado_na_conferencia": "ok", "evidencia": "lapis", "criado": "mais"}
+ROTULO_RAPIDO = {"deste_projeto": "É deste projeto", "mover": "movida para outro projeto", "mesma_folha": "é a mesma folha", "diferentes": "são folhas diferentes",
+                 "metadado": "dado salvo", "nao_e_problema": "não é problema"}
 
 
 def atividade(con, limite: int = 12) -> list[dict]:
@@ -708,25 +738,21 @@ def atividade(con, limite: int = 12) -> list[dict]:
             det = json.loads(r["detalhe"] or "{}")
         except ValueError:
             det = {}
-        txt = ROTULO_EVENTO.get(r["tipo"], r["tipo"])
-        icone, titulo = "relogio", None
+        txt = ROTULO_EVENTO.get(r["tipo"]) or "registrou uma mudança"
+        icone, titulo = ICONE_EVENTO.get(r["tipo"], "relogio"), TITULO_EVENTO.get(r["tipo"])
         if r["tipo"] == "fase" and det.get("para") in ROTULO_FASE:
             txt = "moveu para " + ROTULO_FASE[det["para"]]
             titulo = {"resolvido": "Problema resolvido", "aguardando_revisao": "Enviado para revisão", "reaberto": "Problema reaberto",
                       "devolvido": "Devolvido pela revisão", "duplicado": "Juntado como duplicado", "invalido": "Fechado: não é problema"}.get(det["para"], "Em " + ROTULO_FASE[det["para"]].lower().replace("em ", ""))
+            if det.get("rapido") in ROTULO_RAPIDO:
+                txt = "resolveu na lista: " + ROTULO_RAPIDO[det["rapido"]]
             icone = "ok" if det["para"] == "resolvido" else "relogio"
-        elif r["tipo"] in ("fechado_automatico",):
-            titulo, icone = "Resolvido pelo sistema", "ok"
-        elif r["tipo"] == "evidencia":
-            titulo, icone = "Evidência adicionada", "lapis"
         elif r["tipo"] in ("tarefa_atribuida", "tarefa_devolvida"):
             titulo, icone = ("Atribuído a " + (det.get("para") or "alguém")) if r["tipo"] == "tarefa_atribuida" else "Devolvido (sem responsável)", "pessoa"
-        elif r["tipo"] == "criado":
-            titulo, icone = "Problema registrado", "mais"
         elif r["tipo"] == "editado" and det.get("situacao") in ("corrigido", "fechado"):
             titulo, icone = "Problema resolvido", "ok"
         eid = int(r["codigo"]) if str(r["codigo"]).isdigit() else None
-        out.append({"quando": r["quando"], "ator": nomes.get(r["ator"]) or r["ator"], "texto": txt, "titulo": titulo or txt[:1].upper() + txt[1:],
+        out.append({"quando": r["quando"], "ator": nomes.get(r["ator"]) or r["ator"], "texto": txt, "titulo": titulo or txt[:1].upper() + txt[1:], "tipo": r["tipo"],
                     "icone": icone, "erro_id": eid, "codigo": cods.get(eid)})
     return out
 
@@ -746,11 +772,12 @@ def _fechar_sozinhos(con) -> None:
 def rota_listar(aba: str = "prioridades", q: str | None = None, fase: str | None = None, gravidade: str | None = None, categoria: str | None = None,
                 origem: str | None = None, responsavel: str | None = None, fundo: str | None = None, projeto: str | None = None, de: str | None = None,
                 ate: str | None = None, idade: str | None = None, chip: str | None = None, ordem: str = "prioridade", pagina: int = 1, por_pagina: int = 25,
-                u: dict = Depends(auth.exige("leitura"))) -> dict:
+                agrupar: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     try:
         _fechar_sozinhos(con)
-        return listar(con, _filtros(aba, q, fase, gravidade, categoria, origem, responsavel, fundo, projeto, de, ate, idade, chip), u, ordem, pagina, por_pagina)
+        return listar(con, _filtros(aba, q, fase, gravidade, categoria, origem, responsavel, fundo, projeto, de, ate, idade, chip), u, ordem, pagina, por_pagina,
+                      agrupar=bool(agrupar), rapido=True)
     finally:
         con.close()
 

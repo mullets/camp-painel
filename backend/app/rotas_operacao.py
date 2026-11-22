@@ -1748,21 +1748,60 @@ def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dic
             raise HTTPException(409, "Já foi desfeito")
         if con.execute("SELECT datetime(?, ?) < datetime('now')", (r["criado_em"], f"+{DESFAZER_MINUTOS} minutes")).fetchone()[0]:
             raise HTTPException(409, f"Passou o prazo de {DESFAZER_MINUTOS} minutos para desfazer: reabra um a um")
-        voltaram, ficaram = 0, 0
-        for a in json.loads(r["antes"] or "[]"):
-            n = con.execute("""UPDATE erro SET situacao=?, resolucao=?, resolvido_em=?,
-                               fechado_por=CASE WHEN ? IN ('aberto','em_correcao') THEN NULL ELSE fechado_por END WHERE id=? AND situacao=?""",
-                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["situacao"], a["id"], r["situacao"])).rowcount
-            if n:
-                voltaram += 1
-                _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
-            else:
-                ficaram += 1
+        if str(r["acao"] or "") in ("rapido:mover", "rapido:metadado"):
+            raise HTTPException(409, "Para desfazer esta ação, use o Desfazer da tela Problemas: a folha volta pela mesma rota")
+        con.execute("BEGIN IMMEDIATE")
+        voltaram, ficaram = desfazer_antes(con, json.loads(r["antes"] or "[]"), r["situacao"], r["acao"], u["email"])
         con.execute("UPDATE erro_desfazer SET desfeito_em=datetime('now') WHERE id=?", (token,))
         con.commit()
         return {"ok": True, "voltaram": voltaram, "ficaram": ficaram}
     finally:
         con.close()
+
+
+ITEM_CAMPOS_DESFAZER = ("pendencias", "status_site", "duplicata_de", "tipo_duplicata", "duplicata_conferida_em", "duplicata_conferida_por", "duplicata_conferida_de")
+
+
+def desfazer_antes(con, antes: list, situacao_acao: str, acao: str, ator: str) -> tuple[int, int]:
+    """Volta o que a lista `antes` guardou. Problema: situação, resolução e data (e, quando guardados, fase e quem fechou — CAMP-PROB-RAPIDO);
+    só se continua como a ação deixou (`depois`, ou a situação da ação), senão fica como está. Folha (`item`): os campos guardados voltam só se
+    ninguém mexeu depois (os valores de agora são os de `depois`). `cv_resposta`: apaga a devolução que a ação criou. `evento`: grava o evento
+    que desfaz a decisão (ex.: projeto_confirmado_desfeito, para a próxima leitura do CAMP Vision respeitar). Não faz commit."""
+    voltaram, ficaram = 0, 0
+    for a in antes:
+        if "item" in a:
+            cols = [c for c in a.get("campos", {}) if c in ITEM_CAMPOS_DESFAZER]
+            if not cols:
+                continue
+            atual = con.execute(f"SELECT {', '.join(cols)} FROM item WHERE codigo=?", (a["item"],)).fetchone()
+            if not atual or any(atual[c] != (a.get("depois") or {}).get(c) for c in cols):
+                ficaram += 1
+                continue
+            con.execute(f"UPDATE item SET {', '.join(c + '=?' for c in cols)}, atualizado_em=datetime('now') WHERE codigo=?", (*[a["campos"][c] for c in cols], a["item"]))
+            continue
+        if "cv_resposta" in a:
+            con.execute("DELETE FROM cv_resposta WHERE id=?", (a["cv_resposta"],))
+            continue
+        if "evento" in a:
+            ev = a["evento"]
+            _evento(con, ev.get("entidade") or "item", ev.get("codigo"), ev.get("tipo"), ator, ev.get("detalhe"))
+            continue
+        if "id" not in a:            # outras marcas (o mover e o dado da folha) têm o Desfazer próprio (problemas_rapido)
+            continue
+        sit_depois = a.get("depois") or situacao_acao
+        if "fase" in a:      # CAMP-PROB-RAPIDO: a ação rápida guarda a fase e quem tinha fechado; volta tudo
+            n = con.execute("""UPDATE erro SET situacao=?, resolucao=?, resolvido_em=?, fechado_por=?, fase=?, fase_em=?, motivo_pendencia=? WHERE id=? AND situacao=?""",
+                            (a["situacao"], a["resolucao"], a["resolvido_em"], a.get("fechado_por"), a["fase"], a.get("fase_em"), a.get("motivo_pendencia"), a["id"], sit_depois)).rowcount
+        else:
+            n = con.execute("""UPDATE erro SET situacao=?, resolucao=?, resolvido_em=?,
+                               fechado_por=CASE WHEN ? IN ('aberto','em_correcao') THEN NULL ELSE fechado_por END WHERE id=? AND situacao=?""",
+                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["situacao"], a["id"], sit_depois)).rowcount
+        if n:
+            voltaram += 1
+            _evento(con, "erro", a["id"], "desfeito", ator, {"situacao": a["situacao"], "acao": acao})
+        else:
+            ficaram += 1
+    return voltaram, ficaram
 
 
 class MesclarRepetidos(BaseModel):
