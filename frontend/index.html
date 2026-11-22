@@ -10728,7 +10728,7 @@ function cpTriDesenhar(){const T=CP_TRI,ov=document.getElementById('cp-tri');if(
     <div class="cp-tri-ops">${ops.map(o=>o.campo?`<label class="field">${escHtml(r.campo_rotulo||'Dado')}<input id="cp-tri-valor" ${r.campo==='ano_folha'?'inputmode="numeric" maxlength="4" placeholder="ex.: 1971"':'maxlength="200"'}></label><button type="button" class="btn" data-cp-tri-op="${o.k}"><kbd>${o.k}</kbd> ${escHtml(o.rot)}</button>`:`<button type="button" class="btn" data-cp-tri-op="${o.k}"><kbd>${o.k}</kbd> ${escHtml(o.rot)}</button>`).join('')}
       <button type="button" class="btn lnk" data-cp-tri-abrir><kbd>Enter</kbd> Abrir no painel (resolver com evidência)</button></div>
     <div class="cp-rap-conf" id="cp-tri-conf" hidden></div>${teclas}</div></div>`;
-  box.querySelector('[data-cp-tri-op]')?.focus()}
+  box.tabIndex=-1;box.focus({preventScroll:true})}   /* o foco fica na caixa (não num botão): Enter abre o painel, 1/2/3 escolhem */
 async function cpTriFazer(e,acao,extra={}){try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:[e.id],acao,...extra})});
     cpToastRapido(r,false);cpTriAvancar(r.resolvidos||[])}catch(err){toast(err.message)}}
 async function cpTriMover(e,destino){const c=document.getElementById('cp-tri-conf');c.hidden=false;c.innerHTML='<span class="help">Simulando o mover…</span>';
