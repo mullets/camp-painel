@@ -67,7 +67,11 @@ def site_divergencias(con) -> int:
 def no_site(con) -> dict:
     """Quanto do acervo já está no site: folhas, projetos e fundos (publicado / total)."""
     return {
-        "folhas": {"no_ar": _q(con, "SELECT COUNT(*) FROM item WHERE status_site='no_ar'"), "total": _q(con, "SELECT COUNT(*) FROM item")},
+        # CAMP-HOME-UX (maquete): o que falta, em duas partes (campo opcional): "a_publicar" = conferida/corrigida e ainda fora do site;
+        # "em_preparo" = ainda não conferida (o resto). no_ar + a_publicar + em_preparo = total.
+        "folhas": {"no_ar": _q(con, "SELECT COUNT(*) FROM item WHERE status_site='no_ar'"), "total": _q(con, "SELECT COUNT(*) FROM item"),
+                   "a_publicar": _q(con, "SELECT COUNT(*) FROM item WHERE COALESCE(status_site,'')<>'no_ar' AND revisao IN ('conferida','corrigida')"),
+                   "em_preparo": _q(con, "SELECT COUNT(*) FROM item WHERE COALESCE(status_site,'')<>'no_ar' AND COALESCE(revisao,'') NOT IN ('conferida','corrigida')")},
         "projetos": {"no_ar": _q(con, f"SELECT COUNT(*) FROM projeto WHERE status_site='no_ar' AND {PROJETO_VIVO}"),
                      "total": _q(con, f"SELECT COUNT(*) FROM projeto WHERE {PROJETO_VIVO}"),
                      "sem_folhas": _q(con, "SELECT COUNT(*) FROM projeto p WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.status_site!='no_ar' "
