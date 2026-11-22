@@ -2406,6 +2406,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-ctl{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;margin-left:auto;padding:4px 0 6px}   /* Resolver em sequência · Agrupar · Ordenar por: na MESMA linha */
 .cp-ctl .cp-agrupar{display:flex;align-items:center;gap:4px;font-size:var(--fs-md);color:var(--ink2);white-space:nowrap}
 .cp-ctl .cp-ordem{white-space:nowrap}
+@container (max-width:620px){.cp-ctl{flex-wrap:wrap;margin-left:0;gap:6px 10px}}   /* no celular os três quebram juntos, sem rolagem lateral */
 .cp-ordem{display:flex;align-items:center;gap:6px;font-size:var(--fs-md);color:var(--ink2)}
 .cp-filtros{flex-wrap:wrap;gap:8px;border-top:0;padding-top:8px;padding-bottom:6px}
 .cp-filtros #err-q{flex:1 1 260px;min-width:0}

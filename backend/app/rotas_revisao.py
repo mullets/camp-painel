@@ -1381,7 +1381,7 @@ def jpg_da_folha_no_qnap(raiz, rel):
 
 
 @router.get("/itens/{codigo}/previa")
-def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, q: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
     """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta.
     19/10: folha com recorte/alinhamento serve o JPG corrigido do painel (o = 1: sem o ajuste, para a tela de recortar).
     UX-59: s = giro SUGERIDO (90, 180, 270) só para mostrar a folha de pé na conferência; somado ao giro gravado, nada é gravado."""
@@ -1410,6 +1410,9 @@ def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, u: dict = Depends(au
         finally:
             c2.close()
     if alvo is None:
+        if q:        # CAMP-PROB-REAL: miniatura da lista de Problemas: sem imagem, 204 (a tela mostra "sem imagem"; nada de 404 no console a cada folha)
+            from fastapi import Response
+            return Response(status_code=204, headers={"Cache-Control": "private, max-age=600"})
         raise HTTPException(404, "Sem prévia" if i else "Sem imagem: a folha não está no painel e não achei o JPG dela no lote")
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
     esp = bool(i) and imagens.espelho_efetivo(i)

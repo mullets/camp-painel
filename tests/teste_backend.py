@@ -12630,12 +12630,13 @@ def filho(modo):
         g1 = next((x for x in it if x.get("grupo") and x.get("projeto_codigo") == "F001-P0001"), {})
         g2 = next((x for x in it if x.get("grupo") and x.get("projeto_codigo") == "F001-P0002"), {})
         s21 = next((x for x in it if not x.get("grupo") and x.get("folha") == F21), {})
-        rota = lambda f: f"/api/itens/{f}/previa?t=240"
+        rota = lambda f: f"/api/itens/{f}/previa?t=240&q=1"
         ver("miniaturas do grupo pela rota de prévia do painel (antes: todas 'sem imagem')",
             g1.get("n") == 12 and all(m.get("miniatura") == rota(m["folha"]) for m in g1.get("membros", [])), str([m.get("miniatura") for m in g1.get("membros", [])][:3]))
         r_img = ivo.get(rota(P1[0]))
         ver("a miniatura de uma folha retirada abre (prévia do pacote em _campvision/preview)", r_img.status_code == 200 and r_img.content[:2] == b"\xff\xd8", f"HTTP {r_img.status_code}")
-        ver("folha sem imagem em lugar nenhum: a rota responde 404 (a tela mostra o aviso neutro)", ivo.get(rota(SEM_IMAGEM)).status_code == 404)
+        ver("folha sem imagem em lugar nenhum: a miniatura responde 204 (a tela mostra o aviso neutro, sem 404 no console); a imagem grande, 404 com o motivo",
+            ivo.get(rota(SEM_IMAGEM)).status_code == 204 and ivo.get(f"/api/itens/{SEM_IMAGEM}/previa").status_code == 404)
         mi = miniaturas(c, [ANTIGA, EXISTENTE])
         r_ant = ivo.get(rota(ANTIGA))
         ver("folha importada de lote antigo (pendências sem 'previa', arquivo_jpg no QNAP): miniatura pela rota, que serve o JPG",
@@ -12665,7 +12666,7 @@ def filho(modo):
         ver("toda linha aberta tem decisão rápida ou o motivo", not sem_motivo, str(sem_motivo))
         # 4) painel do problema: a mesma imagem
         dt = ana.get(f"/api/problemas/{id_cv(F21)}").json()
-        ver("painel do problema da folha retirada: a imagem pela mesma rota (antes: nenhuma)", dt.get("previa") == f"/api/itens/{F21}/previa", str(dt.get("previa")))
+        ver("painel do problema da folha retirada: a imagem pela mesma rota (antes: nenhuma)", dt.get("previa") == f"/api/itens/{F21}/previa?q=1", str(dt.get("previa")))
         # 5) "Todas são deste projeto" no grupo real: resolve, fecha as retiradas da mesma folha, devolve ao lote; reimportar traz as folhas
         ids1 = g1.get("ids") or []
         r = ana.post("/api/problemas/rapido", json={"ids": ids1, "acao": "deste_projeto"})

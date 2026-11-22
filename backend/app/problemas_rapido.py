@@ -127,7 +127,7 @@ def url_previa(codigo: str, item=None, lado: int = 0) -> str | None:
     None só quando é certo que não há imagem (folha no painel sem prévia e sem JPG); o resto a tela mostra e, se a rota não achar, o aviso neutro."""
     if not codigo:
         return None
-    q = f"?t={lado}" if lado else ""
+    q = (f"?t={lado}&q=1" if lado else "?q=1")    # q=1: sem imagem, a rota responde 204 (a tela esconde a figura ou mostra "sem imagem"; sem 404 no console)
     if item is None:
         return f"/api/itens/{codigo}/previa{q}" if _DOC.match(str(codigo)) else None
     try:
