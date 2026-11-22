@@ -385,6 +385,9 @@ def progresso(con, u: dict, ocultar: bool | None = None) -> dict:
                     "desaprova o lote), o ponto some. Descartar decisão e marcar \"não era problema\" não contam."}
     if not out["ligado"]:
         return {"ligado": False}
+    # CAMP-HOME-UX (maquete, "Melhorias de hoje"): o que a EQUIPE fez hoje (dia de São Paulo), pelos mesmos eventos validados (desfez, some)
+    hoje_sp = _sp_agora().date().isoformat()
+    out["hoje"] = {k: sum(1 for e in todos if e["tipo"] == k and _dia_sp(e["quando"]) == hoje_sp) for k in tab}
     if ocultar is None:
         r = con.execute("SELECT valor FROM usuario_preferencia WHERE usuario_id=? AND chave='conquistas.ocultar'", (u.get("id"),)).fetchone()
         ocultar = bool(r and r[0] == "1")

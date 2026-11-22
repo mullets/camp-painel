@@ -61,6 +61,7 @@ MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da
 MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking desligado; migração 242; linha própria)
 
 MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking desligado (linha própria)
+MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -15354,12 +15355,13 @@ def filho(modo):
         # 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas"): visitas (admin) logo abaixo do ritmo
         ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material, e as visitas (admin) logo abaixo do ritmo",
             i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"', 'id="ini-visitas"'))
-            and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in esq)
+            and "${admin?`<div class=\"ini-vis\" id=\"ini-visitas\">" in esq)   # maquete (22/11): #ini-visitas guarda os cartões de visitas e de projetos
         # CAMP-HOME-UX (22/11/2026, documento do Rafael §3): a coluna da direita segue a prioridade do documento — alertas reais, progresso
         # (meta e conquistas), qualidade, publicação, sistemas (compacto) — e depois as melhorias e o "Hoje"; nada métrico some da Home
         il = html.find('<div class="ini-col ini-lateral">'); lat = html[il:html.find('</div>\n  </div>`;', il)]
-        ver("CAMP-HOME-UX: coluna da direita completa: alertas, progresso, qualidade, % no site, saúde, melhorias e Hoje, nessa ordem",
-            il > 0 and ordem(lat, ('id="ini-alertas"', 'id="ini-jogo"', 'id="ini-qualidade"', 'id="ini-t-site"', 'id="ini-saude"', 'id="ini-melhorias"', 'id="ini-t-hoje"')) and 'id="ini-visitas"' not in lat)
+        # maquete do Rafael (22/11/2026): "Está tudo funcionando?" sobe para logo depois do progresso
+        ver("CAMP-HOME-UX: coluna da direita completa: alertas, progresso, saúde, qualidade, % no site, melhorias e Hoje, nessa ordem",
+            il > 0 and ordem(lat, ('id="ini-alertas"', 'id="ini-jogo"', 'id="ini-saude"', 'id="ini-qualidade"', 'id="ini-t-site"', 'id="ini-melhorias"', 'id="ini-t-hoje"')) and 'id="ini-visitas"' not in lat)
         ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
             'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
         # 04/11 (especificação "Visitas ao site"): a Home não pede /api/analytics nunca; as visitas vêm só do banco (vmMontar → /api/visitas/evolucao e /projetos)
@@ -15503,6 +15505,41 @@ def filho(modo):
         c.execute("UPDATE item SET revisao='conferida', revisado_por='op@camp.arq.br', revisado_em=datetime('now','-20 days') WHERE codigo='F026-P0001-1972-S01-D00003'"); c.commit()
         rt = pd.ritmo(c, 14)
         ver("ritmo: folhas conferidas nos 14 dias anteriores (para a variação; a tela só compara com base)", rt["anterior_conferidas"] == 1 and rt["periodo_dias"] == 14, str(rt.get("anterior_conferidas")))
+        for l in res: print(l)
+    elif modo == "home_maquete":
+        # CAMP-HOME-UX (maquete do Rafael, 22/11/2026): "Quanto do acervo já está no site" em donut (no site · a publicar · em preparo) e
+        # "Melhorias de hoje" com o que a equipe fez hoje (eventos validados de hoje, dia de São Paulo; o de ontem não entra; desfez, some).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, contagens as ct, home_trabalho as ht
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        auth.criar_usuario("Otto Operador", "otto@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        uid = c.execute("SELECT id FROM usuario WHERE email='otto@camp.arq.br'").fetchone()[0]
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F098','Fundo Maquete')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F098-P0001','F098',1,'Casa da Maquete',1970)")
+        base = c.execute("SELECT COUNT(*) FROM item").fetchone()[0]
+        for k, (rev, st, quando) in enumerate([("conferida", "no_ar", "-3 days"), ("conferida", "nao_publicado", "-1 hours"), ("corrigida", "rascunho", "-2 hours"),
+                                                ("conferida", "nao_publicado", "-30 hours"), ("pendente", "nao_publicado", None), ("pendente", "nao_publicado", None)]):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,revisao,status_site,revisado_por,revisado_em) VALUES (?,?,?,?,?,?,?,?,"
+                      + ("datetime('now',?)" if quando else "?") + ")",
+                      (f"F098-P0001-1970-S01-D{k + 1:05d}", "F098-P0001", "S01", k + 1, f"Planta {k + 1}", rev, st, "otto@camp.arq.br" if quando else None, quando))
+        c.commit()
+        ns = ct.no_site(c)["folhas"]
+        ver("no site: a_publicar (conferida fora do site) e em_preparo (não conferida) somam o total com as publicadas",
+            ns.get("a_publicar") is not None and ns["no_ar"] + ns["a_publicar"] + ns["em_preparo"] == ns["total"] == base + 6 and ns["a_publicar"] >= 3, str(ns))
+        u = {"id": uid, "email": "otto@camp.arq.br", "papel": "operador"}
+        pg = ht.progresso(c, u)
+        hj = pg.get("hoje") or {}
+        # "hoje" pelo dia de São Paulo: as de -1 h e -2 h são de hoje, salvo logo depois da meia-noite (aí a conta muda e o teste se ajusta)
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        _sp = _dt.now(_tz.utc) - _td(hours=3)
+        esperado = sum(1 for h in (1, 2) if (_sp - _td(hours=h)).date() == _sp.date())
+        ver("Melhorias de hoje: folhas conferidas HOJE pela equipe (a de ontem e a de 3 dias não entram)", hj.get("folha_conferida") == esperado and hj.get("lote_aprovado") == 0, str(hj))
+        c.execute("UPDATE item SET revisao='pendente' WHERE codigo='F098-P0001-1970-S01-D00002'"); c.commit()
+        ver("desfez a conferência: sai das melhorias de hoje", (ht.progresso(c, u).get("hoje") or {}).get("folha_conferida") == max(0, esperado - (1 if (_sp - _td(hours=1)).date() == _sp.date() else 0)))
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','0')"); c.commit()
+        ver("jogo desligado: sem 'hoje' (a tela mostra só as edições)", "hoje" not in ht.progresso(c, u))
         for l in res: print(l)
     elif modo == "ux12_desempenho":
         # UX-12 (26/10, logs técnicos): /api/estacoes alternava 20 ms e 3–10 s (ping às estações desligadas DENTRO da requisição quando
@@ -22431,6 +22468,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home UX: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-HOME-UX maquete: donut do site (no site · a publicar · em preparo) e melhorias de hoje")
+rc, out = rodar("home_maquete", f"{tmp}/home_maquete.db")
+if rc != 0: ok(False, f"teste home_maquete não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home maquete: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("166) UX-24: Máquinas — logs, alertas e configurações só para admin/master no servidor; resumo do dia por interruptor")
 rc, out = rodar("ux24_maquinas", f"{tmp}/ux24_maquinas.db")

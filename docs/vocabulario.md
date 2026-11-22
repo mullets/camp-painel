@@ -444,6 +444,32 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Está tudo funcionando?**: tudo normal = "**Tudo funcionando · N sistemas normais**" (e "· N sem medida") com "**Ver cada sistema (…)**"
   recolhido; com falha, só o que falha aberto e "**Ver N outros sistemas (…)**".
 
+## Home no desenho da maquete (CAMP-HOME-UX, maquete do Rafael de 22/11/2026)
+- Barra do topo e menu lateral **não mudam**. **Entenda esta página** chega sempre fechada numa linha (o **?** abre a caixa inteira).
+- **Cabeçalho**: foto grande (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data; cartão **Meta da semana** com o alvo,
+  "**N de M pontos validados**", o **N%** grande, a barra verde e **Como conta?**.
+- **Indicadores**: ícone colorido (pasta · camadas · triângulo · ✓), número grande, rótulo e a linha cinza; a seta e o "?" aparecem ao passar o mouse.
+- **O que fazer agora**: abas com o número em selo e, à direita, "**Ordenar:**"; cada linha = barra colorida, miniatura, nome, linha cinza
+  ("Tipo · lote · código · fundo · responsável"), selo **Crítico** / **Alto** / **Médio** / **Baixo**, "**Há N dias**" / "**Há N h**" /
+  "**Há menos de 1 h**" (a frase inteira na dica), UM botão e **⋯**. A frase "Prioridade … porque …" fica na dica da linha e do selo.
+- **O caminho do material**: 7 cartões lado a lado (número, nome, subtítulo curto — **Estações de captura**, **Pastas enviadas**, **Leitura das
+  folhas**, **Trazer para o painel**, **Folha por folha**, **Um admin confirma**, **Enviar ao site** —, a quantidade com a unidade e ✓ verde
+  quando nada espera); o gargalo em amarelo. Ajuda: "**Como funciona o fluxo?**" (as cores e as unidades).
+- **Folhas conferidas por dia**: período numa caixa de escolha (**7 dias · 14 dias · 30 dias · 90 dias**); 4 números (Total no período, Média
+  por dia de trabalho, Hoje, até agora, e a variação "**Frente aos N dias anteriores**" com seta); "Cada barra é um dia corrido…" em **Ver os números**.
+- **Visitas ao site**: à esquerda **Visitas no período**, **Média por dia** e a variação "**vs. período anterior**"; à direita o gráfico.
+  Sem dados: "**Dados de audiência temporariamente indisponíveis**" numa caixa compacta, com **Tentar de novo**. **Projetos mais visitados**
+  é outro cartão ("os 5 primeiros", **Ver análise completa de visitas →**).
+- **Coluna da direita**: cartão azul-marinho "**Nível N · <nome>**", "N / M XP", "**Faltam N XP para o nível N+1**"; **Suas conquistas** com 3
+  selos (**N folhas conferidas** · **N lotes aprovados** · **N dias de sequência**; cinza quando zero) e **Ver todas →** (os marcos, Próxima,
+  Como os pontos são contados?, **Ocultar conquistas**). **Está tudo funcionando?**: uma linha por sistema, ✓ e "**Online**" (cópias:
+  "**Em dia**"); o que falha vem primeiro com o selo e a frase; **Ver detalhes e histórico →**. **Qualidade da base**: o índice, "**↓ −N p.p.**"
+  só com comparação ("sem comparação ainda"), 4 barras, **Como o índice é calculado? →** e **O que mais baixa o índice →**. **Quanto do acervo
+  já está no site**: donut com o % e "N de M folhas publicadas"; legenda **No site** · **Em preparo** (ainda não conferida) · **A publicar**
+  (conferida, fora do site); embaixo Projetos e Fundos com página. **Melhorias de hoje**: linhas com ✓ ("+N edições na base", "N folhas
+  conferidas", "N lotes aprovados", "N decisões respondidas", "N problemas corrigidos"); vazio: "Nenhuma melhoria registrada hoje ainda.";
+  por pessoa em **Ver histórico de melhorias →**.
+
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
   "Alertas" (admin) e "Logs" (admin/master) somem para o operador, e o servidor recusa esses dados a ele (403).

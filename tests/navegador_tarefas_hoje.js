@@ -58,7 +58,7 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
     await page.evaluate(() => carregarPainel());
     await page.waitForFunction(i => !document.querySelector(`[data-ini-adiar="${i}"]`) && /Rafael/.test(document.getElementById('ini-melhorias').textContent), sig.id, {timeout: 8000}).catch(() => {});
     ok(!(await page.locator(`[data-ini-adiar="${sig.id}"]`).count()), 'corrigida, a tarefa "fundo sem sigla" sai da fila');
-    const mh = await page.locator('#ini-melhorias').innerText();
+    const mh = await page.evaluate(() => document.getElementById('ini-melhorias').textContent);   // maquete: por pessoa em "Ver histórico de melhorias"
     ok(new RegExp('Rafael\\s*' + (antes + 1) + '\\s*hoje').test(mh), `Melhorias de hoje: Rafael aparece com ${antes + 1} correção(ões) hoje (era ${antes})`);
   } else problemas.push('o banco de teste não tem fundo sem sigla para corrigir');
 

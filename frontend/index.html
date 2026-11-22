@@ -1596,6 +1596,243 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
   .ini-fila-barra{padding:0 4px}.ini-ordem-sel{margin-left:0;width:100%}.ini-ordem-sel select{flex:1;min-height:44px}.ini-fila-barra .abas-sit .btn{min-height:44px}
   .ini-saude-rodape .btn,.ini-srv-mais{min-height:44px}.ini-fazer-hint{margin-left:0}}
 @media (prefers-reduced-motion:reduce){.ini-skel{animation:none}}
+/* ===== CAMP-HOME-UX (maquete do Rafael, 22/11/2026): a Home no desenho da maquete — cartões brancos com sombra leve sobre o cinza, títulos
+   fortes, ícones de traço coloridos, caminho em 7 cartões lado a lado, donut do site, nível em azul-marinho e selos de conquista. A barra do
+   topo e o menu lateral não mudam. Cores: os tokens do painel (claro e escuro); o ouro da medalha e o azul-marinho do nível são locais. ===== */
+#v-painel{--ini-sombra:0 1px 2px rgba(16,24,40,.06),0 2px 6px rgba(16,24,40,.06);--ini-ouro:#E0A93A;--ini-ouro2:#F3C95C;--ini-marinho:var(--side-bg,#0E1F3A);--ini-roxo:#6B4FBB}
+:root[data-theme="dark"] #v-painel{--ini-sombra:0 1px 2px rgba(0,0,0,.4);--ini-roxo:#A08BE6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #v-painel{--ini-sombra:0 1px 2px rgba(0,0,0,.4);--ini-roxo:#A08BE6}}
+.ini-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);border:0}
+#v-painel .panel,#v-painel .ini-kpi,#v-painel .ini-meta-card,#v-painel .ini-jogo-corpo>.pb,#v-painel .ini-conq-card{border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--ini-sombra);background:var(--surface)}
+#v-painel .panel .ph{padding:14px 18px 10px;border-bottom:0;flex-wrap:wrap;gap:6px 12px}
+#v-painel .panel .ph h2{font-size:var(--fs-sec);font-weight:700;letter-spacing:-.005em}
+#v-painel .panel .pb{padding:4px 18px 16px}
+#v-painel .ph .ini-link,#v-painel .ini-rodape,#v-painel .ini-mais,#v-painel .ini-cob-ir,#v-painel .qb-def>summary,#v-painel .mh-mais>summary,#v-painel .ini-conq-todas>summary{color:var(--blue);font-size:var(--fs-sm);font-weight:600;text-decoration:none}
+#v-painel .ph .ini-link:hover,#v-painel .ini-rodape:hover,#v-painel .ini-mais:hover{text-decoration:underline}
+#v-painel .ini-grid{gap:18px}#v-painel .ini-col{gap:18px}
+/* cabeçalho: foto grande, saudação, meta da semana */
+#v-painel .ini-hello{align-items:center;margin:0 0 18px;gap:16px}
+#v-painel .ini-hello-p{align-items:center;gap:16px}
+#v-painel .av.ini-av{width:64px;height:64px;font-size:var(--fs-xl);font-weight:600;margin:0;box-shadow:var(--ini-sombra)}
+#v-painel .ini-hello h1{font-size:var(--fs-page);font-weight:700}
+#v-painel .ini-hello .sub{font-size:var(--fs-sub);font-weight:500;margin-top:2px}
+#v-painel .ini-meta{flex:0 1 350px}
+#v-painel .ini-meta-card{display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 14px;align-items:center;padding:12px 18px}
+.ini-meta-ic{color:var(--ink);width:40px;height:40px}.ini-meta-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#v-painel .ini-meta-c{display:grid;gap:2px;min-width:0}
+#v-painel .ini-meta-l1{align-items:baseline;flex-wrap:wrap;gap:2px 10px}
+#v-painel .ini-meta-t{font-size:var(--fs-base);font-weight:700}
+#v-painel .ini-meta-n{font-size:var(--fs-sm);margin:0}
+#v-painel .ini-meta-l2{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:2px 12px}
+#v-painel .ini-meta-pct{font:700 var(--fs-xl)/1.1 var(--sans);color:var(--ink)}
+#v-painel .ini-meta-bar{height:10px;border:0;border-radius:var(--r-pill);background:var(--line2);margin:0}
+#v-painel .ini-meta-bar i{background:var(--green);border-radius:var(--r-pill)}
+#v-painel .ini-meta-mais{grid-column:1/-1;justify-self:end;margin-top:-2px}#v-painel .ini-meta-mais>summary{font-size:var(--fs-xs)}
+/* caixa "Entenda esta página" fechada numa linha */
+#v-painel>.ajuda-recolhida{margin:0 0 14px;padding:6px 14px;background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--ini-sombra)}
+#v-painel>.ajuda-recolhida>summary h2{font-size:var(--fs-sm);font-weight:600;color:var(--blue)}
+/* 4 indicadores */
+#v-painel .ini-kpis{gap:16px;margin:0 0 18px;grid-template-columns:repeat(var(--n,4),minmax(0,1fr))}
+#v-painel .ini-kpi{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"ic v" "l l" "d d";align-items:center;column-gap:12px;row-gap:2px;padding:14px 18px;min-height:96px}
+#v-painel .ini-kpi:hover{border-color:var(--blue)}
+.ini-kpi-ic{grid-area:ic;width:30px;height:30px;color:var(--blue)}.ini-kpi-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ini-kpi-ic.ic-pasta{color:var(--amber)}.ini-kpi-ic.ic-alerta{color:var(--red)}.ini-kpi-ic.ic-checkc{color:var(--green)}.ini-kpi-ic.ic-entrada{color:var(--blue)}
+#v-painel .ini-kpi .v{grid-area:v;font:700 var(--fs-num)/1.05 var(--sans);color:var(--ink)}
+#v-painel .ini-kpi .v.sem{font:600 var(--fs-lg)/1.3 var(--sans);color:var(--ink2)}
+#v-painel .ini-kpi .l{grid-area:l;font-weight:700;font-size:var(--fs-base);margin-top:6px}
+#v-painel .ini-kpi .d{grid-area:d;font-size:var(--fs-sm);color:var(--ink2)}
+#v-painel .ini-kpi .ir,#v-painel .ini-kpi .ini-kpi-q{opacity:0;transition:opacity .15s}
+#v-painel button.ini-kpi:hover .ir,#v-painel button.ini-kpi:focus-visible .ir,#v-painel button.ini-kpi:hover .ini-kpi-q,#v-painel button.ini-kpi:focus-visible .ini-kpi-q{opacity:1}
+/* O que fazer agora */
+#v-painel .ini-fazer>.ph{padding-bottom:6px}
+#v-painel .ini-fila-barra{padding:0 18px;border-bottom:1px solid var(--line2)}
+.ini-abas-linha{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-width:0}
+#v-painel .ini-fila-barra .ini-abas{border-bottom:0;flex:1 1 auto;min-width:0;gap:6px;padding:4px 0 8px}
+#v-painel .ini-fila-barra .ini-abas .btn{border:0;border-radius:var(--r-md) var(--r-md) 0 0;padding:7px 10px;background:transparent;color:var(--ink);font-weight:500;box-shadow:inset 0 -2px 0 transparent}
+#v-painel .ini-fila-barra .ini-abas .btn b{display:inline-block;min-width:22px;margin-left:6px;padding:0 7px;border-radius:var(--r-pill);background:var(--surface2);color:var(--ink2);font:600 var(--fs-xs)/1.6 var(--sans);text-align:center}
+#v-painel .ini-fila-barra .ini-abas .btn[aria-pressed="true"]{background:var(--blue-soft);color:var(--blue);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
+#v-painel .ini-fila-barra .ini-abas .btn[aria-pressed="true"] b{background:var(--surface);color:var(--blue)}
+#v-painel .ini-fila-barra .ini-abas [data-ini-aba="criticos"] b{background:var(--red-soft);color:var(--red)}
+#v-painel .ini-ordem-sel{margin-left:auto;font-size:var(--fs-sm);font-weight:600;color:var(--ink);gap:6px}
+#v-painel .ini-ordem-sel select,.ini-sel{font:inherit;font-size:var(--fs-sm);font-weight:500;padding:5px 28px 5px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--ink);box-shadow:var(--ini-sombra)}
+#v-painel .ini-fila-barra .ini-filtros{border-top:1px solid var(--line2);padding:4px 0 6px}
+#v-painel .ini-fila-barra .ini-filtros .btn{font-size:var(--fs-xs);padding:3px 8px}
+#v-painel .ini-filtros-rot{font-size:var(--fs-xs);text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink3)}
+#v-painel .ini-task{grid-template-columns:4px 72px minmax(0,1fr) auto;gap:2px 14px;padding:10px 18px;min-height:64px;align-items:center}
+#v-painel .ini-task>.ini-sev{align-self:stretch;width:4px;border-radius:var(--r-pill);margin:2px 0}
+#v-painel .ini-task>.mini{width:72px;height:46px;border-radius:var(--r-sm);border-color:var(--line2)}
+#v-painel .ini-task .t{gap:1px}
+#v-painel .ini-task .t b{font-size:var(--fs-base);font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#v-painel .ini-task small.ini-ctx{display:block;font-size:var(--fs-xs);color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}
+#v-painel .ini-ctx .code{font-size:var(--fs-xs);padding:0;background:none;border:0;color:var(--ink2)}
+#v-painel .ini-ctx .ini-tipo{font-size:var(--fs-xs);text-transform:none;letter-spacing:0;color:var(--ink);font-weight:600}
+#v-painel .ini-ctx .ini-lote,#v-painel .ini-ctx .ini-fundo{display:inline;font-size:var(--fs-xs);font-weight:400;color:var(--ink2)}
+#v-painel .ini-ctx .ini-resp{font-size:var(--fs-xs);color:var(--ink2);vertical-align:middle}#v-painel .ini-ctx .av.ini-resp-av{width:16px;height:16px;font-size:var(--fs-2xs)}
+#v-painel .ini-task-fim{flex-direction:row;align-items:center;gap:12px;flex-wrap:nowrap}
+#v-painel .ini-task-meta{flex-direction:row;align-items:center;gap:12px;text-align:left}
+#v-painel .ini-task .tag.ini-prio{border-radius:var(--r-sm);font-size:var(--fs-xs);font-weight:600;padding:1px 8px;border:1px solid transparent}
+#v-painel .ini-task .ini-prio[data-prio="critico"]{background:var(--red-soft);color:var(--red);border-color:color-mix(in srgb,var(--red) 25%,transparent)}
+#v-painel .ini-task .ini-prio[data-prio="alto"],#v-painel .ini-task .ini-prio[data-prio="medio"]{background:var(--amber-soft);color:var(--amber);border-color:color-mix(in srgb,var(--amber) 25%,transparent)}
+#v-painel .ini-task .ini-prio[data-prio="baixo"]{background:var(--green-soft);color:var(--green);border-color:color-mix(in srgb,var(--green) 25%,transparent)}
+#v-painel .ini-task .ini-espera{font-size:var(--fs-xs);color:var(--ink2);min-width:74px;text-align:right}
+#v-painel .ini-task-bts .btn.sm:not(.ini-mais-bt){min-width:84px;justify-content:center;font-weight:600}#v-painel .ini-task-bts .ini-mais-bt{min-width:32px;padding:4px 6px}
+#v-painel .ini-task .ini-sev.a{background:var(--amber)}#v-painel .ini-task[data-prio="critico"]>.ini-sev{background:var(--red)}#v-painel .ini-task[data-prio="medio"]>.ini-sev,#v-painel .ini-task[data-prio="alto"]>.ini-sev{background:var(--amber)}#v-painel .ini-task[data-prio="baixo"]>.ini-sev{background:var(--green)}
+#v-painel .ini-fila-pe{border-top:0;padding:4px 2px 6px}#v-painel .ini-mais{padding:8px 16px}
+/* caminho do material: 7 cartões iguais, lado a lado */
+#v-painel .ini-cam .pb{padding-top:8px}
+#v-painel .ini-flow{grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+#v-painel .ini-passo+.ini-passo::before{display:none}
+#v-painel .ini-step{margin:0;height:100%;grid-template-columns:minmax(0,1fr);grid-template-areas:"i" "tx" "qq" "st";align-content:start;align-items:start;gap:4px;padding:10px 10px 12px;border-radius:var(--r-md);border-color:var(--line2);min-height:118px}
+#v-painel .ini-step .i{width:22px;height:22px;border-width:1px;font:600 var(--fs-xs)/1 var(--sans);color:var(--ink)}
+#v-painel .ini-step .nm{font-size:var(--fs-sm);font-weight:700;line-height:1.25}
+#v-painel .ini-step .w{font-size:var(--fs-xs);line-height:1.3}
+#v-painel .ini-step .qq{text-align:left;white-space:normal;margin-top:auto;padding-right:22px}
+#v-painel .ini-step .q{font:700 var(--fs-xl)/1 var(--sans)}#v-painel .ini-step .u{font-size:var(--fs-xs)}
+#v-painel .ini-step .x{font-size:var(--fs-xs);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#v-painel .ini-step .st{font-size:var(--fs-xs);padding:0 6px;line-height:1.5}
+.ini-passo-ok{position:absolute;right:8px;bottom:9px;width:22px;height:22px;border-radius:50%;background:var(--green);color:var(--on-blue)}
+.ini-passo-ok svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.ini-passo-ok svg circle{display:none}
+#v-painel .ini-passo.zero .q{color:var(--ink)}
+#v-painel .ini-passo.stuck .ini-step{border:2px solid var(--amber);background:var(--amber-soft)}
+#v-painel .ini-passo.stuck .i{border-color:var(--amber);background:var(--surface)}
+@container (max-width:540px){#v-painel .ini-flow{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}}
+/* folhas conferidas por dia */
+#v-painel .ini-ritmo-p .ph h2{flex:1 1 auto}
+#v-painel .ini-per-sel{display:inline-flex}
+#v-painel .rt-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line2);border-radius:var(--r-md);overflow:hidden;margin:0}
+#v-painel .rt-kpis .vm-kpi{display:flex;flex-direction:column;gap:0;border:0;border-radius:0;background:var(--surface);padding:10px 14px;box-shadow:none;min-width:0}
+#v-painel .rt-kpis .vm-kpi+.vm-kpi{border-left:1px solid var(--line2)}
+#v-painel .rt-kpis .vm-kpi .v{order:0;font:700 var(--fs-xl)/1.2 var(--sans);color:var(--ink)}
+#v-painel .rt-kpis .vm-kpi .l{order:1;font-size:var(--fs-sm);color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400}
+#v-painel .rt-kpis .vm-kpi small{order:2;font-size:var(--fs-xs);color:var(--ink3)}
+#v-painel .rt-kpis .vm-kpi:not(.ini-rt-comp) small{display:none}
+#v-painel .rt-kpis .ini-rt-comp.sobe{background:var(--green-soft)}#v-painel .rt-kpis .ini-rt-comp.desce{background:var(--red-soft)}
+#v-painel .rt-kpis .ini-rt-comp .v.vm-sobe{color:var(--green)}#v-painel .rt-kpis .ini-rt-comp .v.vm-desce{color:var(--red)}
+#v-painel .rt-bar{background:var(--blue);opacity:.75;border-radius:var(--r-sm) var(--r-sm) 0 0}#v-painel .rt-col.hoje .rt-bar{opacity:1}
+#v-painel .rt-num>summary{font-size:var(--fs-sm)}#v-painel .rt-area{height:120px}#v-painel .ini-chart{gap:10px}
+/* visitas ao site e projetos mais visitados */
+#v-painel .ini-vis{display:grid;gap:18px}
+#v-painel .ini-vis .vm-per{margin-left:auto}#v-painel .ini-vis .ph #ini-vis-tag:empty{display:none}
+#v-painel .ini-vis .vm-sub{margin:0;font-size:var(--fs-sm);color:var(--ink2)}
+#v-painel .ini-vis .vm-datas{margin:2px 0 10px;font-size:var(--fs-xs);color:var(--ink3)}
+#v-painel .vm-res{display:grid;grid-template-columns:minmax(150px,190px) minmax(0,1fr);gap:16px;align-items:stretch;border:0;padding:0;margin:0}
+#v-painel .vm-res-kpis{display:grid;gap:8px;align-content:start;border:1px solid var(--line2);border-radius:var(--r-md);padding:12px 14px;margin:0;grid-template-columns:minmax(0,1fr)}
+#v-painel .vm-res-tot,#v-painel .vm-res-l{display:grid;gap:0;border:0;padding:0;background:none}
+#v-painel .vm-res-tot .v,#v-painel .vm-res-n{font:700 var(--fs-xl)/1.15 var(--sans);color:var(--ink)}
+#v-painel .vm-res-tot .l,#v-painel .vm-res-l .l{font-size:var(--fs-xs);color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400}
+#v-painel .vm-res-var .vm-res-n{font-size:var(--fs-base)}#v-painel .vm-res-n.vm-desce{color:var(--red)}#v-painel .vm-res-n.vm-sobe{color:var(--green)}
+#v-painel .vm-res-g{min-width:0}#v-painel .vm-res-g .vm-g-leg{display:none}
+#v-painel .vm-proj .ph .vm-nota{font-size:var(--fs-xs);color:var(--ink3)}#v-painel .vm-proj .ph .ini-link{margin-left:auto}
+#v-painel .vm-proj [data-vm-rank]{padding:0 18px 12px}
+#v-painel .vm-rank .vm-row{grid-template-columns:28px 54px minmax(0,1.3fr) minmax(60px,1fr) auto 28px;gap:12px;padding:7px 0;border-top:1px solid var(--line2)}
+#v-painel .vm-rank .vm-row:first-child{border-top:0}
+#v-painel .vm-pos{width:26px;height:22px;border-radius:var(--r-sm);background:var(--surface2);color:var(--ink);font:700 var(--fs-xs)/22px var(--sans);text-align:center}
+#v-painel .vm-row.top .vm-pos{background:var(--ini-ouro);color:var(--surface)}
+#v-painel .vm-foto{width:54px;height:34px;border-radius:var(--r-sm)}
+#v-painel .vm-nome b{font-size:var(--fs-sm);font-weight:700}#v-painel .vm-nome small{font-size:var(--fs-xs)}
+#v-painel .vm-barra{height:6px;border-radius:var(--r-pill);background:transparent}#v-painel .vm-barra i{background:var(--ini-marinho);border-radius:var(--r-pill)}
+:root[data-theme="dark"] #v-painel .vm-barra i{background:var(--blue)}
+#v-painel .vm-n{text-align:right}#v-painel .vm-n b{font:700 var(--fs-base)/1.1 var(--sans)}#v-painel .vm-n small{font-size:var(--fs-2xs)}
+#v-painel #ini-visitas .vm-var,#v-painel #ini-visitas .vm-pub-t{display:none}
+#v-painel .vm-pub{border:0;background:none;padding:2px;color:var(--ink2)}#v-painel .vm-pub svg{width:18px;height:18px}
+.ini-vazio-c{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px 14px;border:1px solid var(--line2);border-radius:var(--r-md);background:var(--surface2);color:var(--ink2);font-size:var(--fs-sm)}
+.ini-vazio-c b{color:var(--ink);font-size:var(--fs-sm)}.ini-vazio-c p{margin:2px 0 0}.ini-vazio-c code{display:block;margin-top:4px;font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink3)}
+.ini-vazio-c .act{margin:0;flex-wrap:wrap;justify-content:flex-end}.ini-vazio-t{min-width:0}
+.ini-vazio-ic{width:26px;height:26px;color:var(--ink3)}.ini-vazio-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+/* coluna da direita: nível (azul-marinho) e conquistas */
+#v-painel .ini-jogo-p{display:grid;gap:18px}#v-painel .ini-jogo-corpo{display:grid;gap:18px}
+#v-painel .ini-jogo{display:grid;gap:18px}
+.ini-nivel-card{display:grid;grid-template-columns:58px minmax(0,1fr);gap:14px;align-items:center;padding:16px 18px;border-radius:var(--r-lg);background:var(--ini-marinho);color:#fff;box-shadow:var(--ini-sombra);border:1px solid rgba(255,255,255,.08)}
+:root[data-theme="dark"] .ini-nivel-card{background:color-mix(in srgb,var(--side-bg,#0A1628) 75%,var(--blue) 25%)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ini-nivel-card{background:color-mix(in srgb,var(--side-bg,#0A1628) 75%,var(--blue) 25%)}}
+.ini-medalha svg{width:58px;height:58px;display:block}.ini-medalha .fita.a{fill:var(--blue-soft)}.ini-medalha .fita.b{fill:var(--red)}.ini-medalha .ouro{fill:var(--ini-ouro)}.ini-medalha .ouro2{fill:var(--ini-ouro2)}.ini-medalha .estrela{fill:var(--ini-ouro)}
+.ini-nivel-c{min-width:0;display:grid;gap:4px}.ini-nivel-t{margin:0;font-size:var(--fs-base)}.ini-nivel-t b{font-weight:700}
+#v-painel .ini-nivel-card .ini-bar{height:10px;border:0;border-radius:var(--r-pill);background:rgba(255,255,255,.22);margin:2px 0}#v-painel .ini-nivel-card .ini-bar i{background:var(--ini-ouro2);border-radius:var(--r-pill)}
+.ini-nivel-card .ini-nivel-xp{margin:0;color:#fff;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}.ini-nivel-falta{margin:0;font-size:var(--fs-xs);color:rgba(255,255,255,.82)}.ini-nivel-falta b{color:#fff}
+#v-painel .ini-conq-card{padding:14px 18px 16px}
+.ini-conq-h{display:flex;align-items:center;justify-content:space-between;gap:8px}.ini-conq-h .ini-jogo-h{margin:0;font-size:var(--fs-sec);font-weight:700}
+.ini-conq-todas>summary{list-style:none;cursor:pointer}.ini-conq-todas>summary::-webkit-details-marker{display:none}.ini-conq-todas .mais-lista{right:0;left:auto;min-width:280px}
+.ini-conq-todas .ini-link{color:var(--blue);background:none;border:0;padding:0;font:inherit;font-size:var(--fs-sm);cursor:pointer;text-decoration:underline;text-underline-offset:3px;justify-self:start}
+.ini-selos{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;text-align:center}
+.ini-selo{display:grid;justify-items:center;gap:6px;font-size:var(--fs-xs);color:var(--ink2);line-height:1.3}.ini-selo-t b{display:inline;color:var(--ink);font-size:var(--fs-sm)}
+.ini-selo-ic svg{width:50px;height:50px;display:block}.ini-selo-ic .w{fill:none;stroke:var(--on-blue);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.ini-selo-ic .w.wf{fill:var(--on-blue);stroke-width:1}
+.ini-selo.s-folha .f{fill:var(--green)}.ini-selo.s-lote .f{fill:var(--ini-roxo)}.ini-selo.s-dias .f{fill:var(--ini-ouro)}
+.ini-selo.zero .f{fill:var(--line)}.ini-selo.zero .ini-selo-ic{opacity:.8}
+#v-painel .ini-jogo-corpo>.pb{padding:14px 18px}
+/* está tudo funcionando? */
+#v-painel .ini-saude-p>.ph{padding-bottom:4px}#v-painel #ini-saude-resumo:empty{display:none}
+#v-painel .ini-saude-p .ini-ajuda-sec{margin-left:auto}#v-painel #ini-saude-resumo+.ini-ajuda-sec{margin-left:0}
+#v-painel .ini-srv{grid-template-columns:22px minmax(0,1fr);padding:6px 18px;border-bottom:0;align-items:start}
+#v-painel .ini-srv.ok{align-items:center}
+#v-painel .ini-srv-ic.g{background:var(--green);color:var(--on-blue)}
+#v-painel .ini-srv-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}#v-painel .ini-srv-ic svg circle{display:none}
+#v-painel .ini-srv-l1{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px}#v-painel .ini-srv-l1 b{font-size:var(--fs-sm);font-weight:700}
+#v-painel .ini-pill{border-radius:var(--r-pill);font-size:var(--fs-xs);padding:0 10px;font-weight:500;min-width:64px;text-align:center}
+#v-painel .ini-srv.ok .ini-pill{background:var(--green-soft);color:var(--green);border-color:transparent}
+#v-painel .ini-srv-t p{font-size:var(--fs-xs)}#v-painel .ini-srv-x{margin:0}
+#v-painel .ini-saude-rodape{display:grid;gap:6px;padding:6px 18px 14px;font-size:var(--fs-xs)}
+#v-painel .ini-saude-rodape .ini-rodape{padding:4px 0}
+.ini-saude-v{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--ink3)}.ini-saude-v .btn.sm{font-size:var(--fs-xs);padding:2px 8px}
+/* qualidade da base */
+#v-painel #ini-qualidade .ph .hint{margin-left:auto;font-size:var(--fs-xs);color:var(--ink3)}
+#v-painel .qb-geral{align-items:baseline;gap:8px 10px}
+#v-painel .qb-geral .v{font:700 var(--fs-num)/1.1 var(--sans)}
+#v-painel .qb-geral-l{font-size:var(--fs-sm)}
+.qb-delta{margin-left:auto;font-size:var(--fs-sm);font-weight:700;color:var(--ink2)}.qb-delta.desce{color:var(--red)}.qb-delta.sobe{color:var(--green)}.qb-delta.sem{font-weight:400;font-size:var(--fs-xs);color:var(--ink3)}
+#v-painel .qb-crit{gap:8px;margin:10px 0 6px}
+#v-painel .qb-crit label{font-size:var(--fs-sm);gap:2px 8px}
+#v-painel .qb-crit .qb-v{font:700 var(--fs-sm) var(--sans)}
+#v-painel .qb-crit progress{-webkit-appearance:none;appearance:none;height:8px;border:0;border-radius:var(--r-pill);background:var(--line2);overflow:hidden;accent-color:var(--ini-marinho)}
+#v-painel .qb-crit progress::-webkit-progress-bar{background:var(--line2);border-radius:var(--r-pill)}
+#v-painel .qb-crit progress::-webkit-progress-value{background:var(--ini-marinho);border-radius:var(--r-pill)}
+#v-painel .qb-crit progress::-moz-progress-bar{background:var(--ini-marinho);border-radius:var(--r-pill)}
+:root[data-theme="dark"] #v-painel .qb-crit progress::-webkit-progress-value{background:var(--blue)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #v-painel .qb-crit progress::-webkit-progress-value{background:var(--blue)}}
+#v-painel .qb-crit small{font-size:var(--fs-xs)}
+#v-painel .qb-def{margin:4px 0 0}#v-painel .qb-def>summary{min-height:28px;list-style:none}#v-painel .qb-def>summary::-webkit-details-marker{display:none}
+#v-painel .qb-def[open]>summary{color:var(--ink2)}#v-painel .qb-causas{background:var(--surface)}
+/* quanto do acervo no site: donut */
+#v-painel .ini-prog{gap:12px}
+.ini-donut-row{display:grid!important;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:center}
+.ini-donut{position:relative;width:150px;height:150px}
+.ini-donut svg{width:100%;height:100%;display:block;transform:none}
+.ini-donut circle{fill:none;stroke-width:6}.ini-donut .ini-donut-bg{stroke:var(--line2)}
+.ini-donut-s.no{stroke:var(--ini-marinho)}.ini-donut-s.prep{stroke:var(--blue);opacity:.55}.ini-donut-s.pub{stroke:var(--line-forte)}.ini-donut-s.falta{stroke:var(--line-forte)}
+:root[data-theme="dark"] .ini-donut-s.no{stroke:var(--blue);opacity:1}:root[data-theme="dark"] .ini-donut-s.prep{stroke:var(--blue);opacity:.45}
+.ini-donut-c{position:absolute;inset:26px;display:grid;place-content:center;text-align:center;gap:2px}
+.ini-donut-c .ini-cob-pct{font:700 var(--fs-xl)/1 var(--sans);color:var(--ink)}
+.ini-donut-c .ini-cob-n{font-size:var(--fs-2xs);line-height:1.25;color:var(--ink2)}.ini-donut-c .ini-cob-n b{color:var(--ink2);font-weight:500}
+.ini-donut-leg{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:var(--fs-sm);color:var(--ink)}
+.ini-donut-leg li{display:flex;align-items:center;gap:8px}.ini-donut-leg span{color:var(--ink2)}
+.ini-donut-leg i{width:10px;height:10px;border-radius:50%;flex:none;background:var(--line-forte)}.ini-donut-leg i.no{background:var(--ini-marinho)}.ini-donut-leg i.prep{background:color-mix(in srgb,var(--blue) 55%,var(--surface))}
+:root[data-theme="dark"] .ini-donut-leg i.no{background:var(--blue)}
+#v-painel #ini-cobertura .ini-prog-row:not(.ini-donut-row){padding-top:10px;border-top:1px solid var(--line2)}
+#v-painel #ini-cobertura .ini-prog-row header{font-size:var(--fs-sm)}#v-painel #ini-cobertura .ini-cob-pct{font:700 var(--fs-base) var(--sans)}
+#v-painel #ini-cobertura .ini-cob-n{font-size:var(--fs-xs)}#v-painel #ini-cobertura .ini-nota{font-size:var(--fs-xs);margin:0}
+#v-painel #ini-cobertura .ini-bar{height:6px;border:0;border-radius:var(--r-pill);background:var(--line2)}#v-painel #ini-cobertura .ini-bar i{background:var(--ini-marinho);border-radius:var(--r-pill)}
+/* melhorias de hoje */
+#v-painel .mh-pb{padding-top:2px}
+.mh-hoje{list-style:none;margin:0;padding:0;display:grid;gap:10px}.mh-hoje li{display:flex;align-items:center;gap:10px;font-size:var(--fs-sm);font-weight:500}
+.mh-ic{width:20px;height:20px;border-radius:50%;background:var(--green);color:var(--on-blue);flex:none}.mh-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}.mh-ic svg circle{display:none}
+.mh-hoje-vazio{margin:0}
+#v-painel .mh-mais{margin-top:12px}#v-painel .mh-mais>summary{list-style:none;cursor:pointer;min-height:28px}#v-painel .mh-mais>summary::-webkit-details-marker{display:none}
+#v-painel .mh-mais .pb{padding:8px 0 0}#v-painel .mh-mais .mh-cab,#v-painel .mh-mais .mh-lista li{padding-left:0;padding-right:0}
+/* tablet e celular */
+@media (max-width:1279px){#v-painel .ini-meta{flex-basis:320px}}
+@media (max-width:900px){#v-painel .ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#v-painel .vm-res{grid-template-columns:minmax(0,1fr)}#v-painel .vm-res-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){
+  #v-painel .av.ini-av{width:48px;height:48px;font-size:var(--fs-lg)}
+  #v-painel .ini-kpi{min-height:0;padding:12px 14px}
+  #v-painel .ini-task{grid-template-columns:4px 56px minmax(0,1fr);padding:10px 12px}#v-painel .ini-task>.mini{width:56px;height:38px}
+  #v-painel .ini-task-fim{grid-column:2 / -1;justify-content:space-between;flex-wrap:wrap}
+  #v-painel .ini-task small.ini-ctx{white-space:normal}
+  #v-painel .ini-fila-barra{padding:0 10px}#v-painel .ini-abas-linha>.ini-abas{flex:1 1 100%;min-width:0}#v-painel .ini-ordem-sel{margin-left:0;width:100%;min-width:0}#v-painel .ini-ordem-sel select{flex:1;min-width:0;min-height:44px}
+  #v-painel .rt-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#v-painel .rt-kpis .vm-kpi:nth-child(3){border-left:0}#v-painel .rt-kpis .vm-kpi:nth-child(n+3){border-top:1px solid var(--line2)}
+  #v-painel .vm-res-kpis{grid-template-columns:minmax(0,1fr)}
+  #v-painel .vm-rank .vm-row{grid-template-columns:26px 44px minmax(0,1fr) auto 24px}#v-painel .vm-rank .vm-barra{display:none}
+  .ini-donut-row{grid-template-columns:minmax(0,1fr);justify-items:center}
+  #v-painel .ini-meta-card{padding:10px 14px}
+}
 /* P2-18 · janela de confirmação padrão (alvo + consequência; digitar o código para o que não tem volta) */
 .conf-ov{position:fixed;inset:0;background:rgba(10,14,20,.55);display:grid;place-items:center;z-index:80;padding:16px}
 .conf-box{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;width:min(520px,100%);max-height:90vh;overflow:auto;padding:18px 20px;display:grid;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.25)}
@@ -3996,7 +4233,7 @@ function garantirCaixaAjuda(forcar){
   /* Redesenho §6: na Home, depois do PRIMEIRO uso (a 1ª vez que a caixa apareceu inteira, ou um "Entendi" de versão anterior) ela chega
      fechada, numa linha "Entenda esta página", e não reabre sozinha a cada visita; "Entendi" tira até a linha. O "?" abre a explicação inteira. */
   const usou=k==='painel'&&!window.AJUDA_PAINEL_INTEIRA&&(!!vista||!!AJUDA_VISTAS['ajuda.painel_uso']);   /* na mesma visita (sem recarregar), continua inteira */
-  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr'),rec=!inteira&&(ajudaJaFechouAlguma()||usou);const html=caixaAjudaHTML(k,!!vista&&vista!==versao,rec);hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html);
+  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr'),rec=!inteira&&(k==='painel'||ajudaJaFechouAlguma()||usou);   /* CAMP-HOME-UX (maquete): na Home a caixa grande empurrava tudo para baixo: chega sempre fechada, numa linha */const html=caixaAjudaHTML(k,!!vista&&vista!==versao,rec);hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html);
     if(k==='painel'&&!rec&&!AJUDA_VISTAS['ajuda.painel_uso']){window.AJUDA_PAINEL_INTEIRA=true;AJUDA_VISTAS['ajuda.painel_uso']='1';guardarVistasLocal();API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.painel_uso',valor:'1'})}).catch(()=>{})}}}
 async function carregarPreferenciasAjuda(){const ch='camp.ajuda.vistas.'+((EU&&EU.email)||'');try{const c=JSON.parse(localStorage.getItem(ch)||'null');if(c&&AJUDA_VISTAS===null){AJUDA_VISTAS=c;garantirCaixaAjuda()}}catch(_){}   /* H1: o que já se sabe aparece na hora (sem piscar a caixa) */
   try{AJUDA_VISTAS=await API('/api/auth/eu/preferencias')}catch(_){AJUDA_VISTAS=AJUDA_VISTAS||{}}guardarVistasLocal();garantirCaixaAjuda()}
@@ -8018,25 +8255,40 @@ function saudacaoPainel(d){
   const f=d.fila,pa=d.pendencias&&d.pendencias.pedem_acao,n=f&&f.pedem_atencao!=null?+f.pedem_atencao:pa&&pa.precisa_de_voce!=null?+pa.precisa_de_voce:null;   /* servidor antigo, sem "fila": o número do menu */
   return {t1,n,data,t2:n==null?'Não consegui contar agora o que pede a sua atenção.':n?`${fmtN(n)} ${n===1?'coisa pede':'coisas pedem'} sua atenção hoje`:'Nada pede sua atenção agora.'}}
 function iniAlertasHTML(al){return (al||[]).map(a=>`<div class="ini-alerta" role="alert"><span class="ini-dot r" aria-hidden="true" style="margin:0"></span><p><b>${escHtml(a.titulo)}</b> ${escHtml(a.texto)}</p>${a.acao?`<button type="button" class="btn sm" data-ini-rota="${escHtml(a.acao.rota)}">${escHtml(a.acao.rotulo)}</button>`:''}</div>`).join('')}
+/* CAMP-HOME-UX (maquete do Rafael, 22/11/2026): ícones de traço (SVG inline, cor pela classe) dos indicadores, da meta e das seções */
+const INI_SVG=(d,extra='')=>`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"${extra}>${d}</svg>`;
+const INI_IC={pasta:INI_SVG('<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6l2 2.2h7.4A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/>'),
+  camadas:INI_SVG('<path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="m2.5 12.5 9.5 5 9.5-5"/><path d="m2.5 16.5 9.5 5 9.5-5"/>'),
+  alerta:INI_SVG('<path d="M10.3 4 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.5"/><path d="M12 17.4v.1"/>'),
+  entrada:INI_SVG('<path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4 19.5h16"/>'),
+  checkc:INI_SVG('<circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.7 2.7L16.2 9.6"/>'),
+  alvo:INI_SVG('<circle cx="11" cy="13" r="8"/><circle cx="11" cy="13" r="4.5"/><circle cx="11" cy="13" r="1.2"/><path d="m11 13 8.5-8.5"/><path d="M16.5 4.5h3v3"/>'),
+  info:INI_SVG('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6v.1"/>')};
+/* conquistas: o desenho do selo (escudo, hexágono, escudo) com o ícone branco por cima */
+const INI_SELO={escudo:'<path class="f" d="M24 3 6 9.5v12C6 33 13.6 41.6 24 45c10.4-3.4 18-12 18-23.5v-12z"/>',hexa:'<path class="f" d="M24 3 42.2 13.5v21L24 45 5.8 34.5v-21z"/>'};
+const INI_SELO_IC={check:'<path class="w" d="m16 24.5 5.5 5.5L32.5 19"/>',camadas:'<path class="w" d="M24 14 13 19.5 24 25l11-5.5z"/><path class="w" d="m13 24.5 11 5.5 11-5.5"/><path class="w" d="m13 29 11 5.5L35 29"/>',raio:'<path class="w wf" d="M26.5 11 16 26.5h7.5L21.5 37 32 21.5h-7.5z"/>'};
+function iniSeloSVG(forma,ic){return `<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${INI_SELO[forma]}${INI_SELO_IC[ic]}</svg>`}
+const INI_MEDALHA='<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path class="fita a" d="M20 4h10l6 16H26z"/><path class="fita b" d="M44 4H34l-6 16h10z"/><circle class="ouro" cx="32" cy="38" r="20"/><circle class="ouro2" cx="32" cy="38" r="14.5"/><path class="estrela" d="m32 28.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L32 43.3l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z"/></svg>';
 /* Redesenho §7: 3 ou 4 indicadores, cada um com UMA unidade (decisões, lotes ou folhas), número grande, rótulo e complemento. Os que contam
    uma lista são botões que abrem essa lista; "Folhas conferidas hoje" não é lista (só informa). Sem dado: "Sem dados", nunca 0. */
 function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
   /* CAMP-HOME-UX: cada cartão abre a lista que conta e diz a REGRA da contagem (o "?" e a dica ao passar o mouse ou com Tab; o leitor de tela ouve no rótulo) */
-  const k=(cls,v,l,dd,rota,ex,regra)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" aria-label="${escHtml(`${fmtN(v)} ${l} (${dd}): abrir a lista. Como conta: ${regra}`)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span><span class="ir" aria-hidden="true">→</span><span class="ini-kpi-q" aria-hidden="true">?</span><span class="ini-kpi-regra" aria-hidden="true"><b>Como conta:</b> ${escHtml(regra)} ${escHtml(ex)}</span></button>`;
+  const k=(cls,v,l,dd,rota,ex,regra,ic)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" aria-label="${escHtml(`${fmtN(v)} ${l} (${dd}): abrir a lista. Como conta: ${regra}`)}"><span class="ini-kpi-ic ic-${ic}" aria-hidden="true">${INI_IC[ic]||''}</span><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span><span class="ir" aria-hidden="true">→</span><span class="ini-kpi-q" aria-hidden="true">?</span><span class="ini-kpi-regra" aria-hidden="true"><b>Como conta:</b> ${escHtml(regra)} ${escHtml(ex)}</span></button>`;
   /* UX-18: com zero decisões o cartão nem aparece (Decisões continua no menu) */
-  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão pendente':'decisões pendentes',p.decisoes_estacao?'o CAMP Vision está parado esperando':(p.pedem_acao&&+p.pedem_acao.decisoes_escondidas)?`${fmtN(+p.pedem_acao.decisoes_escondidas)} deixada${+p.pedem_acao.decisoes_escondidas===1?'':'s'} para depois por você (Agora não)`:'esperando resposta','decisoes',INI_EXPLICA.decisoes,INI_REGRA.decisoes)]:[]),
-    k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir,INI_REGRA.conferir),
-    admin?k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'lote espera um admin':'lotes esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin,INI_REGRA.admin)
-      :k('',p.lotes_importar,p.lotes_importar===1?'lote para importar':'lotes para importar','o CAMP Vision leu; falta trazer as folhas','filas/importar',INI_EXPLICA.importar,INI_REGRA.importar),
+  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão pendente':'decisões pendentes',p.decisoes_estacao?'o CAMP Vision está parado esperando':(p.pedem_acao&&+p.pedem_acao.decisoes_escondidas)?`${fmtN(+p.pedem_acao.decisoes_escondidas)} deixada${+p.pedem_acao.decisoes_escondidas===1?'':'s'} para depois por você (Agora não)`:'esperando resposta','decisoes',INI_EXPLICA.decisoes,INI_REGRA.decisoes,'pasta')]:[]),
+    k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir,INI_REGRA.conferir,'camadas'),
+    admin?k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'lote espera um admin':'lotes esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin,INI_REGRA.admin,'alerta')
+      :k('',p.lotes_importar,p.lotes_importar===1?'lote para importar':'lotes para importar','o CAMP Vision leu; falta trazer as folhas','filas/importar',INI_EXPLICA.importar,INI_REGRA.importar,'entrada'),
     /* "Folhas conferidas hoje" não é uma lista: o cartão leva ao gráfico dos últimos dias (Resultados), com a mesma regra */
-    `<button type="button" class="ini-kpi ini-kpi-info" id="ini-kpi-hoje" data-ini-rolar="ini-t-ritmo" aria-label="${escHtml('Folhas conferidas hoje: ver o gráfico dos últimos dias. Como conta: '+INI_REGRA.hoje)}">${iniKpiHojeHTML(undefined)}</button>`];
+    `<button type="button" class="ini-kpi ini-kpi-info k-hoje" id="ini-kpi-hoje" data-ini-rolar="ini-t-ritmo" aria-label="${escHtml('Folhas conferidas hoje: ver o gráfico dos últimos dias. Como conta: '+INI_REGRA.hoje)}">${iniKpiHojeHTML(undefined)}</button>`];
   return `<div class="ini-kpis" style="--n:${ks.length}" role="group" aria-label="Resumo do dia">${ks.join('')}</div>`}
 const INI_REGRA={decisoes:'as perguntas abertas em Decisões; não entram as que você deixou para depois (Agora não).',conferir:'os lotes com pelo menos uma folha que ninguém conferiu; embaixo, a soma das folhas que faltam nesses lotes.',
   admin:'os lotes já conferidos que esperam a aprovação e os aprovados que esperam a publicação.',importar:'os lotes que o CAMP Vision já leu e cujas folhas ainda não vieram para o painel.',
   hoje:'as folhas marcadas como conferidas ou corrigidas hoje (dia de São Paulo); a média usa só os dias com alguma conferência nas últimas 2 semanas.'};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-rolar]');if(!b)return;const alvo=document.getElementById(b.dataset.iniRolar);if(!alvo)return;
   const sec=alvo.closest('section')||alvo;if(sec.scrollIntoView)sec.scrollIntoView({block:'start',behavior:'smooth'});alvo.setAttribute('tabindex','-1');alvo.focus({preventScroll:true})});
-function iniKpiHojeHTML(R){if(R===undefined)return '<span class="v"><span class="ini-skel ini-kpi-skel"></span></span><span class="l">folhas conferidas hoje</span><span class="d">carregando…</span>';
+function iniKpiHojeHTML(R){return `<span class="ini-kpi-ic ic-checkc" aria-hidden="true">${INI_IC.checkc}</span>`+iniKpiHojeCorpo(R)}
+function iniKpiHojeCorpo(R){if(R===undefined)return '<span class="v"><span class="ini-skel ini-kpi-skel"></span></span><span class="l">folhas conferidas hoje</span><span class="d">carregando…</span>';
   const r=R&&!R.erro&&R.dias||[],u=r[r.length-1],hoje=new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(new Date());
   if(!u||u.dia!==hoje||u.conferidas==null)return `<span class="v sem">Sem dados</span><span class="l">folhas conferidas hoje</span><span class="d">${escHtml(R&&R.erro?'não consegui medir agora':'o ritmo de hoje ainda não foi medido')}</span>`;
   const n=+u.conferidas,m=+R.media_conferidas||0;
@@ -8059,7 +8311,7 @@ const INI_ABAS=[['minha','Minha fila','As tarefas que estão com você (atribuí
 function iniOrdem(){try{const v=localStorage.getItem('camp.ini.fila');if(INI_ORDENS.some(o=>o[0]===v))return v;return localStorage.getItem('camp.ini.ordem')==='parado'?'antigo':'prioridade'}catch(_){return 'prioridade'}}   /* UX-09: quem tinha "mais parado primeiro" fica com "mais antigo primeiro"; CAMP-HOME-UX: o padrão é a Prioridade */
 function iniEsperaTxt(i){const h=i.espera_h;if(h==null||isNaN(+h))return '';const pre=i.parado_h!=null?'parado':'esperando';   /* UX-09: lote = "parado há" (tempo na mesma etapa) */
   return +h<1?`${pre} há menos de 1 h`:+h<48?`${pre} há ${Math.round(+h)} h`:`${pre} há ${Math.round(+h/24)} dias`}
-function iniOrdemHTML(f){const ordem=(f&&f.ordem)||iniOrdem();return `<label class="ini-ordem-sel">Ordenar <select id="ini-ordem" aria-label="Ordenar a fila">${INI_ORDENS.map(([v,t])=>`<option value="${v}"${v===ordem?' selected':''}>${t}</option>`).join('')}</select></label>`}
+function iniOrdemHTML(f){const ordem=(f&&f.ordem)||iniOrdem();return `<label class="ini-ordem-sel">Ordenar: <select id="ini-ordem" aria-label="Ordenar a fila">${INI_ORDENS.map(([v,t])=>`<option value="${v}"${v===ordem?' selected':''}>${t}</option>`).join('')}</select></label>`}
 function iniFilaItens(){const f=PAINEL_D&&PAINEL_D.fila;return f?f.itens||[]:[]}
 function iniAbaAtual(f){const ab=f&&f.abas,leit=EU&&EU.papel==='leitura';if(!ab)return 'todos';let a=INI_ABA;if(!a){try{a=localStorage.getItem('camp.ini.aba')}catch(_){}}
   if(!INI_ABAS.some(x=>x[0]===a)||(leit&&a==='minha'))a=null;return a||(!leit&&ab.minha?'minha':'todos')}   /* sem escolha lembrada: a Minha fila, se tiver algo; senão Todos */
@@ -8071,13 +8323,17 @@ function iniPrioTag(i){const p=i.prioridade;if(!p)return i.urgente?`<span class=
 function iniRespHTML(i){const r=i.responsavel;if(i.filtro==='base'||!(PAINEL_D&&PAINEL_D.fila&&PAINEL_D.fila.abas))return '';
   if(!r)return '<span class="ini-resp sem">Sem responsável</span>';const eu=EU&&r.id===EU.id;
   return `<span class="ini-resp" data-uid="${escHtml(r.id)}" title="${escHtml('Responsável: '+r.nome)}">${avatarHTML(null,r.nome,false,'ini-resp-av')}<span class="ini-resp-n">${escHtml(eu?'Você':String(r.nome).split(/\s+/)[0])}</span></span>`}
+/* CAMP-HOME-UX (maquete): "Há 19 dias" na linha; a frase inteira ("parado há 19 dias") fica na dica */
+function iniEsperaCurta(i){const h=i.espera_h;if(h==null||isNaN(+h))return '';return +h<1?'Há menos de 1 h':+h<48?`Há ${Math.round(+h)} h`:`Há ${Math.round(+h/24)} dias`}
 function iniLinhaHTML(i,k,primeira){const a=i.acao,leitura=EU&&EU.papel==='leitura',esp=iniEsperaTxt(i);
   const outro=i.meu===false?`<span class="ini-outro-nota">você acompanha; quem faz é ${i.quem==='admin'?'um admin':'um operador'}</span>`:'';
   const bt=a?`<button type="button" class="btn sm ${primeira?'pri':'ini-bt'}" data-ini-acao="${k}">${escHtml(a.rotulo)}</button>`:'';
   const ctx=[i.lote?`<span class="ini-lote">${escHtml(i.lote)}</span>`:'',i.codigo?`<span class="code">${escHtml(i.codigo)}</span>${i.fundo_nome?` <span class="ini-fundo">${escHtml(i.fundo_nome)}</span>`:''}`:'',i.contexto?escHtml(i.contexto):''].filter(Boolean).join(' · ');
   const pm=i.prioridade&&i.filtro!=='base'?i.prioridade.motivo:(i.urgente||'');
-  const motivo=pm?(i.urgente?`<span class="ini-motivo">${escHtml(pm)}</span>`:`<small class="ini-prio-motivo">${escHtml(pm)}</small>`):'';
-  return `<div class="ini-task${i.meu===false?' ini-outro':''}${i.nivel===2?' ini-base':''}" data-ini-linha="${k}" data-ini-grupo="${escHtml(i.grupo)}" data-ini-cat="${escHtml(i.filtro)}"${i.prioridade?` data-prio="${escHtml(i.prioridade.nivel)}"`:''}${i.urgente?' data-ini-urgente=""':''}><span class="ini-sev ${i.nivel===2?'':escHtml(i.sev)}" aria-hidden="true"></span>${LST.mini(i.miniatura||null)}<div class="t"><div class="ini-l1"><span class="ini-tipo">${escHtml(i.tipo_tarefa||'')}</span>${i.filtro==='base'?'':iniPrioTag(i)}${outro}</div><b>${escHtml(i.titulo)}</b>${ctx?`<small class="ini-ctx">${ctx}</small>`:''}${motivo}</div><div class="ini-task-fim"><span class="ini-task-meta">${iniRespHTML(i)}${esp?`<span class="ini-espera">${escHtml(esp)}</span>`:''}</span><span class="ini-task-bts">${bt}${a&&!leitura&&i.adiar?iniIgnorarHTML(i,k):''}</span></div></div>`}
+  /* CAMP-HOME-UX (maquete): a frase da prioridade não alonga a linha: fica na dica do selo e da linha (e para o leitor de tela) */
+  const motivo=pm?(i.urgente?`<span class="ini-motivo ini-sr">${escHtml(pm)}</span>`:`<small class="ini-prio-motivo ini-sr">${escHtml(pm)}</small>`):'';
+  const meta=[`<span class="ini-tipo">${escHtml(i.tipo_tarefa||'')}</span>`,ctx,iniRespHTML(i)].filter(Boolean).join('<span class="ini-sep" aria-hidden="true"> · </span>');
+  return `<div class="ini-task${i.meu===false?' ini-outro':''}${i.nivel===2?' ini-base':''}" data-ini-linha="${k}" data-ini-grupo="${escHtml(i.grupo)}" data-ini-cat="${escHtml(i.filtro)}"${i.prioridade?` data-prio="${escHtml(i.prioridade.nivel)}"`:''}${i.urgente?' data-ini-urgente=""':''}${pm?` title="${escHtml(pm)}"`:''}><span class="ini-sev ${i.nivel===2?'':escHtml(i.sev)}" aria-hidden="true"></span>${LST.mini(i.miniatura||null)}<div class="t"><b>${escHtml(i.titulo)}</b><small class="ini-ctx">${meta}</small>${motivo}${outro?`<span class="ini-l1">${outro}</span>`:''}</div><div class="ini-task-fim"><span class="ini-task-meta">${i.filtro==='base'?'':iniPrioTag(i)}${esp?`<span class="ini-espera" title="${escHtml(esp)}"><span aria-hidden="true">${escHtml(iniEsperaCurta(i))}</span><span class="ini-sr">${escHtml(esp)}</span></span>`:''}</span><span class="ini-task-bts">${bt}${a&&!leitura&&i.adiar?iniIgnorarHTML(i,k):''}</span></div></div>`}
 function iniFiltrosHTML(f){const ativo=f.filtros.find(x=>x.id===INI_FILTRO)?INI_FILTRO:'todas',sempre=['todas','conferir','publicar','responder','base'];   /* os 5 do plano sempre (0 é 0); Decidir e Resolver só quando há */
   return `<div class="abas-sit ini-filtros" role="group" aria-label="Filtrar a fila por tipo de trabalho"><span class="ini-filtros-rot" aria-hidden="true">Tipo</span>${f.filtros.filter(x=>sempre.includes(x.id)||x.n).map(x=>`<button type="button" class="btn sm" data-ini-filtro="${x.id}" aria-pressed="${x.id===ativo}">${escHtml(x.id==='todas'?'Todos os tipos':x.rotulo)} <b>${fmtN(x.n)}</b></button>`).join('')}</div>`}
 function iniTarefasHTML(d){PAINEL_ACOES=[];const f=d.fila;
@@ -8085,7 +8341,7 @@ function iniTarefasHTML(d){PAINEL_ACOES=[];const f=d.fila;
   if(!f.itens.length)return `<div class="ini-vazio"><b>✔ Tudo em dia.</b> Nenhuma decisão, lote ou pedido esperando.${EU&&EU.papel!=='leitura'?' Quer adiantar trabalho? Veja os projetos que ainda não têm folhas digitalizadas.<div class="act ini-vazio-act"><button type="button" class="btn sm" data-ini-rota="projetos/sem_folhas">Ver projetos sem folhas</button></div>':''}</div>`;
   if(!f.filtros.some(x=>x.id===INI_FILTRO&&(x.n||x.id==='todas')))INI_FILTRO='todas';
   const st=INI_STATUS&&Date.now()-INI_STATUS.em<10000?INI_STATUS:null;
-  return `<div class="ini-fila-barra">${iniAbasHTML(f)}${iniFiltrosHTML(f)}</div>
+  return `<div class="ini-fila-barra"><div class="ini-abas-linha">${iniAbasHTML(f)}${iniOrdemHTML(f)}</div>${iniFiltrosHTML(f)}</div>
   <div class="ini-status" id="ini-fila-status" role="status" aria-live="polite">${st?escHtml(st.txt):''}</div>
   <div class="ini-lista" id="ini-lista">${iniListaHTML(f)}</div>`}
 function iniListaHTML(f){const its=iniFilaItens(),aba=iniAbaAtual(f),
@@ -8148,6 +8404,8 @@ function iniEstacoesCaptura(e){if(e&&e.estacoes_resumo)return e.estacoes_resumo;
    Cada etapa abre a lista filtrada (data-ini-rota). Largo: horizontal; estreito (container query) e celular: percurso vertical. */
 const INI_PASSO_DESC={digitalizar:'As estações escaneiam e fotografam as folhas.',qnap:'Pastas enviadas, esperando a leitura do CAMP Vision.',campvision:'Lê cada folha: tipo, ano, carimbo e código.',
   importar:'Trazer para o painel o que o CAMP Vision leu.',conferir:'Uma pessoa confere folha por folha.',aprovar:'Um admin confirma que a conferência acabou.',publicar:'Enviar ao site público.'};
+/* CAMP-HOME-UX (maquete): no cartão, um subtítulo curto; a frase inteira fica na dica e no rótulo do botão */
+const INI_PASSO_CURTO={digitalizar:'Estações de captura',qnap:'Pastas enviadas',campvision:'Leitura das folhas',importar:'Trazer para o painel',conferir:'Folha por folha',aprovar:'Um admin confirma',publicar:'Enviar ao site'};
 const INI_PASSO_UN={digitalizar:['estação ligada','estações ligadas'],qnap:['pasta','pastas'],campvision:['pasta','pastas']};
 /* CAMP-HOME-UX (documento §3): o GARGALO é o passo onde o material espera há mais tempo, somando as horas paradas dos lotes (campo
    "gargalo" do servidor), não o de maior volume; com ele vem "N aguardando há até X dias" quando a hora de entrada na etapa é conhecida.
@@ -8173,12 +8431,14 @@ function iniCaminhoHTML(c,e){const temG=(c||[]).some(p=>p.gargalo);
     else if(q===0&&p.id!=='digitalizar'){cls='zero';extra=extra||'nada esperando'}
     const qs=q==null?'—':fmtN(q),u=q==null?un[1]:(q===1?un[0]:un[1]),esp=iniAguardandoTxt(p,q,q===1?un[0]:un[1]);
     const rot=`Passo ${i+1} de 7, ${p.nome}: ${q==null?'sem medida':qs+' '+u}${st?'. '+st:''}${extra&&st!=='sem medida'?'. '+extra:''}${esp?'. '+esp:''}. Abrir a lista.`;
-    return `<li class="ini-passo ${cls}"><button type="button" class="ini-step" data-ini-rota="${escHtml(p.rota)}" id="ini-passo-${escHtml(p.id)}" data-unidade="${escHtml(u)}"${p.gargalo?' data-gargalo=""':''} aria-label="${escHtml(rot)}">
-      <span class="i" aria-hidden="true">${cls==='zero'?'✓':i+1}</span><span class="tx"><span class="nm">${escHtml(p.nome)}</span><span class="w">${escHtml(INI_PASSO_DESC[p.id]||'')}</span></span>
-      <span class="qq"><span class="q">${escHtml(qs)}</span> <span class="u">${escHtml(u)}</span>${extra?`<span class="x">${escHtml(extra)}</span>`:''}${esp?`<span class="x ini-aguarda">${escHtml(esp)}</span>`:''}</span>${st?`<span class="st">${escHtml(st)}</span>`:''}</button></li>`}).join('');
-  return `<ol class="ini-flow" aria-label="O caminho do material: 7 passos, do scanner ao site">${L}</ol>
-  <div class="ini-legenda"><span><i class="a"></i>${temG?'amarelo: gargalo, onde o material espera há mais tempo (somando os lotes)':'amarelo: maior acúmulo, é aqui que falta gente'}</span><span><i class="b"></i>azul: próximo passo de uma pessoa</span><span><i class="r"></i>vermelho: parado com erro</span><span><i class="z"></i>✓ zero: nada esperando (não é problema)</span></div>
-  <p class="ini-nota ini-cam-un">Cada passo conta a sua unidade (estações, pastas ou lotes): os números não se somam. Clique num passo para ver a lista.</p>`}
+    return `<li class="ini-passo ${cls}"><button type="button" class="ini-step" data-ini-rota="${escHtml(p.rota)}" id="ini-passo-${escHtml(p.id)}" data-unidade="${escHtml(u)}"${p.gargalo?' data-gargalo=""':''} aria-label="${escHtml(rot)}" title="${escHtml([INI_PASSO_DESC[p.id],extra,esp].filter(Boolean).join(' · '))}">
+      <span class="i" aria-hidden="true">${i+1}</span><span class="tx"><span class="nm">${escHtml(p.nome)}</span><span class="w">${escHtml(INI_PASSO_CURTO[p.id]||INI_PASSO_DESC[p.id]||'')}</span></span>
+      <span class="qq"><span class="q">${escHtml(qs)}</span> <span class="u">${escHtml(u)}</span>${extra?`<span class="x">${escHtml(extra)}</span>`:''}${esp?`<span class="x ini-aguarda">${escHtml(esp)}</span>`:''}</span>${st?`<span class="st">${escHtml(st)}</span>`:''}${cls==='zero'?`<span class="ini-passo-ok" aria-hidden="true">${INI_IC.checkc}</span>`:''}</button></li>`}).join('');
+  /* a legenda das cores e a nota das unidades ficam na ajuda "Como funciona o fluxo?" (iniCaminhoAjuda) */
+  return `<ol class="ini-flow" aria-label="O caminho do material: 7 passos, do scanner ao site">${L}</ol>`}
+const INI_CAM_AJUDA=['Conferir é olhar cada folha que o CAMP Vision leu e confirmar (ou corrigir) o que ele achou: tipo, ano, carimbo e código. Só folha conferida vai para Aprovar e depois para Publicar.',
+  'Amarelo: o gargalo, o passo onde os lotes esperam há mais tempo, somando as horas de todos (não o que tem mais lotes). Azul: próximo passo de uma pessoa. Vermelho: parado com erro. ✓ verde: nada esperando (zero não é problema).',
+  'Cada passo conta a sua unidade (estações, pastas ou lotes): os números não se somam. Clique num passo para ver a lista; passe o mouse para a frase inteira.'];
 /* Redesenho §11: "Folhas conferidas por dia — últimas 2 semanas". Gráfico de barras em HTML (rótulos com tamanho fixo: não esticam como o
    texto de SVG), total e média, dica com data, quantidade, unidade e origem, legenda "dia corrido". Sem nenhuma folha conferida: estado vazio
    com atalho, sem gráfico falso. Falha ao buscar ≠ "sem atividade": mostra o erro e "Tentar de novo". */
@@ -8201,8 +8461,7 @@ function iniRitmoHTML(R,p){if(!R)return '<div class="rt-load" role="status"><spa
     <div class="rt-g" role="group" aria-label="${escHtml(`Folhas conferidas por dia, de ${dm(de)} a ${dm(ate)}. Passe o mouse ou use Tab em cada barra; “Ver os números” tem a tabela.`)}">
       <div class="rt-y" aria-hidden="true">${[1,.5,0].map(f=>`<span data-y="${f*100}">${fmtN(f*topo)}</span>`).join('')}</div>
       <div class="rt-area${r.length!==14?' n'+r.length:''}">${[.5,1].map(f=>`<i class="rt-grade" data-y="${f*100}"></i>`).join('')}${barras}</div><span></span><div class="rt-x${r.length!==14?' n'+r.length:''}" aria-hidden="true">${xs}</div></div>
-    <p class="vm-def rt-leg"><b>Cada barra é um dia corrido</b> (inclui fins de semana e feriados), no horário de São Paulo; a barra azul mais escura é hoje, ainda em andamento. A média conta só os dias com alguma folha conferida (dias de trabalho).${escHtml(prev)}</p>
-    <details class="vm-num rt-num"><summary>Ver os números</summary><div class="tw"><table><thead><tr><th>Dia</th><th class="num">Folhas conferidas</th></tr></thead><tbody>${r.map((x,i)=>`<tr><td>${escHtml(rtDiaLongo(x.dia))}${i===r.length-1?' (hoje)':''}</td><td class="num">${fmtN(v[i])}</td></tr>`).join('')}</tbody></table></div></details>`}
+    <details class="vm-num rt-num"><summary>Ver os números</summary><p class="vm-def rt-leg"><b>Cada barra é um dia corrido</b> (inclui fins de semana e feriados), no horário de São Paulo; a barra azul mais escura é hoje, ainda em andamento. A média conta só os dias com alguma folha conferida (dias de trabalho).${escHtml(prev)}</p><div class="tw"><table><thead><tr><th>Dia</th><th class="num">Folhas conferidas</th></tr></thead><tbody>${r.map((x,i)=>`<tr><td>${escHtml(rtDiaLongo(x.dia))}${i===r.length-1?' (hoje)':''}</td><td class="num">${fmtN(v[i])}</td></tr>`).join('')}</tbody></table></div></details>`}
 function iniRitmoPosicionar(el){if(!el)return;el.querySelectorAll('[data-h]').forEach(b=>{b.style.height=b.dataset.h+'%'});el.querySelectorAll('.rt-y [data-y],.rt-grade[data-y]').forEach(s=>{s.style.bottom=s.dataset.y+'%'})}
 function iniRitmoMostrar(r,p){const el=document.getElementById('ini-ritmo');if(!el)return;el.innerHTML=iniRitmoHTML(r,p);iniRitmoPosicionar(el)}
 /* CAMP-HOME-UX: o período dos Resultados (7, 14, 30 ou 90 dias; o padrão continua 2 semanas) e a variação contra os N dias anteriores,
@@ -8211,12 +8470,13 @@ const INI_PERIODOS=[[7,'7 dias'],[14,'14 dias'],[30,'30 dias'],[90,'90 dias']];
 function iniDias(){try{const v=+localStorage.getItem('camp.ini.dias');return INI_PERIODOS.some(x=>x[0]===v)?v:14}catch(_){return 14}}
 function iniRitmoTitulo(d){return `Folhas conferidas por dia — ${d===14?'últimas 2 semanas':`últimos ${d} dias`}`}
 function iniRitmoCompHTML(R,total,n){const ant=+R.anterior_conferidas||0;if(!ant||R.anterior_conferidas==null)return '';const pct=Math.round(1000*(total-ant)/ant)/10;
-  return `<div class="vm-kpi ini-rt-comp"><div class="l">Frente aos ${fmtN(n)} dias anteriores</div><div class="v ${pct>0?'vm-sobe':pct<0?'vm-desce':''}">${pct>0?'+':''}${escHtml(fmtNum(pct,1))}%</div><small>${qtd(ant,'folha conferida','folhas conferidas')} antes</small></div>`}
-function iniPeriodoHTML(){const d=iniDias();return `<div class="abas-sit ini-periodo" role="group" aria-label="Período dos resultados">${INI_PERIODOS.map(([v,t])=>`<button type="button" class="btn sm" data-ini-per="${v}" aria-pressed="${v===d}">${t}</button>`).join('')}</div>`}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-per]');if(!b)return;const d=+b.dataset.iniPer;try{localStorage.setItem('camp.ini.dias',String(d))}catch(_){}
-  document.querySelectorAll('[data-ini-per]').forEach(x=>x.setAttribute('aria-pressed',String(+x.dataset.iniPer===d)));const t=document.getElementById('ini-t-ritmo');if(t)t.textContent=iniRitmoTitulo(d);
+  return `<div class="vm-kpi ini-rt-comp ${pct>0?'sobe':pct<0?'desce':''}" title="${escHtml(qtd(ant,'folha conferida','folhas conferidas'))} nos ${fmtN(n)} dias anteriores"><div class="l">Frente aos ${fmtN(n)} dias anteriores</div><div class="v ${pct>0?'vm-sobe':pct<0?'vm-desce':''}"><span aria-hidden="true">${pct>0?'↗':pct<0?'↘':'→'}</span> ${pct>0?'+':''}${escHtml(fmtNum(pct,1))}%</div><small>${qtd(ant,'folha conferida','folhas conferidas')} antes</small></div>`}
+function iniPeriodoHTML(){const d=iniDias();return `<label class="ini-per-sel"><span class="ini-sr">Período dos resultados</span><select id="ini-per" class="ini-sel" aria-label="Período dos resultados">${INI_PERIODOS.map(([v,t])=>`<option value="${v}"${v===d?' selected':''}>${t}</option>`).join('')}</select></label>`}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='ini-per')iniMudarPeriodo(+e.target.value)});
+function iniMudarPeriodo(d){try{localStorage.setItem('camp.ini.dias',String(d))}catch(_){}
+  const sel=document.getElementById('ini-per');if(sel&&+sel.value!==d)sel.value=String(d);const t=document.getElementById('ini-t-ritmo');if(t)t.textContent=iniRitmoTitulo(d);
   const p=PAINEL_D&&PAINEL_D.pendencias;iniRitmoMostrar(null,p);iniRitmoCarregar(p).then(r=>{if(r)iniRitmoMostrar(r,p)});
-  if(d!==14&&document.getElementById('ini-visitas')&&VM.periodo!==d+'d'){VM.periodo=d+'d';VM.ev=null;VM.pj=null;vmRender();vmCarregar()}});   /* as visitas têm 7, 30 e 90 dias */
+  if(d!==14&&document.getElementById('ini-visitas')&&VM.periodo!==d+'d'){VM.periodo=d+'d';VM.ev=null;VM.pj=null;vmRender();vmCarregar()}}   /* as visitas têm 7, 30 e 90 dias */
 function iniRitmoCarregar(p){return API('/api/painel/ritmo?dias='+iniDias()).catch(e=>(e&&(e.status===401||e.status===428))?null:{erro:(e&&e.message)||'sem resposta do servidor'})}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-rt-tentar]');if(!b)return;const p=PAINEL_D&&PAINEL_D.pendencias;iniRitmoMostrar(null,p);iniRitmoCarregar(p).then(r=>{if(r)iniRitmoMostrar(r,p)})});
 /* Redesenho §9 ("Está tudo funcionando?"): UMA linha por sistema (QNAP, CAMP Vision, site público, estações de captura, cópias das imagens,
@@ -8276,19 +8536,18 @@ function iniSaudeLinhas(e,qi,p){const L=[],admin=EU&&['admin','master'].includes
   return L.map((x,i)=>({...x,i})).sort((a,b)=>INI_SRV_ORDEM[a.c]-INI_SRV_ORDEM[b.c]||a.i-b.i)}   /* o que falha primeiro; empate: a ordem do plano */
 /* CAMP-HOME-UX (documento §3, coluna lateral 5): com tudo normal, UMA linha verde ("Tudo funcionando · N sistemas normais") e a lista
    recolhida; com falha (vermelho ou amarelo), as linhas que falham abertas e as normais recolhidas. "Sem medida" não é falha: fica recolhida, contada. */
+/* CAMP-HOME-UX (maquete do Rafael): uma linha por sistema, sempre à vista: ✓ verde e "Online" (cópias: "Em dia") quando normal; o que falha
+   vem primeiro, com o selo (atenção · crítico · não medido · fora do expediente), a frase e "detalhes". A frase do normal fica na dica. */
 function iniSaudeHTML(e,qi,p){
   if(!e)return Array.from({length:2},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
   const L=iniSaudeLinhas(e,qi,p);
-  const linha=x=>{const [rot,ic]=INI_SRV_NIVEL[x.c],q=x.quando?iniQuando(x.quando):'';
-    return `<div class="ini-srv" data-srv="${x.id}" data-nivel="${x.c}"><span class="ini-srv-ic ${x.c}" aria-hidden="true">${ic}</span><div class="ini-srv-t"><div class="ini-srv-l1"><b>${escHtml(x.nome)}</b> <span class="tag ${x.c==='c'?'':x.c}">${escHtml(x.rotulo||rot)}</span>${x.det?`<button type="button" class="ini-srv-mais" aria-expanded="false" aria-controls="ini-srv-det-${x.id}" data-ini-srv-det>detalhes</button>`:''}</div><p>${escHtml(x.frase)}${x.html||''}</p>${q?`<p class="ini-srv-q">medido ${escHtml(q)}</p>`:''}${x.det?`<p class="ini-srv-det" id="ini-srv-det-${x.id}" hidden>${escHtml(x.det)}</p>`:''}</div></div>`};
-  const falham=L.filter(x=>x.c==='r'||x.c==='a'),resto=L.filter(x=>x.c!=='r'&&x.c!=='a'),ok=resto.filter(x=>x.c==='g').length,sem=resto.length-ok;
-  const nomes=resto.map(x=>x.nome).join(', ');
-  const topo=falham.length?falham.map(linha).join(''):`<div class="ini-saude-ok" role="status"><span class="ini-srv-ic g" aria-hidden="true">✓</span><p><b>Tudo funcionando</b> · ${escHtml(qtd(ok,'sistema normal','sistemas normais'))}${sem?` · ${escHtml(qtd(sem,'sem medida','sem medida'))}`:''}</p></div>`;
-  const lista=resto.length?`<details class="ini-saude-resto"><summary>${falham.length?`Ver ${escHtml(qtd(resto.length,'outro sistema','outros sistemas'))} (${escHtml(nomes)})`:`Ver cada sistema (${escHtml(nomes)})`}</summary>${resto.map(linha).join('')}</details>`:'';
+  const linha=x=>{const [rot,ic]=INI_SRV_NIVEL[x.c],q=x.quando?iniQuando(x.quando):'',ok=x.c==='g',pill=ok?(['replica','backup'].includes(x.id)?'Em dia':'Online'):(x.rotulo||rot);
+    return `<div class="ini-srv${ok?' ok':''}" data-srv="${x.id}" data-nivel="${x.c}"${ok?` title="${escHtml(x.frase+(q?' · medido '+q:''))}"`:''}><span class="ini-srv-ic ${x.c}" aria-hidden="true">${ok?INI_IC.checkc:ic}</span><div class="ini-srv-t"><div class="ini-srv-l1"><b>${escHtml(x.nome)}</b> <span class="tag ini-pill ${x.c==='c'?'':x.c}">${escHtml(pill)}</span>${x.det&&!ok?`<button type="button" class="ini-srv-mais" aria-expanded="false" aria-controls="ini-srv-det-${x.id}" data-ini-srv-det>detalhes</button>`:''}</div>${ok?`<p class="ini-sr">${escHtml(x.frase)}</p>${x.html?`<p class="ini-srv-x">${x.html}</p>`:''}`:`<p>${escHtml(x.frase)}${x.html||''}</p>${q?`<p class="ini-srv-q">medido ${escHtml(q)}</p>`:''}${x.det?`<p class="ini-srv-det" id="ini-srv-det-${x.id}" hidden>${escHtml(x.det)}</p>`:''}`}</div></div>`};
+  const falham=L.filter(x=>x.c==='r'||x.c==='a');
   const quando=PAINEL_EST_EM?`Verificado às ${fmtHoraCamp(PAINEL_EST_EM)}`:'';
-  return `<div class="ini-saude-lista${falham.length?' falha':' ok'}">${topo}${lista}</div><div class="ini-saude-rodape"><span id="ini-saude-quando">${escHtml(quando)}</span><button type="button" class="btn sm" data-ini-verificar>Verificar agora</button>${estAdmin()?'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver detalhes dos sistemas →</button>':''}</div>`}
+  return `<div class="ini-saude-lista${falham.length?' falha':' ok'}">${L.map(linha).join('')}</div><div class="ini-saude-rodape">${estAdmin()?'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver detalhes e histórico →</button>':''}<span class="ini-saude-v"><span id="ini-saude-quando">${escHtml(quando)}</span><button type="button" class="btn sm" data-ini-verificar>Verificar agora</button></span></div>`}
 function iniSaudeResumo(e,qi,p){if(!e)return '';const L=iniSaudeLinhas(e,qi,p),n=c=>L.filter(x=>x.c===c).length;
-  return n('r')?`<span class="tag r">${qtd(n('r'),'com problema','com problema')}</span>`:n('a')?`<span class="tag a">${qtd(n('a'),'em atenção','em atenção')}</span>`:n('c')?`<span class="tag">${qtd(n('c'),'sem medida','sem medida')}</span>`:'<span class="tag g">tudo normal</span>'}
+  return n('r')?`<span class="tag r">${qtd(n('r'),'com problema','com problema')}</span>`:n('a')?`<span class="tag a">${qtd(n('a'),'em atenção','em atenção')}</span>`:n('c')?`<span class="tag">${qtd(n('c'),'sem medida','sem medida')}</span>`:''}   /* tudo normal: as linhas verdes já dizem (maquete) */
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-srv-det]');if(!b)return;const d=document.getElementById(b.getAttribute('aria-controls'));if(!d)return;d.hidden=!d.hidden;b.setAttribute('aria-expanded',String(!d.hidden));b.textContent=d.hidden?'detalhes':'esconder detalhes'});
 /* "Verificar agora": mede de novo (estações e site sem esperar o cache das sondas; QNAP e cópias relidos) e diz a hora */
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-verificar]');if(!b||b.disabled)return;b.disabled=true;const t0=b.textContent;b.textContent='Verificando…';
@@ -8305,9 +8564,17 @@ function iniNoSiteHTML(s){if(!s||!s.folhas||!s.projetos||!s.fundos)return '<p cl
       ${b?`<div class="ini-bar" role="img" aria-label="${escHtml(`${t}: ${fmtN(a)} de ${fmtN(b)} ${un[1]} ${un[2]}, ${pct}`)}"><i data-w="${w.toFixed(2)}"></i></div>`:''}
       ${nota?`<p class="ini-nota">${escHtml(nota)}</p>`:''}${link&&b&&a<b?`<button type="button" class="ini-link ini-cob-ir" data-ini-rota="${escHtml(link[0])}">${escHtml(link[1])} →</button>`:''}</div>`};
   const sf=+s.projetos.sem_folhas||0;
-  return r('folhas','Folhas',['f','folhas','publicadas'],s.folhas.no_ar,s.folhas.total,'Total: todas as folhas digitalizadas que estão no painel, também as que ainda não foram conferidas.',['projetos/pronto','Ver projetos prontos para publicar'])
+  return (+s.folhas.total?iniDonutHTML(s.folhas):r('folhas','Folhas',['f','folhas','publicadas'],s.folhas.no_ar,s.folhas.total,'',null))
     +r('projetos','Projetos',['m','projetos','com página publicada'],s.projetos.no_ar,s.projetos.total,sf?`O total inclui ${qtd(sf,'projeto','projetos')} do inventário ainda sem folhas digitalizadas: não é erro, ${sf===1?'ele ainda vai':'eles ainda vão'} passar pela digitalização.`:'',['projetos/nao_publicado','Ver projetos não publicados'])
     +r('fundos','Fundos com página',['m','fundos','com página publicada'],s.fundos.no_ar,s.fundos.total,'Total: os fundos ativos do painel.',['fundos/nao_publicado','Ver fundos não publicados'])}
+/* CAMP-HOME-UX (maquete): as folhas num donut (No site · Em preparo · A publicar), com o % e "N de M folhas publicadas" no meio.
+   Em preparo = ainda não conferida; A publicar = conferida e fora do site (servidor antigo sem essas partes: No site × Fora do site). */
+function iniDonutHTML(f){const t=+f.total||0,a=+f.no_ar||0,ap=f.a_publicar!=null?+f.a_publicar:null,ep=ap!=null?(f.em_preparo!=null?+f.em_preparo:Math.max(0,t-a-ap)):null;
+  const seg=ap!=null?[['no','No site',a],['prep','Em preparo',ep],['pub','A publicar',ap]]:[['no','No site',a],['falta','Fora do site',Math.max(0,t-a)]];
+  let cum=0;const arcos=seg.map(([c,,n])=>{const pc=100*n/t,h=n?`<circle class="ini-donut-s ${c}" cx="21" cy="21" r="15.9155" stroke-dasharray="${pc.toFixed(3)} ${(100-pc).toFixed(3)}" stroke-dashoffset="${(25-cum).toFixed(3)}"/>`:'';cum+=pc;return h}).join('');
+  const pct=iniPctTxt(a,t),rot=`Folhas: ${fmtN(a)} de ${fmtN(t)} folhas publicadas, ${pct}. `+seg.map(([,r,n])=>`${r}: ${qtd(n,'folha','folhas')}`).join('; ');
+  return `<div class="ini-prog-row ini-donut-row" data-cob="folhas" data-pct="${(100*a/t).toFixed(2)}"><div class="ini-donut" role="img" aria-label="${escHtml(rot)}" title="Total: todas as folhas digitalizadas que estão no painel, também as que ainda não foram conferidas."><svg viewBox="0 0 42 42" aria-hidden="true" focusable="false"><circle class="ini-donut-bg" cx="21" cy="21" r="15.9155"/>${arcos}</svg><div class="ini-donut-c" aria-hidden="true"><span class="ini-cob-pct">${pct}</span><span class="ini-cob-n"><b>${fmtN(a)}</b> de ${fmtN(t)} folhas publicadas</span></div></div>
+    <ul class="ini-donut-leg">${seg.map(([c,r,n])=>`<li title="${escHtml(qtd(n,'folha','folhas'))}"><i class="${c}" aria-hidden="true"></i>${escHtml(r)} <span>(${iniPctTxt(n,t)||'0%'})</span></li>`).join('')}</ul></div>`}
 const QB_CRIT=[['com_imagem','Com imagem'],['com_codigo','Com código completo'],['com_titulo','Com título'],['com_direitos','Com direitos definidos']];
 const QB_DEF={com_imagem:'a folha tem a imagem (JPG ou TIFF) no painel, ou a imagem já está no site.',com_codigo:'o código da folha está no formato F000-P0000-AAAA-S00-D0000, com o ano preenchido (não 0000).',
   com_titulo:'o título da folha está preenchido.',com_direitos:'a situação dos direitos do fundo da folha foi registrada (não está “não definida”).'};
@@ -8327,16 +8594,31 @@ const QB_CTA={com_direitos:['fundos','Registrar os direitos nos fundos'],com_tit
 function qbCausasHTML(g){const cs=QB_CRIT.map(([k,t])=>({k,t,v:+g.pct[k]})).filter(x=>!isNaN(x.v)&&x.v<100).sort((a,b)=>a.v-b.v).slice(0,2);if(!cs.length)return '';
   return `<div class="qb-causas"><p class="qb-causas-t">O que mais baixa o índice</p><ol>${cs.map(x=>{const falta=g.folhas&&g[x.k]!=null?g.folhas-g[x.k]:null,c=QB_CTA[x.k];
     return `<li data-causa="${x.k}"><span><b>${escHtml(x.t)}: ${fmtPct(x.v)}</b>${falta!=null?` <small class="help">faltam ${escHtml(qtd(falta,'folha','folhas'))}</small>`:''}</span>${c?(c[0]==='@base'?`<button type="button" class="ini-link" data-ini-filtro="base" data-ini-rolar="ini-t-fazer">${escHtml(c[1])} →</button>`:`<button type="button" class="ini-link" data-ini-rota="${c[0]}">${escHtml(c[1])} →</button>`):''}</li>`}).join('')}</ol></div>`}
+/* CAMP-HOME-UX (maquete): o índice grande, a variação curta em p.p. ao lado (só com comparação), as 4 barras grossas e, recolhidos,
+   "Como o índice é calculado?" e "O que mais baixa o índice" (as duas medidas mais baixas e os fundos que mais precisam de cuidado). */
+function qbDeltaHTML(t){if(!t||!t.seta)return '<span class="qb-delta sem" aria-hidden="true">sem comparação ainda</span>';const d=Math.abs(+t.diferenca||0);
+  return `<span class="qb-delta ${t.seta==='sobe'?'sobe':t.seta==='desce'?'desce':''}" aria-hidden="true">${t.seta==='sobe'?'↑ +':t.seta==='desce'?'↓ −':'→ '}${escHtml(fmtNum(d,1))} p.p.</span>`}
 function iniQualidadeHTML(q){if(!q||!q.geral)return '<p class="ini-nota">Não consegui calcular o índice agora.</p>';const g=q.geral;
   if(!g.folhas)return '<p class="ini-nota">Ainda não há folhas no painel para medir.</p>';
   const fs=q.fundos||[],linha=f=>`<li><button type="button" data-ini-rota="fundo/${escHtml(f.codigo)}"><span><b>${escHtml(f.sigla||f.codigo)}</b> <small class="help">${escHtml(f.titulo)}</small></span><span class="n">${fmtPct(f.indice)}</span>${qbVarHTML(f.tendencia,true)}</button></li>`;
-  return `<div class="qb-geral"><span class="v">${fmtPct(g.indice)}</span><span class="qb-geral-l">índice geral</span></div><p class="qb-var">${qbVarHTML(g.tendencia)}</p>${qbCausasHTML(g)}
-  <p class="ini-nota">Média simples das quatro medidas abaixo, em ${qtd(g.folhas,'folha','folhas')} de projetos ativos (sem projetos mesclados, descartados ou de teste).</p>${qbCriteriosHTML(g)}
-  <details class="qb-def"><summary>Como cada medida é calculada</summary><dl>${QB_CRIT.map(([k,t])=>`<dt>${t}</dt><dd>${escHtml(QB_DEF[k])}</dd>`).join('')}<dt>Índice geral</dt><dd>a média das quatro porcentagens, sobre todas as folhas juntas. A comparação usa o retrato guardado de 7 dias atrás; a diferença é em pontos percentuais.</dd></dl></details>
-  ${fs.length?`<p class="qb-fund-t">Fundos que mais precisam de cuidado <span class="ini-nota">(menor índice primeiro)</span></p><ul class="qb-fundos">${fs.slice(0,3).map(linha).join('')}</ul>${fs.length>3?`<details class="qb-todos"><summary>Ver todos os ${fmtN(fs.length)} fundos com folhas</summary><ul class="qb-fundos">${fs.slice(3).map(linha).join('')}</ul></details>`:''}`:''}`}
+  return `<div class="qb-geral"><span class="v">${fmtPct(g.indice)}</span><span class="qb-geral-l">índice geral</span>${qbDeltaHTML(g.tendencia)}</div><p class="qb-var ini-sr">${qbVarHTML(g.tendencia)}</p>
+  ${qbCriteriosHTML(g)}
+  <details class="qb-def"><summary>Como o índice é calculado? →</summary><p class="ini-nota">Média simples das quatro medidas, em ${qtd(g.folhas,'folha','folhas')} de projetos ativos (sem projetos mesclados, descartados ou de teste).</p><dl>${QB_CRIT.map(([k,t])=>`<dt>${t}</dt><dd>${escHtml(QB_DEF[k])}</dd>`).join('')}<dt>Índice geral</dt><dd>a média das quatro porcentagens, sobre todas as folhas juntas. A comparação usa o retrato guardado de 7 dias atrás; a diferença é em pontos percentuais.</dd></dl></details>
+  ${qbCausasHTML(g)||fs.length?`<details class="qb-def qb-mais"><summary>O que mais baixa o índice →</summary>${qbCausasHTML(g)}${fs.length?`<p class="qb-fund-t">Fundos que mais precisam de cuidado <span class="ini-nota">(menor índice primeiro)</span></p><ul class="qb-fundos">${fs.slice(0,3).map(linha).join('')}</ul>${fs.length>3?`<details class="qb-todos"><summary>Ver todos os ${fmtN(fs.length)} fundos com folhas</summary><ul class="qb-fundos">${fs.slice(3).map(linha).join('')}</ul></details>`:''}`:''}</details>`:''}`}
 /* §16: só o essencial (pessoa, correções válidas hoje e nos últimos 7 dias), em ordem alfabética (não é ranking), o que conta e o que não conta.
    Quem só lê vê o total da equipe, sem nomes. */
-function iniMelhoriasHTML(m){if(!m)return '<p class="ini-nota pb">Não consegui contar as melhorias agora.</p>';
+/* CAMP-HOME-UX (maquete): "Melhorias de hoje" = linhas com ✓ do que a equipe fez hoje (as edições na base e, do progresso, folhas
+   conferidas, lotes aprovados, decisões respondidas e problemas corrigidos; só o que não é zero). Por pessoa: "Ver histórico de melhorias". */
+let PAINEL_MH=null;
+function iniMelhoriasHojeHTML(m,pg){const hj=pg&&pg.ligado!==false&&pg.hoje,L=[];
+  if(m&&+m.total_hoje)L.push(`+${fmtN(+m.total_hoje)} ${+m.total_hoje===1?'edição na base':'edições na base'}`);
+  if(hj){const n=k=>+hj[k]||0,pr=n('problema_resolvido')+n('problema_critico_resolvido');
+    if(n('folha_conferida'))L.push(qtd(n('folha_conferida'),'folha conferida','folhas conferidas'));if(n('lote_aprovado'))L.push(qtd(n('lote_aprovado'),'lote aprovado','lotes aprovados'));
+    if(n('decisao_resolvida'))L.push(qtd(n('decisao_resolvida'),'decisão respondida','decisões respondidas'));if(pr)L.push(qtd(pr,'problema corrigido','problemas corrigidos'))}
+  if(!L.length)return `<p class="ini-nota mh-hoje-vazio">${m===undefined?'Carregando…':'Nenhuma melhoria registrada hoje ainda.'}</p>`;
+  return `<ul class="mh-hoje">${L.map(t=>`<li><span class="mh-ic" aria-hidden="true">${INI_IC.checkc}</span>${escHtml(t)}</li>`).join('')}</ul>`}
+function iniMelhoriasHTML(m){PAINEL_MH=m||null;return `<div class="pb mh-pb"><div id="ini-mh-hoje">${iniMelhoriasHojeHTML(m||null,PAINEL_PG)}</div><details class="mh-mais"><summary class="ini-link">Ver histórico de melhorias →</summary>${iniMelhoriasPessoasHTML(m)}</details></div>`}
+function iniMelhoriasPessoasHTML(m){if(!m)return '<p class="ini-nota pb">Não consegui contar as melhorias agora.</p>';
   const ps=(m.pessoas||[]).slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')),leitura=!EU||EU.papel==='leitura';
   const conta='<p class="ini-nota mh-conta">Conta cada edição feita no painel em folhas, projetos, fundos e arquitetos (títulos, códigos, datas, fundos, folhas…). Criar, importar e sincronizar com o site não contam. É número de edições, não de projetos concluídos.</p>';
   if(!ps.length)return `<div class="pb mh-vazio"><p>Nenhuma correção nos últimos 7 dias.</p>${conta}</div>`;
@@ -8419,7 +8701,7 @@ function vmSinc(s){const u=s&&s.ultima,ok=s&&s.ultima_ok;if(!u)return 'Última s
 function vmCarregandoHTML(){return `<div class="vm-load" role="status" aria-live="polite"><span class="ini-skel"></span><span class="ini-skel alto"></span><span class="ini-skel"></span><span class="ini-skel"></span><span class="vm-nota">Carregando as visitas…</span></div>`}
 function vmMontar(el){if(!el)return;el.dataset.vm='1';
   if(el.id==='ini-visitas'&&(VM.periodo==='livre'||VM.todos||VM.busca||VM.ordem!=='mais'||VM.fundo||VM.autor||VM.comparar)){   /* Redesenho §12: a Home é o resumo (7/30/90 dias, top 5); o resto fica na tela completa */
-    if(VM.periodo==='livre')VM.periodo='30d';Object.assign(VM,{todos:false,busca:'',ordem:'mais',fundo:'',autor:'',comparar:false,ev:null,pj:null,t:0})}if(VM.ev||VM.erro)vmRender();else el.innerHTML=vmCarregandoHTML();
+    if(VM.periodo==='livre')VM.periodo='30d';Object.assign(VM,{todos:false,busca:'',ordem:'mais',fundo:'',autor:'',comparar:false,ev:null,pj:null,t:0})}if(VM.ev||VM.erro)vmRender();else el.innerHTML=el.id==='ini-visitas'?vmResumoHTML(null):vmCarregandoHTML();
   if(!VM.carregando&&(!VM.ev||Date.now()-VM.t>5*60e3))vmCarregar()}
 async function vmCarregar(){const vez=++VM.vez;VM.carregando=true;document.querySelectorAll('[data-vm] .vm').forEach(x=>{x.classList.add('vm-atualizando');x.setAttribute('aria-busy','true')});
   try{const [ev,pj]=await Promise.all([API('/api/visitas/evolucao?'+vmQS()+'&comparar=1'),API('/api/visitas/projetos?'+vmQS()+vmQSRank())]);
@@ -8458,22 +8740,33 @@ function vmFiltrosRankHTML(){const r=VM.pj||{},fs=r.fundos||[],as=r.autores||[];
     ${as.length?`<select class="btn" data-vm-autor aria-label="Filtrar por arquiteto"><option value="">Todos os arquitetos</option>${as.map(a=>`<option value="${escHtml(a.nome)}"${VM.autor===a.nome?' selected':''}>${escHtml(a.nome)} (${fmtN(a.projetos)})</option>`).join('')}</select>`:''}`}
 /* Redesenho §12: na Home, só o RESUMO — total de visitas (sessões) com a definição, a evolução ao lado e os 5 projetos mais visitados logo abaixo,
    filtro 7/30/90 dias, a data da última sincronização e o link para a análise completa. Falha ≠ zero: "Dados de audiência temporariamente indisponíveis". */
-function vmResumoHTML(e){const per=`<div class="vm-top"><p class="vm-sub">Resumo das visitas ao site público no período.</p><div class="vm-per"><select class="btn" data-vm-per aria-label="Período">${VM_PER.slice(0,3).map(([k,t])=>`<option value="${k}"${VM.periodo===k?' selected':''}>${t}</option>`).join('')}</select></div></div>`;
-  const ir=`<div class="vm-mais vm-ir"><button type="button" class="btn sm" data-vm-ir>Ver análise completa de visitas →</button></div>`;
-  if(!e&&!VM.erro)return `<div class="vm vm-resumo">${per}${vmCarregandoHTML()}</div>`;
+/* CAMP-HOME-UX (maquete do Rafael, 22/11/2026): na Home, DOIS cartões. "Visitas ao site": à esquerda o total, a média por dia e a variação;
+   à direita o gráfico; o período no alto. "Projetos mais visitados": os 5 primeiros, com posição, foto, barra e o link da página pública.
+   Sem dados do Google Analytics: um aviso compacto (o motivo, o erro técnico numa linha e "Tentar de novo"), nunca zero. */
+function vmResumoHTML(e){const per=`<div class="vm-per"><select class="btn ini-sel" data-vm-per aria-label="Período">${VM_PER.slice(0,3).map(([k,t])=>`<option value="${k}"${VM.periodo===k?' selected':''}>${t}</option>`).join('')}</select></div>`;
+  const cab=`<div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span>${per}</div>`,sub='<p class="vm-sub">Resumo das visitas ao site público no período.</p>';
+  const atu=VM.carregando?' vm-atualizando" aria-busy="true':'';
+  if(!e&&!VM.erro)return `<section class="panel vm vm-resumo" aria-labelledby="ini-t-vis">${cab}<div class="pb">${sub}${vmCarregandoHTML()}</div></section>`;
   const datas=e?`<p class="vm-datas">De <b>${escHtml(vmDMA(e.de))}</b> a <b>${escHtml(vmDMA(e.ate))}</b> · horário de São Paulo · termina ontem · ${vmSinc(e.sincronizacao)}</p>`:'';
-  if(VM.erro||e.estado==='indisponivel')return `<div class="vm vm-resumo">${per}${datas}${vmErroHTML('Dados de audiência temporariamente indisponíveis')}${ir}</div>`;
+  if(VM.erro||e.estado==='indisponivel')return `<section class="panel vm vm-resumo${atu}" aria-labelledby="ini-t-vis">${cab}<div class="pb">${sub}${vmIndispCurtoHTML()}</div></section>`;
   const media=e.media_dia==null?'—':fmtNum(e.media_dia,e.media_dia<10?1:0),v=e.variacao||{};
-  const vr=!v.disponivel?'<b>—</b><small>sem dados completos do período anterior</small>':v.base_zero?'<b>—</b><small>sem base de comparação (nenhuma visita no período anterior)</small>'
-    :`<b class="${v.percentual>0?'vm-sobe':v.percentual<0?'vm-desce':''}">${v.percentual>0?'+':''}${escHtml(String(v.percentual).replace('.',','))}%</b><small>frente a ${escHtml(vmDM(e.anterior.de))}–${escHtml(vmDM(e.anterior.ate))} (${fmtN(e.anterior.total)} ${e.anterior.total===1?'visita':'visitas'})</small>`;
-  const kpis=`<div class="vm-res-kpis"><div class="vm-res-tot"><span class="l">Visitas no período</span><span class="v">${fmtN(e.total)}</span><small><b>Visitas</b> = sessões: cada vez que alguém entra no site público conta uma, mesmo vendo várias páginas.${e.completo?'':` Dados de ${fmtN(e.dias_com_dados)} dos ${fmtN(e.dias)} dias.`}</small></div>
-    <div class="vm-res-l"><span class="l">Média por dia</span><b>${media}</b></div><div class="vm-res-l"><span class="l">Variação vs. período anterior</span>${vr}</div></div>`;
+  const ref=e.anterior?`frente a ${vmDM(e.anterior.de)}–${vmDM(e.anterior.ate)} (${fmtN(e.anterior.total)} ${e.anterior.total===1?'visita':'visitas'})`:'';
+  const vr=!v.disponivel?'<b class="vm-res-n">—</b><span class="l">sem dados completos do período anterior</span>':v.base_zero?'<b class="vm-res-n">—</b><span class="l">sem base de comparação (nenhuma visita no período anterior)</span>'
+    :`<b class="vm-res-n ${v.percentual>0?'vm-sobe':v.percentual<0?'vm-desce':''}" title="${escHtml(ref)}"><span aria-hidden="true">${v.percentual>0?'↑':v.percentual<0?'↓':'→'}</span> ${v.percentual>0?'+':v.percentual<0?'−':''}${escHtml(String(Math.abs(v.percentual)).replace('.',','))}%</b><span class="l">vs. período anterior</span><small class="ini-sr">${escHtml(ref)}</small>`;
+  const def='Visitas = sessões: cada vez que alguém entra no site público conta uma, mesmo vendo várias páginas.'+(e.completo?'':` Dados de ${fmtN(e.dias_com_dados)} dos ${fmtN(e.dias)} dias.`);
+  const kpis=`<div class="vm-res-kpis"><div class="vm-res-tot" title="${escHtml(def)}"><span class="v">${fmtN(e.total)}</span><span class="l">Visitas no período</span><small class="ini-sr">${escHtml(def)}</small></div>
+    <div class="vm-res-l"><b class="vm-res-n">${media}</b><span class="l">Média por dia</span></div><div class="vm-res-l vm-res-var">${vr}</div></div>`;
   const graf=e.estado==='sem_dados'?`<div class="vm-vazio" role="status"><b>Sem visitas registradas neste período</b>Escolha outro período no filtro acima.</div>`:vmGraficoHTML(e,Math.round((VM.larg||700)*.6));
-  return `<div class="vm vm-resumo${VM.carregando?' vm-atualizando':''}"${VM.carregando?' aria-busy="true"':''}>${per}${datas}
-    <section class="vm-sec vm-res" aria-label="Evolução das visitas">${kpis}<div class="vm-res-g">${graf}</div></section>
-    <section class="vm-sec" aria-label="Projetos mais visitados"><div class="vm-sec-h"><h3>Projetos mais visitados</h3><span class="vm-nota">os 5 primeiros</span></div>
-      <p class="vm-def">Por <b>visualizações</b> da página do projeto: cada vez que a página pública de um projeto foi aberta (outra medida, diferente das visitas).</p>
-      <div data-vm-rank>${vmRankHTML({max:5,curto:true})}</div></section>${ir}</div>`}
+  return `<section class="panel vm vm-resumo${atu}" aria-labelledby="ini-t-vis">${cab}<div class="pb">${sub}${datas}
+    <div class="vm-sec vm-res" aria-label="Evolução das visitas">${kpis}<div class="vm-res-g">${graf}</div></div></div></section>
+    <section class="panel vm-proj" aria-labelledby="ini-t-vmp"><div class="ph"><h2 id="ini-t-vmp">Projetos mais visitados</h2><span class="vm-nota">os 5 primeiros</span><button type="button" class="ini-link" data-vm-ir>Ver análise completa de visitas →</button></div>
+      <p class="ini-sr">Por visualizações da página do projeto: cada vez que a página pública de um projeto foi aberta (outra medida, diferente das visitas).</p>
+      <div data-vm-rank>${vmRankHTML({max:5,curto:true})}</div></section>`}
+function vmIndispCurtoHTML(){const s=VM.ev&&VM.ev.sincronizacao,u=s&&s.ultima,admin=EU&&['admin','master'].includes(EU.papel);
+  const porque=VM.erro?'o painel não respondeu ao pedir as visitas.':s&&s.nunca?'o painel ainda não conseguiu buscar as visitas no Google Analytics (nada foi trocado por zero).':'a última sincronização com o Google Analytics falhou e não há visitas guardadas para estas datas.';
+  const tec=VM.erro||(u&&u.erro)||'';
+  return `<div class="vm-erro ini-vazio-c" role="status"><span class="ini-vazio-ic" aria-hidden="true">${INI_IC.info}</span><div class="ini-vazio-t"><b>Dados de audiência temporariamente indisponíveis</b><p>Não foi possível carregar os dados de visitas: ${escHtml(porque)}</p>${tec?`<code title="${escHtml(tec)}">${escHtml(tec)}</code>`:''}</div>
+    <div class="act"><button type="button" class="btn sm" data-vm-tentar>Tentar de novo</button>${admin?'<button type="button" class="btn sm" data-vm-diag>Ver o diagnóstico</button>':''}</div></div>`}
 function vmErroHTML(titulo){const s=VM.ev&&VM.ev.sincronizacao,u=s&&s.ultima,admin=EU&&['admin','master'].includes(EU.papel);
   const porque=VM.erro?'O painel não respondeu ao pedir as visitas.':s&&s.nunca?'O painel ainda não conseguiu buscar as visitas no Google Analytics, por isso não há números para mostrar (nada foi trocado por zero).':'A última sincronização com o Google Analytics falhou e o painel não tem visitas guardadas para estas datas.';
   const tec=VM.erro||(u&&u.erro)||'';
@@ -8619,24 +8912,31 @@ let PAINEL_PG=null;
 function iniBarraHTML(v,max,rot){const w=max?Math.min(100,100*v/max):0;return `<div class="ini-bar ini-meta-bar" role="img" aria-label="${escHtml(rot)}"><i data-w="${w.toFixed(2)}"></i></div>`}
 function iniMetaHTML(pg){if(pg===undefined)return '<div class="ini-meta-card" aria-busy="true"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado||!pg.semana)return '';
   const s=pg.semana,adm=EU&&['admin','master'].includes(EU.papel),pts=qtd(s.feito,'ponto','pontos');
-  return `<div class="ini-meta-card" id="ini-meta-card"><div class="ini-meta-l1"><span class="ini-meta-t">Meta da semana <small class="ini-nota">· equipe</small></span><b class="ini-meta-pct">${fmtN(s.pct)}%</b></div>
-    ${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`)}<div class="ini-meta-l2"><p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados</p>
+  return `<div class="ini-meta-card" id="ini-meta-card"><span class="ini-meta-ic" aria-hidden="true">${INI_IC.alvo}</span><div class="ini-meta-c"><div class="ini-meta-l1"><span class="ini-meta-t">Meta da semana <small class="ini-nota">· equipe</small></span><p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados</p></div>
+    <div class="ini-meta-l2"><b class="ini-meta-pct">${fmtN(s.pct)}%</b>${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`)}
     <details class="mais-menu ini-meta-mais"><summary class="ini-link">Como conta?</summary><div class="mais-lista ini-ajuda-txt" role="note"><p>${escHtml(pg.regra)}</p><p>Semana de segunda a domingo (horário de São Paulo). Nesta semana: ${escHtml(Object.entries(s.por_tipo||{}).filter(([,n])=>n).map(([k,n])=>`${fmtN(n)} ${s.por_tipo_rotulo[k]}`).join(' · ')||'nenhuma ação validada ainda')}.</p>${iniPontosTabelaHTML(pg)}
-    ${adm?`<form class="ini-meta-form" data-ini-meta-form><label>Nova meta (pontos) <input type="number" min="1" max="100000" step="1" name="meta" value="${escHtml(s.meta)}" required></label><button type="submit" class="btn sm">Salvar a meta</button></form>`:''}</div></details></div></div>`}
+    ${adm?`<form class="ini-meta-form" data-ini-meta-form><label>Nova meta (pontos) <input type="number" min="1" max="100000" step="1" name="meta" value="${escHtml(s.meta)}" required></label><button type="submit" class="btn sm">Salvar a meta</button></form>`:''}</div></details></div></div></div>`}
 function iniPontosTabelaHTML(pg){return `<table class="ini-pontos"><caption>Pontos por ação validada</caption><tbody>${Object.entries(pg.pontos||{}).map(([k,v])=>`<tr><td>${escHtml((pg.pontos_rotulo||{})[k]||k)}</td><td class="num">${fmtN(v)}</td></tr>`).join('')}</tbody></table>`}
-function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado)return '';
+function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb ini-jogo-load"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado)return '';
   if(EU&&EU.papel==='leitura')return `<div class="pb"><p class="ini-nota">Nível e conquistas são de quem edita o painel. A meta da semana, no alto, é da equipe toda.</p></div>${iniEquipeHTML(pg)}`;
   if(pg.oculto)return `<div class="pb ini-jogo-oculto"><p class="ini-nota">Você ocultou o seu nível e as suas conquistas. A meta da semana continua no alto.</p><button type="button" class="btn sm" data-ini-conquistas="0">Mostrar de novo</button></div>${iniEquipeHTML(pg)}`;
   const e=pg.eu;if(!e)return '';const fim=e.ate||e.xp,rot=e.ate?`${fmtN(e.xp)} / ${fmtN(e.ate)} XP`:`${fmtN(e.xp)} XP (último nível)`;
-  const cq=e.conquistas||[];
-  return `<div class="pb ini-jogo"><div class="ini-nivel"><span class="ini-nivel-n" aria-hidden="true">${fmtN(e.nivel)}</span><div><b>Nível ${fmtN(e.nivel)} · ${escHtml(e.nome)}</b><p class="ini-nivel-xp">${escHtml(rot)}${e.xp_semana?` · ${escHtml(qtd(e.xp_semana,'ponto','pontos'))} nesta semana`:''}</p></div></div>
-    ${iniBarraHTML(e.xp-e.de,fim-e.de,`Nível ${e.nivel}: ${rot}`)}
-    <h3 class="ini-jogo-h">Suas conquistas</h3>${cq.length?`<ul class="ini-conq">${cq.slice(-4).reverse().map(c=>`<li data-conq="${escHtml(c.id)}"><span class="ini-conq-ic" aria-hidden="true">★</span>${escHtml(c.rotulo)}</li>`).join('')}</ul>${cq.length>4?`<p class="ini-nota">e mais ${fmtN(cq.length-4)}.</p>`:''}`:'<p class="ini-nota">Ainda nenhuma. A primeira vem com a primeira folha conferida.</p>'}
-    ${e.proxima?`<p class="ini-nota ini-prox">Próxima: ${escHtml(e.proxima.rotulo)} (${fmtN(e.proxima.feito)} de ${fmtN(e.proxima.de)}).</p>`:''}
-    ${e.dias_seguidos>=2?`<p class="ini-nota">${fmtN(e.dias_seguidos)} dias seguidos com trabalho validado.</p>`:''}
-    <div class="ini-jogo-pe"><details class="mais-menu"><summary class="ini-link">Como os pontos são contados?</summary><div class="mais-lista ini-ajuda-txt" role="note"><p>${escHtml(pg.regra)}</p>${iniPontosTabelaHTML(pg)}<p>As conquistas são marcos seus; ninguém é comparado com ninguém.</p></div></details><button type="button" class="ini-link" data-ini-conquistas="1">Ocultar conquistas</button></div></div>${iniEquipeHTML(pg)}`}
+  const cq=e.conquistas||[],ct=e.contagens||{};
+  /* CAMP-HOME-UX (maquete): os 3 selos contam o que é da pessoa (folhas conferidas, lotes aprovados, dias seguidos), com os números de verdade;
+     em cinza quando ainda é zero. A lista dos marcos, "Próxima", a regra e "Ocultar conquistas" ficam em "Ver todas". */
+  const selo=(cls,forma,ic,n,um,varios)=>`<li class="ini-selo ${cls}${n?'':' zero'}"><span class="ini-selo-ic">${iniSeloSVG(forma,ic)}</span><span class="ini-selo-t"><b>${fmtN(n)}</b> ${escHtml(n===1?um:varios)}</span></li>`;
+  const falta=e.ate?`<p class="ini-nivel-falta">Faltam <b>${fmtN(e.ate-e.xp)} XP</b> para o nível ${fmtN(e.nivel+1)}</p>`:'<p class="ini-nivel-falta">Último nível</p>';
+  return `<div class="ini-jogo"><div class="ini-nivel-card"><span class="ini-medalha">${INI_MEDALHA}</span><div class="ini-nivel-c"><p class="ini-nivel-t"><b>Nível ${fmtN(e.nivel)} · ${escHtml(e.nome)}</b></p>
+    ${iniBarraHTML(e.xp-e.de,fim-e.de,`Nível ${e.nivel}: ${rot}`)}<p class="ini-nivel-xp">${escHtml(rot)}${e.xp_semana?` · ${escHtml(qtd(e.xp_semana,'ponto','pontos'))} nesta semana`:''}</p>${falta}</div></div>
+    <div class="ini-conq-card"><div class="ini-conq-h"><h3 class="ini-jogo-h">Suas conquistas</h3><details class="mais-menu ini-conq-todas"><summary class="ini-link">Ver todas →</summary><div class="mais-lista ini-ajuda-txt" role="note">
+      ${cq.length?`<ul class="ini-conq">${cq.slice().reverse().map(c=>`<li data-conq="${escHtml(c.id)}"><span class="ini-conq-ic" aria-hidden="true">★</span>${escHtml(c.rotulo)}</li>`).join('')}</ul>`:'<p>Ainda nenhuma. A primeira vem com a primeira folha conferida.</p>'}
+      ${e.proxima?`<p class="ini-prox">Próxima: ${escHtml(e.proxima.rotulo)} (${fmtN(e.proxima.feito)} de ${fmtN(e.proxima.de)}).</p>`:''}
+      ${e.dias_seguidos>=2?`<p>${fmtN(e.dias_seguidos)} dias seguidos com trabalho validado.</p>`:''}
+      <p><b>Como os pontos são contados?</b> ${escHtml(pg.regra)}</p>${iniPontosTabelaHTML(pg)}<p>As conquistas são marcos seus; ninguém é comparado com ninguém.</p>
+      <button type="button" class="ini-link" data-ini-conquistas="1">Ocultar conquistas</button></div></details></div>
+      <ul class="ini-selos">${selo('s-folha','escudo','check',+ct.folha_conferida||0,'folha conferida','folhas conferidas')}${selo('s-lote','hexa','camadas',+ct.lote_aprovado||0,'lote aprovado','lotes aprovados')}${selo('s-dias','escudo','raio',+e.dias_seguidos||0,'dia de sequência','dias de sequência')}</ul></div></div>${iniEquipeHTML(pg)}`}
 function iniEquipeHTML(pg){const q=pg&&pg.equipe;if(!q)return '';return `<div class="pb ini-equipe"><h3 class="ini-jogo-h">Equipe nesta semana</h3><p class="ini-nota">Ligado por um admin (Configurações: jogo.ranking_equipe).</p>${q.length?`<ul class="mh-lista">${q.map(x=>`<li><span>${escHtml(x.nome)}</span><span class="n"><b>${fmtN(x.pontos)}</b> pontos</span></li>`).join('')}</ul>`:'<p class="ini-nota">Nenhuma ação validada nesta semana ainda.</p>'}</div>`}
-function iniJogoDesenhar(){const m=document.getElementById('ini-meta'),j=document.getElementById('ini-jogo');
+function iniJogoDesenhar(){const m=document.getElementById('ini-meta'),j=document.getElementById('ini-jogo'),mh=document.getElementById('ini-mh-hoje');if(mh)mh.innerHTML=iniMelhoriasHojeHTML(PAINEL_MH,PAINEL_PG);
   if(m){m.innerHTML=iniMetaHTML(PAINEL_PG);vmPosicionar(m)}
   if(j){const h=iniJogoHTML(PAINEL_PG);j.hidden=!h;const b=j.querySelector('.ini-jogo-corpo');if(b){b.innerHTML=h;vmPosicionar(b)}}}
 function iniJogoCarregar(){return API('/api/painel/progresso').then(pg=>{PAINEL_PG=pg;iniJogoDesenhar()}).catch(err=>{if(err&&(err.status===401||err.status===428))return;PAINEL_PG=null;const j=document.getElementById('ini-jogo');if(j){j.hidden=false;const b=j.querySelector('.ini-jogo-corpo');if(b)b.innerHTML=`<div class="pb" role="alert"><p class="ini-nota">Não consegui contar o progresso agora.</p><button type="button" class="btn sm" data-ini-jogo-tentar>Tentar de novo</button></div>`}const m=document.getElementById('ini-meta');if(m)m.innerHTML=''})}
@@ -8667,20 +8967,20 @@ async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')
   ${iniKpisHTML(p)}
   <div class="ini-grid">
     <div class="ini-col ini-col-princ">
-      <section class="panel ini-fazer" data-ini-parte="acao" aria-labelledby="ini-t-fazer"><div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2>${iniAjudaSecHTML('fila','Como a fila é ordenada?',[(d.fila&&d.fila.ordem==='prioridade'&&d.fila.regra_prioridade)||(d.fila&&d.fila.regra)||'Mais urgente primeiro.',...(d.fila&&d.fila.regra_prioridade&&d.fila.ordem!=='prioridade'?[d.fila.regra_prioridade]:[]),'Minha fila: o que está com você. Críticos: nota 60 ou mais. Sem responsável: ninguém pegou ainda.','Os filtros de tipo mostram só um tipo de trabalho; o número ao lado é o total real.','“⋯” guarda as ações menores: Pegar para mim, Agora não.'])}${d.fila&&d.fila.itens.length?iniOrdemHTML(d.fila):''}${d.contagens&&d.contagens.medido_em?`<small class="help atualizado-ha ini-fazer-hint" title="${escHtml(fmtDataHora(d.contagens.medido_em))}">atualizado ${escHtml(haTempo(d.contagens.medido_em))}</small>`:''}</div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
-      <section class="panel ini-cam" data-ini-parte="operacao" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2>${iniAjudaSecHTML('conferir','O que significa conferir?',['Conferir é olhar cada folha que o CAMP Vision leu e confirmar (ou corrigir) o que ele achou: tipo, ano, carimbo e código.','Só folha conferida vai para Aprovar e depois para Publicar.','O gargalo (amarelo) é o passo onde os lotes esperam há mais tempo, somando as horas de todos, e não o que tem mais lotes.','Cada etapa abaixo conta numa unidade própria (estações, pastas, lotes ou folhas): os números não se somam.'])}<button type="button" class="ini-link" onclick="nav('caminho')">O que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
-      <div class="ini-res" data-ini-parte="resultados" role="region" aria-labelledby="ini-t-res"><div class="ini-res-h"><h2 id="ini-t-res">Resultados</h2>${iniPeriodoHTML()}</div>
-      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">${escHtml(iniRitmoTitulo(iniDias()))}</h2><button type="button" class="ini-link" onclick="nav('relatorios')">Ver relatório completo</button></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
-      ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div class="pb" id="ini-visitas">${vmCarregandoHTML()}</div></section>`:''}
+      <section class="panel ini-fazer" data-ini-parte="acao" aria-labelledby="ini-t-fazer"><div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2>${iniAjudaSecHTML('fila','Como a fila é ordenada?',[(d.fila&&d.fila.ordem==='prioridade'&&d.fila.regra_prioridade)||(d.fila&&d.fila.regra)||'Mais urgente primeiro.',...(d.fila&&d.fila.regra_prioridade&&d.fila.ordem!=='prioridade'?[d.fila.regra_prioridade]:[]),'Minha fila: o que está com você. Críticos: nota 60 ou mais. Sem responsável: ninguém pegou ainda.','Os filtros de tipo mostram só um tipo de trabalho; o número ao lado é o total real.','“⋯” guarda as ações menores: Pegar para mim, Agora não.'])}${d.contagens&&d.contagens.medido_em?`<small class="help atualizado-ha ini-fazer-hint" title="${escHtml(fmtDataHora(d.contagens.medido_em))}">atualizado ${escHtml(haTempo(d.contagens.medido_em))}</small>`:''}</div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
+      <section class="panel ini-cam" data-ini-parte="operacao" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2>${iniAjudaSecHTML('conferir','Como funciona o fluxo?',INI_CAM_AJUDA)}<button type="button" class="ini-link" onclick="nav('caminho')">O que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
+      <div class="ini-res" data-ini-parte="resultados" role="region" aria-labelledby="ini-t-res"><h2 id="ini-t-res" class="ini-sr">Resultados</h2>
+      <section class="panel ini-ritmo-p" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">${escHtml(iniRitmoTitulo(iniDias()))}</h2>${iniPeriodoHTML()}<button type="button" class="ini-link" onclick="nav('relatorios')">Ver relatório completo</button></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
+      ${admin?`<div class="ini-vis" id="ini-visitas">${vmResumoHTML(null)}</div>`:''}
       </div>
     </div>
     <div class="ini-col ini-lateral">
       <div id="ini-alertas">${iniAlertasHTML(d.alertas)}</div>
-      <section class="panel ini-jogo-p" id="ini-jogo" aria-labelledby="ini-t-jogo"><div class="ph"><h2 id="ini-t-jogo">Seu progresso</h2></div><div class="ini-jogo-corpo">${iniJogoHTML(undefined)}</div></section>
-      <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">comparado com 7 dias atrás</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
+      <section class="ini-jogo-p" id="ini-jogo" aria-labelledby="ini-t-jogo"><h2 id="ini-t-jogo" class="ini-sr">Seu progresso</h2><div class="ini-jogo-corpo">${iniJogoHTML(undefined)}</div></section>
+      <section class="panel ini-saude-p" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2><span id="ini-saude-resumo">${iniSaudeResumo(PAINEL_EST,PAINEL_QI,p)}</span>${iniAjudaSecHTML('saude','O que significam as cores?',['Verde (✓ Online): funcionando.','Amarelo (! atenção): precisa de olho, mas não para o trabalho.','Vermelho (✕ crítico): parou ou vai parar; resolva hoje.','Cinza (? não medido): o painel não conseguiu medir, ou está desligado fora do expediente.','O que falha vem primeiro, com a frase do que acontece; “detalhes” mostra o lado técnico. Passe o mouse num sistema verde para ver a medida.'])}</div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
+      <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">Comparado com 7 dias atrás</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
       <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog" id="ini-cobertura">${iniNoSiteHTML(d.no_site)}</div></section>
-      <section class="panel ini-saude-p" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2>${iniAjudaSecHTML('saude','O que significam as cores?',['Verde (✓ normal): funcionando.','Amarelo (! atenção): precisa de olho, mas não para o trabalho.','Vermelho (✕ crítico): parou ou vai parar; resolva hoje.','Cinza (? não medido): o painel não conseguiu medir, ou está desligado fora do expediente.','Com tudo normal, fica uma linha só; o que falha abre sozinho, primeiro. “detalhes” mostra o lado técnico.'])}<span id="ini-saude-resumo">${iniSaudeResumo(PAINEL_EST,PAINEL_QI,p)}</span></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
-      <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2><span class="hint ini-nota">correções válidas, por pessoa</span></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
+      <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
       <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
     </div>
   </div>`;

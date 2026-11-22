@@ -60,11 +60,12 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     const caixa = () => P.evaluate(() => { const b = document.querySelector('#v-painel > .ajuda-caixa'); if (!b) return null;
       return { recolhida: b.tagName === 'DETAILS', aberta: b.tagName !== 'DETAILS' || b.open, txt: b.textContent, alt: Math.round(b.getBoundingClientRect().height), assuntos: b.querySelectorAll('details.aj-assunto').length }; });
     let c = await caixa();
-    chk(c && !c.recolhida && /Entenda esta página/.test(c.txt) && /Para que serve/.test(c.txt) && c.assuntos >= 3, `§6: na 1ª vez "Entenda esta página" vem inteira, com o conteúdo dividido por assunto (${c && c.assuntos} assuntos): ${JSON.stringify(c && { r: c.recolhida, t: c.txt.slice(0, 60) })}`);
+    /* CAMP-HOME-UX maquete (22/11/2026): a caixa empurrava tudo para baixo; agora chega SEMPRE fechada numa linha, com o mesmo conteúdo dentro */
+    chk(c && c.recolhida && !c.aberta && c.alt < 60 && /Entenda esta página/.test(c.txt) && /Para que serve/.test(c.txt) && c.assuntos >= 3, `§6 + maquete: "Entenda esta página" chega fechada numa linha, com o conteúdo dividido por assunto dentro, com o conteúdo dividido por assunto (${c && c.assuntos} assuntos): ${JSON.stringify(c && { r: c.recolhida, t: c.txt.slice(0, 60) })}`);
     chk(c && /PARADO esperando/.test(c.txt) && /quase cheio/.test(c.txt) && /Diferenças com o site/.test(c.txt), '§6: o conteúdo de antes foi preservado (Decidir/PARADO, QNAP quase cheio, diferenças com o site)');
     await abrirHome(P);   // de novo na mesma visita: continua inteira
     c = await caixa();
-    chk(c && !c.recolhida, '§6: na mesma visita (a Home redesenhada depois de uma ação), a caixa continua inteira');
+    chk(c && c.recolhida && !c.aberta, '§6 + maquete: na mesma visita continua fechada numa linha');
     await P.reload(); await P.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await abrirHome(P);   // a próxima visita
     c = await caixa();
     chk(c && c.recolhida && !c.aberta && c.alt < 60, `§6: depois do primeiro uso, a caixa chega FECHADA, numa linha (${c && c.alt}px)`);

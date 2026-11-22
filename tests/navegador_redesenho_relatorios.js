@@ -149,7 +149,7 @@ print(json.dumps({"dia": dia}))
     chk(passos.length === 7 && JSON.stringify(passos.map(p => p.id)) === '["digitalizar","qnap","campvision","importar","conferir","aprovar","publicar"]', 'as 7 etapas, na ordem Digitalizar → … → Publicar', JSON.stringify(passos.map(p => p.id)));
     const UN = { digitalizar: /^estaç(ão|ões) ligadas?$/, qnap: /^pastas?$/, campvision: /^pastas?$/, importar: /^lotes?$/, conferir: /^lotes?$/, aprovar: /^lotes?$/, publicar: /^lotes?$/ };
     chk(passos.every(p => UN[p.id].test(p.u) && p.u === p.un && p.w.length > 10 && new RegExp('^Passo \\d de 7, ').test(p.aria)), 'cada etapa: posição, quantidade, a UNIDADE por extenso (estações/pastas/lotes) e uma linha de descrição', JSON.stringify(passos.map(p => [p.id, p.q, p.u, p.w.slice(0, 20)])));
-    chk(!/\d+\s*(itens|unidades)\b/.test(await P.locator('#ini-caminho').innerText()) && /os números não se somam/.test(await P.locator('#ini-caminho').innerText()), 'a tela diz que as unidades não se somam (nenhum total misturado)');
+    chk(!/\d+\s*(itens|unidades)\b/.test(await P.locator('#ini-caminho').innerText()) && /os números não se somam/.test(await P.evaluate(() => document.getElementById('ini-caminho').closest('section').textContent)), 'a tela diz que as unidades não se somam (nenhum total misturado)');
     const cam = Object.fromEntries(pa.caminho.map(c => [c.id, c]));
     const acum = passos.find(p => cam[p.id].estado === 'acumula'), prox = passos.find(p => cam[p.id].proxima);
     chk(!!acum && /maior acúmulo/.test(acum.st) && /stuck/.test(acum.cls), 'a etapa com maior acúmulo destacada em amarelo E com o texto "maior acúmulo"', JSON.stringify(acum));
@@ -168,7 +168,7 @@ print(json.dumps({"dia": dia}))
     chk(passos.filter(p => /stuck|go|bloq/.test(p.cls)).every(p => p.st), 'toda etapa colorida tem o estado também em texto');
 
     // ================= §11 folhas conferidas por dia =================
-    const rt = await P.evaluate(() => ({ h2: document.getElementById('ini-t-ritmo').textContent, cols: document.querySelectorAll('#ini-ritmo .rt-col').length, svg: document.querySelectorAll('#ini-ritmo svg').length, t: document.getElementById('ini-ritmo').innerText }));
+    const rt = await P.evaluate(() => ({ h2: document.getElementById('ini-t-ritmo').textContent, cols: document.querySelectorAll('#ini-ritmo .rt-col').length, svg: document.querySelectorAll('#ini-ritmo svg').length, t: document.getElementById('ini-ritmo').innerText + ' ' + document.getElementById('ini-ritmo').textContent }));   /* maquete: a legenda fica em "Ver os números" */
     chk(rt.h2 === 'Folhas conferidas por dia — últimas 2 semanas', 'título descritivo "Folhas conferidas por dia — últimas 2 semanas"', rt.h2);
     chk(rt.cols === 14 && rt.svg === 0 && /Total no período/.test(rt.t) && /Média por dia de trabalho/.test(rt.t) && /dia corrido/.test(rt.t), 'gráfico em HTML (sem SVG) com 14 dias, total, média e a legenda "dia corrido"', JSON.stringify(rt).slice(0, 300));
     const ri = await P.evaluate(async () => (await fetch('/api/painel/ritmo?dias=14')).json());
@@ -208,7 +208,7 @@ print(json.dumps({"dia": dia}))
     // ================= §12 visitas na Home: só o resumo =================
     await home();
     const vh = await P.evaluate(() => { const v = document.getElementById('ini-visitas'); return { t: v.innerText, rows: v.querySelectorAll('.vm-row').length, todos: !!v.querySelector('[data-vm-todos]'), csv: !!v.querySelector('[data-vm-csv]'), ni: !!v.querySelector('.vm-ni'), busca: !!v.querySelector('[data-vm-busca]'),
-      per: [...v.querySelectorAll('[data-vm-per] option')].map(o => o.value), ir: (v.querySelector('[data-vm-ir]') || {}).textContent || '', antes: v.closest('section').previousElementSibling === document.getElementById('ini-ritmo').closest('section') }; });
+      per: [...v.querySelectorAll('[data-vm-per] option')].map(o => o.value), ir: (v.querySelector('[data-vm-ir]') || {}).textContent || '', antes: v.previousElementSibling === document.getElementById('ini-ritmo').closest('section') }; });
     chk(vh.rows === 5 && !vh.todos && !vh.csv && !vh.ni && !vh.busca, 'Home: só o top 5 (sem "Ver todos", busca, CSV nem "não identificadas")', JSON.stringify(vh).slice(0, 300));
     chk(JSON.stringify(vh.per) === '["7d","30d","90d"]' && /Visitas no período/.test(vh.t) && /sessões/.test(vh.t) && /Última sincronização: \d\d\/\d\d\/\d{4}/.test(vh.t) && !!(await P.$('#ini-visitas .vm-res .vm-g')), 'Home: total de visitas (sessões) com a definição, evolução ao lado, filtro 7/30/90 e a data da sincronização', JSON.stringify(vh).slice(0, 400));
     chk(/Ver análise completa de visitas/.test(vh.ir) && vh.antes, 'Home: link "Ver análise completa de visitas" e o bloco logo abaixo do gráfico de folhas');
@@ -254,15 +254,16 @@ print(json.dumps({"dia": dia}))
     chk(crit.length === 4 && crit.every(c => /%$/.test(c.v) && c.p), 'os 4 critérios com o % ao lado do rótulo e a barra', JSON.stringify(crit));
     const dir = crit.find(c => /direitos/.test(c.r));
     chk(dir && (dir.v !== '0%' || (dir.z && /atenção/.test(dir.r))), '0% em "Com direitos definidos" aparece como atenção', JSON.stringify(dir));
-    chk(/Como cada medida é calculada/.test(qb) && /folhas de projetos ativos/.test(qb) && (await P.$$eval('#ini-qualidade .qb-def dt', d => d.length)) === 5, 'definição de cada critério e do universo');
+    const qbT = await P.evaluate(() => document.getElementById('ini-qualidade').textContent);   /* maquete: recolhido em "Como o índice é calculado?" */
+    chk(/Como o índice é calculado/.test(qbT) && /Como cada medida é calculada|Média simples das quatro medidas/.test(qbT) && /folhas de projetos ativos/.test(qbT) && (await P.$$eval('#ini-qualidade .qb-def dt', d => d.length)) === 5, 'definição de cada critério e do universo');
     chk((await P.$$eval('#ini-qualidade > .pb > .qb-fundos li', l => l.length)) <= 3, 'poucos fundos priorizados (no máximo 3) + "Ver todos"');
 
     // ================= §16 melhorias =================
     const nomes = await P.$$eval('#ini-melhorias .mh-lista li > span:first-child', s => s.map(x => x.textContent));
-    chk(JSON.stringify(nomes) === JSON.stringify([...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'))) && /Criar, importar e sincronizar com o site não contam/.test(await P.locator('#ini-melhorias').innerText()), 'melhorias: ordem alfabética (não é ranking) e o que conta', JSON.stringify(nomes));
+    chk(JSON.stringify(nomes) === JSON.stringify([...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'))) && /Criar, importar e sincronizar com o site não contam/.test(await P.evaluate(() => document.getElementById('ini-melhorias').textContent)), 'melhorias: ordem alfabética (não é ranking) e o que conta', JSON.stringify(nomes));
 
     // ================= §17 cobertura =================
-    const cob = await P.$$eval('#ini-cobertura .ini-prog-row', rs => rs.map(r => ({ id: r.dataset.cob, n: r.querySelector('.ini-cob-n').textContent, pct: (r.querySelector('.ini-cob-pct') || {}).textContent, w: parseFloat((r.querySelector('.ini-bar i') || { style: {} }).style.width) })));
+    const cob = await P.$$eval('#ini-cobertura .ini-prog-row', rs => rs.map(r => ({ id: r.dataset.cob, n: r.querySelector('.ini-cob-n').textContent, pct: (r.querySelector('.ini-cob-pct') || {}).textContent, w: r.dataset.pct != null ? +r.dataset.pct : parseFloat((r.querySelector('.ini-bar i') || { style: {} }).style.width) })));   /* maquete: as folhas num donut (data-pct) */
     const ns = pa.no_site, esp = { folhas: [ns.folhas.no_ar, ns.folhas.total, 'folhas publicadas'], projetos: [ns.projetos.no_ar, ns.projetos.total, 'projetos com página publicada'], fundos: [ns.fundos.no_ar, ns.fundos.total, 'fundos com página publicada'] };
     chk(cob.length === 3 && cob.every(c => { const [a, b, u] = esp[c.id], p = 100 * a / b; return c.n.includes(`${a.toLocaleString('pt-BR')} de ${b.toLocaleString('pt-BR')} ${u}`) && c.pct === (p > 0 && p < 1 ? p.toFixed(1).replace('.', ',') + '%' : Math.round(p) + '%') && Math.abs(c.w - p) < 0.1; }),
       'cobertura: Folhas, Projetos e Fundos com página, cada um com publicado / total / % / barra e a unidade por extenso', JSON.stringify([cob, esp]));
@@ -281,8 +282,8 @@ print(json.dumps({"dia": dia}))
       const lat = await P.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
       chk(lat, `${w} px: Home sem rolagem lateral`);
       if (w === 390) {
-        const vert = await P.$$eval('#ini-caminho .ini-step', b => b.map(x => Math.round(x.getBoundingClientRect().left)));
-        chk(new Set(vert).size === 1, '390 px: o caminho vira percurso vertical', JSON.stringify(vert));
+        const vert = await P.$$eval('#ini-caminho .ini-step', b => b.map(x => Math.round(x.getBoundingClientRect().right)));
+        chk(vert.length === 7 && vert.every(x => x <= 390), '390 px: o caminho quebra em linhas (cartões dentro da tela)', JSON.stringify(vert));   /* maquete: cartões lado a lado que quebram */
         const alvo = await P.$$eval('#ini-caminho .ini-step, #ini-qualidade .qb-fundos button', b => b.every(x => x.getBoundingClientRect().height >= 44));
         chk(alvo, '390 px: alvos de toque com 44 px ou mais');
       }
