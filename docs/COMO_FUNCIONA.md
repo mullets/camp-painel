@@ -3841,7 +3841,7 @@ Blocos da tela, na ordem:
 Documento do Rafael "Redesenho do painel inicial / Precisa de você". A barra do topo, a faixa do sistema e o menu lateral **não mudam** (o teste
 `tests/navegador_home_redesenho.js` compara a marcação de `<div class="top">` com a do main de 22/11/2026). A Home fica em três partes:
 
-1. **Ação** (acima da dobra): saudação com a foto, a meta da semana (`#ini-meta`), os 4 indicadores (cada um abre a lista que conta e diz a
+1. **Ação** (acima da dobra): saudação com a foto e o "?" na mesma linha (a meta da semana da equipe, `#ini-meta`, é a 2ª seção do cartão azul-marinho do nível, na coluna da direita), os 4 indicadores (cada um abre a lista que conta e diz a
    regra no "?" e no rótulo acessível; "folhas conferidas hoje" leva ao gráfico) e **O que fazer agora**.
 2. **Operação**: o caminho do material com o **gargalo** pela espera acumulada.
 3. **Resultados**: período comum (7/14/30/90 dias), ritmo (`/api/painel/ritmo?dias=N`, agora com `anterior_conferidas`) e visitas (7/30/90).

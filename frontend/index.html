@@ -1546,8 +1546,6 @@ button.ini-kpi{cursor:pointer}button.ini-kpi:hover{border-color:var(--blue);back
 /* ===== CAMP-HOME-UX (22/11/2026): Ação · Operação · Resultados, prioridade, responsável, meta da semana e conquistas ===== */
 .ini-hello-p{display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1 1 auto}
 .av.ini-av{width:44px;height:44px;font-size:var(--fs-base);margin-top:2px}
-.ini-meta{flex:0 1 300px;min-width:0}.ini-meta:empty{display:none}
-.ini-meta-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:10px 14px;display:grid;gap:4px}
 .ini-meta-l1{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.ini-meta-t{font-weight:600;font-size:var(--fs-md)}
 .ini-meta-pct{font:600 var(--fs-lg)/1.2 var(--mono);color:var(--blue)}.ini-meta-n{margin:0;font-size:var(--fs-md);color:var(--ink2)}.ini-meta-n b{color:var(--ink)}
 .ini-meta-bar{margin:2px 0}.ini-meta-l2{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}.ini-meta-mais .mais-lista{right:0;left:auto}@media (max-width:1499px){.ini-fazer>.ph .ini-fazer-hint{display:none}}.ini-meta-mais>summary{font-size:var(--fs-sm2)}
@@ -1586,8 +1584,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .ini-saude-ok{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:center;padding:12px 16px}.ini-saude-ok p{margin:0}.ini-saude-ok b{color:var(--green)}
 .ini-saude-resto>summary{padding:8px 16px;font-size:var(--fs-md);color:var(--blue);cursor:pointer;border-bottom:1px solid var(--line2)}
 .ini-saude-resto[open]>summary{color:var(--ink2)}
-@media (max-width:1279px){.ini-meta{flex-basis:260px}}
-@media (max-width:760px){.ini-hello{flex-wrap:wrap}.ini-meta{order:3;flex:1 1 100%}.av.ini-av{width:36px;height:36px}
+@media (max-width:760px){.ini-hello{flex-wrap:nowrap}.av.ini-av{width:36px;height:36px}
   #v-painel .ini-task{grid-template-columns:4px 44px minmax(0,1fr)}#v-painel .ini-task>.mini{width:44px;height:33px}#v-painel .ini-task-fim{grid-column:2 / -1;flex-direction:row;align-items:center;justify-content:space-between}#v-painel .ini-task-meta{align-items:flex-start;text-align:left}
   .ini-res-h{flex-direction:column;align-items:flex-start}#v-painel .ini-fila-barra .abas-sit{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}#v-painel .ini-fila-barra .abas-sit .btn{flex:none}}
 @media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}}
@@ -1605,7 +1602,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 :root[data-theme="dark"] #v-painel{--ini-sombra:0 1px 2px rgba(0,0,0,.4);--ini-roxo:#A08BE6}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #v-painel{--ini-sombra:0 1px 2px rgba(0,0,0,.4);--ini-roxo:#A08BE6}}
 .ini-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);border:0}
-#v-painel .panel,#v-painel .ini-kpi,#v-painel .ini-meta-card,#v-painel .ini-jogo-corpo>.pb,#v-painel .ini-conq-card{border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--ini-sombra);background:var(--surface)}
+#v-painel .panel,#v-painel .ini-kpi,#v-painel .ini-jogo-corpo>.pb,#v-painel .ini-conq-card{border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--ini-sombra);background:var(--surface)}
 #v-painel .panel .ph{padding:14px 18px 10px;border-bottom:0;flex-wrap:wrap;gap:6px 12px}
 #v-painel .panel .ph h2{font-size:var(--fs-sec);font-weight:700;letter-spacing:-.005em}
 #v-painel .panel .pb{padding:4px 18px 16px}
@@ -1618,18 +1615,6 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 #v-painel .av.ini-av{width:64px;height:64px;font-size:var(--fs-xl);font-weight:600;margin:0;box-shadow:var(--ini-sombra)}
 #v-painel .ini-hello h1{font-size:var(--fs-page);font-weight:700}
 #v-painel .ini-hello .sub{font-size:var(--fs-sub);font-weight:500;margin-top:2px}
-#v-painel .ini-meta{flex:0 1 350px}
-#v-painel .ini-meta-card{display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 14px;align-items:center;padding:12px 18px}
-.ini-meta-ic{color:var(--ink);width:40px;height:40px}.ini-meta-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-#v-painel .ini-meta-c{display:grid;gap:2px;min-width:0}
-#v-painel .ini-meta-l1{align-items:baseline;flex-wrap:wrap;gap:2px 10px}
-#v-painel .ini-meta-t{font-size:var(--fs-base);font-weight:700}
-#v-painel .ini-meta-n{font-size:var(--fs-sm);margin:0}
-#v-painel .ini-meta-l2{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:2px 12px}
-#v-painel .ini-meta-pct{font:700 var(--fs-xl)/1.1 var(--sans);color:var(--ink)}
-#v-painel .ini-meta-bar{height:10px;border:0;border-radius:var(--r-pill);background:var(--line2);margin:0}
-#v-painel .ini-meta-bar i{background:var(--green);border-radius:var(--r-pill)}
-#v-painel .ini-meta-mais{grid-column:1/-1;justify-self:end;margin-top:-2px}#v-painel .ini-meta-mais>summary{font-size:var(--fs-xs)}
 /* caixa "Entenda esta página" fechada numa linha */
 #v-painel>.ajuda-recolhida{margin:0 0 14px;padding:6px 14px;background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--ini-sombra)}
 #v-painel>.ajuda-recolhida>summary h2{font-size:var(--fs-sm);font-weight:600;color:var(--blue)}
@@ -1751,6 +1736,20 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .ini-nivel-c{min-width:0;display:grid;gap:4px}.ini-nivel-t{margin:0;font-size:var(--fs-base)}.ini-nivel-t b{font-weight:700}
 #v-painel .ini-nivel-card .ini-bar{height:10px;border:0;border-radius:var(--r-pill);background:rgba(255,255,255,.22);margin:2px 0}#v-painel .ini-nivel-card .ini-bar i{background:var(--ini-ouro2);border-radius:var(--r-pill)}
 .ini-nivel-card .ini-nivel-xp{margin:0;color:#fff;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}.ini-nivel-falta{margin:0;font-size:var(--fs-xs);color:rgba(255,255,255,.82)}.ini-nivel-falta b{color:#fff}
+/* CAMP-HOME-UX: meta da semana (equipe) = 2ª seção do cartão azul-marinho, abaixo do XP; barra verde para não confundir com o XP dourado */
+.ini-nivel-card .ini-meta{grid-column:1/-1;min-width:0;border-top:1px solid rgba(255,255,255,.18);padding-top:12px;--ini-verde:#5BD48A}
+.ini-nivel-so-meta .ini-meta{border-top:0;padding-top:0}
+.ini-nivel-card .ini-meta-c{display:grid;gap:4px;min-width:0}
+.ini-nivel-card .ini-meta-l1{display:grid;gap:2px}
+.ini-nivel-card .ini-meta-t{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);font-weight:700;color:#fff}.ini-nivel-card .ini-meta-t small{font-weight:500;font-size:var(--fs-sm);color:rgba(255,255,255,.82)}
+.ini-nivel-card .ini-meta-ic{width:20px;height:20px;color:var(--ini-verde);flex:none}.ini-nivel-card .ini-meta-ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ini-nivel-card .ini-meta-n{margin:0;font-size:var(--fs-sm);color:rgba(255,255,255,.88);font-variant-numeric:tabular-nums}.ini-nivel-card .ini-meta-n b{color:#fff}
+.ini-nivel-card .ini-meta-l2{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:4px 12px}
+.ini-nivel-card .ini-meta-pct{font:700 var(--fs-lg)/1.1 var(--sans);color:var(--ini-verde);font-variant-numeric:tabular-nums}
+#v-painel .ini-nivel-card .ini-bar.ini-meta-bar{margin:0}#v-painel .ini-nivel-card .ini-bar.ini-meta-bar i{background:var(--ini-verde)}
+.ini-nivel-card .ini-meta-mais{grid-column:1/-1;justify-self:end}
+#v-painel .ini-nivel-card .ini-meta .ini-link{color:#fff;font-size:var(--fs-xs);text-decoration-color:rgba(255,255,255,.6)}
+.ini-nivel-card .mais-lista{color:var(--ink)}
 #v-painel .ini-conq-card{padding:14px 18px 16px}
 .ini-conq-h{display:flex;align-items:center;justify-content:space-between;gap:8px}.ini-conq-h .ini-jogo-h{margin:0;font-size:var(--fs-sec);font-weight:700}
 .ini-conq-todas>summary{list-style:none;cursor:pointer}.ini-conq-todas>summary::-webkit-details-marker{display:none}.ini-conq-todas .mais-lista{right:0;left:auto;min-width:280px}
@@ -1820,7 +1819,6 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 #v-painel .mh-mais{margin-top:12px}#v-painel .mh-mais>summary{list-style:none;cursor:pointer;min-height:28px}#v-painel .mh-mais>summary::-webkit-details-marker{display:none}
 #v-painel .mh-mais .pb{padding:8px 0 0}#v-painel .mh-mais .mh-cab,#v-painel .mh-mais .mh-lista li{padding-left:0;padding-right:0}
 /* tablet e celular */
-@media (max-width:1279px){#v-painel .ini-meta{flex-basis:320px}}
 @media (max-width:900px){#v-painel .ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#v-painel .vm-res{grid-template-columns:minmax(0,1fr)}#v-painel .vm-res-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:760px){
   #v-painel .av.ini-av{width:48px;height:48px;font-size:var(--fs-lg)}
@@ -1833,7 +1831,6 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
   #v-painel .vm-res-kpis{grid-template-columns:minmax(0,1fr)}
   #v-painel .vm-rank .vm-row{grid-template-columns:26px 44px minmax(0,1fr) auto 24px}#v-painel .vm-rank .vm-barra{display:none}
   .ini-donut-row{grid-template-columns:minmax(0,1fr);justify-items:center}
-  #v-painel .ini-meta-card{padding:10px 14px}
 }
 /* P2-18 · janela de confirmação padrão (alvo + consequência; digitar o código para o que não tem volta) */
 .conf-ov{position:fixed;inset:0;background:rgba(10,14,20,.55);display:grid;place-items:center;z-index:80;padding:16px}
@@ -9002,17 +8999,20 @@ function iniSaudeAtualizar(){const el=document.getElementById('ini-saude');if(el
    as conquistas, que a pessoa pode ocultar. Os pontos vêm só de ações validadas que continuam valendo (GET /api/painel/progresso):
    desfez, o ponto some. O Ranking da equipe (mês) vem ligado (decisão do Rafael, 22/11/2026); um admin desliga em Configurações. */
 let PAINEL_PG=null;
-function iniBarraHTML(v,max,rot){const w=max?Math.min(100,100*v/max):0;return `<div class="ini-bar ini-meta-bar" role="img" aria-label="${escHtml(rot)}"><i data-w="${w.toFixed(2)}"></i></div>`}
-function iniMetaHTML(pg){if(pg===undefined)return '<div class="ini-meta-card" aria-busy="true"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado||!pg.semana)return '';
+function iniBarraHTML(v,max,rot,cls){const w=max?Math.min(100,100*v/max):0;return `<div class="ini-bar${cls?' '+cls:''}" role="img" aria-label="${escHtml(rot)}"><i data-w="${w.toFixed(2)}"></i></div>`}
+/* CAMP-HOME-UX (Rafael, 22/11/2026: "meta da semana tá meio jogado aí"): a meta sai do cabeçalho e vira a 2ª seção do cartão azul-marinho do
+   nível, com a barra verde (o nível é dourado). Sem o nível (leitura, conquistas ocultas), o mesmo cartão só com a meta. */
+function iniMetaHTML(pg){if(!pg||!pg.ligado||!pg.semana)return '';
   const s=pg.semana,adm=EU&&['admin','master'].includes(EU.papel),pts=qtd(s.feito,'ponto','pontos');
-  return `<div class="ini-meta-card" id="ini-meta-card"><span class="ini-meta-ic" aria-hidden="true">${INI_IC.alvo}</span><div class="ini-meta-c"><div class="ini-meta-l1"><span class="ini-meta-t">Meta da semana <small class="ini-nota">· equipe</small></span><p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados</p></div>
-    <div class="ini-meta-l2"><b class="ini-meta-pct">${fmtN(s.pct)}%</b>${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`)}
+  return `<div class="ini-meta" id="ini-meta"><div class="ini-meta-c"><div class="ini-meta-l1"><span class="ini-meta-t"><span class="ini-meta-ic" aria-hidden="true">${INI_IC.alvo}</span><span>Meta da semana <small>· equipe</small></span></span><p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados</p></div>
+    <div class="ini-meta-l2"><b class="ini-meta-pct">${fmtN(s.pct)}%</b>${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`,'ini-meta-bar')}
     <details class="mais-menu ini-meta-mais"><summary class="ini-link">Como conta?</summary><div class="mais-lista ini-ajuda-txt" role="note"><p>${escHtml(pg.regra)}</p><p>Semana de segunda a domingo (horário de São Paulo). Nesta semana: ${escHtml(Object.entries(s.por_tipo||{}).filter(([,n])=>n).map(([k,n])=>`${fmtN(n)} ${s.por_tipo_rotulo[k]}`).join(' · ')||'nenhuma ação validada ainda')}.</p>${iniPontosTabelaHTML(pg)}
     ${adm?`<form class="ini-meta-form" data-ini-meta-form><label>Nova meta (pontos) <input type="number" min="1" max="100000" step="1" name="meta" value="${escHtml(s.meta)}" required></label><button type="submit" class="btn sm">Salvar a meta</button></form>`:''}</div></details></div></div></div>`}
 function iniPontosTabelaHTML(pg){return `<table class="ini-pontos"><caption>Pontos por ação validada</caption><tbody>${Object.entries(pg.pontos||{}).map(([k,v])=>`<tr><td>${escHtml((pg.pontos_rotulo||{})[k]||k)}</td><td class="num">${fmtN(v)}</td></tr>`).join('')}</tbody></table>`}
 function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb ini-jogo-load"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado)return '';
-  if(EU&&EU.papel==='leitura')return `<div class="pb"><p class="ini-nota">Nível e conquistas são de quem edita o painel. A meta da semana, no alto, é da equipe toda.</p></div>${iniEquipeHTML(pg)}`;
-  if(pg.oculto)return `<div class="pb ini-jogo-oculto"><p class="ini-nota">Você ocultou o seu nível e as suas conquistas. A meta da semana continua no alto.</p><button type="button" class="btn sm" data-ini-conquistas="0">Mostrar de novo</button></div>${iniEquipeHTML(pg)}`;
+  const meta=iniMetaHTML(pg),soMeta=meta?`<div class="ini-nivel-card ini-nivel-so-meta">${meta}</div>`:'';
+  if(EU&&EU.papel==='leitura')return `${soMeta}<div class="pb"><p class="ini-nota">Nível e conquistas são de quem edita o painel. A meta da semana é da equipe toda.</p></div>${iniEquipeHTML(pg)}`;
+  if(pg.oculto)return `${soMeta}<div class="pb ini-jogo-oculto"><p class="ini-nota">Você ocultou o seu nível e as suas conquistas. A meta da semana da equipe continua aqui.</p><button type="button" class="btn sm" data-ini-conquistas="0">Mostrar de novo</button></div>${iniEquipeHTML(pg)}`;
   const e=pg.eu;if(!e)return '';const fim=e.ate||e.xp,rot=e.ate?`${fmtN(e.xp)} / ${fmtN(e.ate)} XP`:`${fmtN(e.xp)} XP (último nível)`;
   const cq=e.conquistas||[],ct=e.contagens||{};
   /* CAMP-HOME-UX (maquete): os 3 selos contam o que é da pessoa (folhas conferidas, lotes aprovados, dias seguidos), com os números de verdade;
@@ -9020,7 +9020,7 @@ function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb ini-jogo-load"
   const selo=(cls,forma,ic,n,um,varios)=>`<li class="ini-selo ${cls}${n?'':' zero'}"><span class="ini-selo-ic">${iniSeloSVG(forma,ic)}</span><span class="ini-selo-t"><b>${fmtN(n)}</b> ${escHtml(n===1?um:varios)}</span></li>`;
   const falta=e.ate?`<p class="ini-nivel-falta">Faltam <b>${fmtN(e.ate-e.xp)} XP</b> para o nível ${fmtN(e.nivel+1)}</p>`:'<p class="ini-nivel-falta">Último nível</p>';
   return `<div class="ini-jogo"><div class="ini-nivel-card"><span class="ini-medalha">${INI_MEDALHA}</span><div class="ini-nivel-c"><p class="ini-nivel-t"><b>Nível ${fmtN(e.nivel)} · ${escHtml(e.nome)}</b></p>
-    ${iniBarraHTML(e.xp-e.de,fim-e.de,`Nível ${e.nivel}: ${rot}`)}<p class="ini-nivel-xp">${escHtml(rot)}${e.xp_semana?` · ${escHtml(qtd(e.xp_semana,'ponto','pontos'))} nesta semana`:''}</p>${falta}</div></div>
+    ${iniBarraHTML(e.xp-e.de,fim-e.de,`Nível ${e.nivel}: ${rot}`,'ini-nivel-bar')}<p class="ini-nivel-xp">${escHtml(rot)}${e.xp_semana?` · ${escHtml(qtd(e.xp_semana,'ponto','pontos'))} nesta semana`:''}</p>${falta}</div>${meta}</div>
     <div class="ini-conq-card"><div class="ini-conq-h"><h3 class="ini-jogo-h">Suas conquistas</h3><details class="mais-menu ini-conq-todas"><summary class="ini-link">Ver todas →</summary><div class="mais-lista ini-ajuda-txt" role="note">
       ${cq.length?`<ul class="ini-conq">${cq.slice().reverse().map(c=>`<li data-conq="${escHtml(c.id)}"><span class="ini-conq-ic" aria-hidden="true">★</span>${escHtml(c.rotulo)}</li>`).join('')}</ul>`:'<p>Ainda nenhuma. A primeira vem com a primeira folha conferida.</p>'}
       ${e.proxima?`<p class="ini-prox">Próxima: ${escHtml(e.proxima.rotulo)} (${fmtN(e.proxima.feito)} de ${fmtN(e.proxima.de)}).</p>`:''}
@@ -9034,10 +9034,9 @@ const RANKING_AVISO='Reconhecimento, não avaliação: não serve para avaliar d
 function rankingQHTML(aviso){return `<details class="mais-menu rank-q"><summary aria-label="Como conta o Ranking da equipe?" title="Como conta?">?</summary><div class="mais-lista ini-ajuda-txt" role="note"><p>Pontos validados de cada pessoa neste mês (horário de São Paulo). Só contam ações que continuam valendo: se alguém desfaz, o ponto some.</p><p><b>${escHtml(aviso||RANKING_AVISO)}</b></p><p>Um admin desliga o ranking em Configurações.</p></div></details>`}
 function rankingListaHTML(q){return q.length?`<ol class="cp-rank">${q.slice(0,10).map((r,i)=>`<li><span class="cp-rank-n">${i+1}</span><span>${escHtml(r.nome)}</span><b>${escHtml(qtd(+r.pontos||0,'ponto','pontos'))}</b></li>`).join('')}</ol>`:'<p class="ini-nota">Ninguém pontuou neste mês ainda.</p>'}
 function iniEquipeHTML(pg){const q=pg&&pg.equipe;if(!Array.isArray(q))return '';return `<div class="pb ini-equipe" id="ini-ranking"><div class="ini-conq-h"><h3 class="ini-jogo-h">Ranking da equipe <span class="cp-lat-sub">(mês)</span></h3>${rankingQHTML(pg.aviso_ranking)}</div>${rankingListaHTML(q)}</div>`}
-function iniJogoDesenhar(){const m=document.getElementById('ini-meta'),j=document.getElementById('ini-jogo'),mh=document.getElementById('ini-mh-hoje');if(mh)mh.innerHTML=iniMelhoriasHojeHTML(PAINEL_MH,PAINEL_PG);
-  if(m){m.innerHTML=iniMetaHTML(PAINEL_PG);vmPosicionar(m)}
+function iniJogoDesenhar(){const j=document.getElementById('ini-jogo'),mh=document.getElementById('ini-mh-hoje');if(mh)mh.innerHTML=iniMelhoriasHojeHTML(PAINEL_MH,PAINEL_PG);
   if(j){const h=iniJogoHTML(PAINEL_PG);j.hidden=!h;const b=j.querySelector('.ini-jogo-corpo');if(b){b.innerHTML=h;vmPosicionar(b)}}}
-function iniJogoCarregar(){return API('/api/painel/progresso').then(pg=>{PAINEL_PG=pg;iniJogoDesenhar()}).catch(err=>{if(err&&(err.status===401||err.status===428))return;PAINEL_PG=null;const j=document.getElementById('ini-jogo');if(j){j.hidden=false;const b=j.querySelector('.ini-jogo-corpo');if(b)b.innerHTML=`<div class="pb" role="alert"><p class="ini-nota">Não consegui contar o progresso agora.</p><button type="button" class="btn sm" data-ini-jogo-tentar>Tentar de novo</button></div>`}const m=document.getElementById('ini-meta');if(m)m.innerHTML=''})}
+function iniJogoCarregar(){return API('/api/painel/progresso').then(pg=>{PAINEL_PG=pg;iniJogoDesenhar()}).catch(err=>{if(err&&(err.status===401||err.status===428))return;PAINEL_PG=null;const j=document.getElementById('ini-jogo');if(j){j.hidden=false;const b=j.querySelector('.ini-jogo-corpo');if(b)b.innerHTML=`<div class="pb" role="alert"><p class="ini-nota">Não consegui contar o progresso agora.</p><button type="button" class="btn sm" data-ini-jogo-tentar>Tentar de novo</button></div>`}})}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-conquistas],[data-ini-jogo-tentar]');if(!b)return;if(b.hasAttribute('data-ini-jogo-tentar'))return iniJogoCarregar();
   const ocultar=b.dataset.iniConquistas==='1';b.disabled=true;try{await API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'conquistas.ocultar',valor:ocultar?'1':null})});toast(ocultar?'Conquistas ocultas: só você deixa de vê-las. Dá para mostrar de novo aqui.':'Conquistas de volta.');await iniJogoCarregar();document.querySelector(ocultar?'#ini-jogo [data-ini-conquistas="0"]':'#ini-jogo [data-ini-conquistas="1"]')?.focus()}catch(err){b.disabled=false;toast(err.message)}});
 document.addEventListener('submit',async e=>{const f=e.target.closest('[data-ini-meta-form]');if(!f)return;e.preventDefault();const v=+f.elements.meta.value;const bt=f.querySelector('button');bt.disabled=true;
@@ -9057,11 +9056,11 @@ async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')
      sempre abertos (desfaz o bloco recolhido "Números do acervo" do UX-30). Visitas com o GA desligado mostra "desligado" sem pedir /api/analytics (UX-12). */
   const S=saudacaoPainel(d),p=d.pendencias;INI_PENDENTE=null;
   /* Redesenho §5–§8: cabeçalho compacto (título, a contagem real da fila e a data), os indicadores logo abaixo e, em seguida, a fila */
-  /* CAMP-HOME-UX (documento do Rafael, 22/11/2026): três partes, nesta ordem. AÇÃO, acima da dobra: saudação com a meta da semana, os 4
+  /* CAMP-HOME-UX (documento do Rafael, 22/11/2026): três partes, nesta ordem. AÇÃO, acima da dobra: saudação (e o "?" na mesma linha), os 4
      indicadores e "O que fazer agora". OPERAÇÃO: o caminho do material com o gargalo. RESULTADOS: ritmo, visitas e projetos mais visitados, com o
-     mesmo período. Coluna da direita, pela prioridade do documento: alertas reais, nível e conquistas, qualidade, publicação e sistemas (compacto);
+     mesmo período. Coluna da direita, pela prioridade do documento: alertas reais, nível com a meta da semana da equipe e conquistas, qualidade, publicação e sistemas (compacto);
      depois as melhorias e o que aconteceu hoje. Tablet: a coluna desce para baixo; celular: tudo empilhado. */
-  sec.innerHTML=`<div class="hdr ini-hello"><div class="ini-hello-p">${EU?avatarHTML(EU.id,EU.nome,EU.tem_foto,'ini-av'):''}<div class="ini-hello-t"><h1 id="ini-saud">${escHtml(S.t1)}</h1><p class="sub" id="ini-sub">${escHtml(S.t2)}</p><p class="ini-data">${escHtml(S.data)}</p></div></div><div class="ini-meta" id="ini-meta">${iniMetaHTML(undefined)}</div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Entenda esta página (tecla ?)" aria-label="Entenda esta página">?</button></div>
+  sec.innerHTML=`<div class="hdr ini-hello"><div class="ini-hello-p">${EU?avatarHTML(EU.id,EU.nome,EU.tem_foto,'ini-av'):''}<div class="ini-hello-t"><h1 id="ini-saud">${escHtml(S.t1)}</h1><p class="sub" id="ini-sub">${escHtml(S.t2)}</p><p class="ini-data">${escHtml(S.data)}</p></div></div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Entenda esta página (tecla ?)" aria-label="Entenda esta página">?</button></div>
   ${iniKpisHTML(p)}
   <div class="ini-grid">
     <div class="ini-col ini-col-princ">

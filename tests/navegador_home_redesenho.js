@@ -1,5 +1,5 @@
 // CAMP-HOME-UX (22/11/2026, documento do Rafael "Redesenho do painel inicial / Precisa de você"), no navegador de verdade:
-//  - a Home em três partes, nesta ordem: Ação (saudação + meta da semana + 4 indicadores + "O que fazer agora"), Operação (caminho do material)
+//  - a Home em três partes, nesta ordem: Ação (saudação + "?" + 4 indicadores + "O que fazer agora"), Operação (caminho do material)
 //    e Resultados (ritmo, visitas); coluna da direita na ordem do documento (alertas, progresso, qualidade, publicação, sistemas…);
 //  - os indicadores abrem a lista que contam e dizem a regra da contagem;
 //  - abas Minha fila · Todos · Críticos · Sem responsável; "Pegar para mim" leva a tarefa para a Minha fila; no máximo 5 linhas + "Ver todas";
@@ -12,6 +12,9 @@
 //  fechada numa linha; indicadores com ícone; linha da fila curta ("Há 19 dias", a frase da prioridade na dica); caminho em 7 cartões LADO A
 //  LADO com ✓ verde no que está zerado; coluna da direita na ordem da maquete (nível azul-marinho, 3 selos, sistemas com "Online", qualidade,
 //  donut do site, melhorias de hoje); visitas sem dados = aviso compacto.
+// CAMP-HOME-UX (Rafael, 22/11/2026: "meta da semana tá meio jogado aí"): a meta da semana da equipe sai do cabeçalho e vira a 2ª seção do
+//  cartão azul-marinho do nível, na coluna da direita (barra verde, legível no claro e no escuro, admin muda a meta ali); o cabeçalho fica só
+//  com a saudação e o "?" na mesma linha; com o jogo desligado, somem a meta e o nível.
 // Uso (servidor PRÓPRIO, porta 8931):
 //   CAMP_DB_PATH=/dev/shm/t/h.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/dev/shm/t/h.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8931)
@@ -65,12 +68,49 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
 
     // ---------- ordem: Ação · Operação · Resultados; coluna da direita pela prioridade do documento ----------
     const ordem = await P.evaluate(() => { const pos = s => { const e = document.querySelector(s); return e ? [...document.querySelectorAll('#v-painel *')].indexOf(e) : -1 };
-      return { hello: pos('#ini-saud'), meta: pos('#ini-meta'), kpis: pos('.ini-kpis'), acao: pos('[data-ini-parte="acao"]'), op: pos('[data-ini-parte="operacao"]'), res: pos('[data-ini-parte="resultados"]'),
+      return { hello: pos('#ini-saud'), kpis: pos('.ini-kpis'), acao: pos('[data-ini-parte="acao"]'), op: pos('[data-ini-parte="operacao"]'), res: pos('[data-ini-parte="resultados"]'),
         ritmo: pos('#ini-ritmo'), jogo: pos('#ini-jogo'), qb: pos('#ini-qualidade'), site: pos('#ini-cobertura'), saude: pos('#ini-saude'), mh: pos('#ini-melhorias'), hoje: pos('#ini-t-hoje'),
         princ: !!document.querySelector('.ini-col-princ [data-ini-parte="acao"]') && !!document.querySelector('.ini-col-princ [data-ini-parte="resultados"] #ini-ritmo'), lat: !!document.querySelector('.ini-lateral #ini-jogo') } });
     const crescente = a => a.every((v, i) => v >= 0 && (!i || a[i - 1] < v));
-    chk(crescente([ordem.hello, ordem.meta, ordem.kpis, ordem.acao, ordem.op, ordem.res, ordem.ritmo]) && ordem.princ, `Ação → Operação → Resultados, nesta ordem, na coluna principal: ${JSON.stringify(ordem)}`);
+    chk(crescente([ordem.hello, ordem.kpis, ordem.acao, ordem.op, ordem.res, ordem.ritmo]) && ordem.princ, `Ação → Operação → Resultados, nesta ordem, na coluna principal: ${JSON.stringify(ordem)}`);
     chk(ordem.lat && crescente([ordem.jogo, ordem.saude, ordem.qb, ordem.site, ordem.mh, ordem.hoje]), 'coluna da direita na ordem da maquete: progresso, sistemas, qualidade, publicação, melhorias, hoje');
+    // ---------- meta da semana junto do nível (não fica solta no topo) ----------
+    const lumi = c => { const m = String(c).match(/[\d.]+/g); if (!m) return null; let v = m.slice(0, 3).map(Number); if (/^color\(/.test(c)) v = v.map(x => x * 255);
+      const [r, g, b] = v.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+    const contraste = (a, b) => { const [x, y] = [lumi(a), lumi(b)].sort((p, q) => q - p); return (x + .05) / (y + .05); };
+    const metaNo = async () => P.evaluate(() => { const r = e => e && e.getBoundingClientRect(), h = document.querySelector('#v-painel .ini-hello'), q = h && h.querySelector('.ini-q'), hp = h && h.querySelector('.ini-hello-p');
+      const m = document.querySelector('#ini-meta'), nc = m && m.closest('.ini-nivel-card'), cor = s => { const e = m && m.querySelector(s); return e ? getComputedStyle(e).color : null; };
+      return { naCartao: !!document.querySelector('.ini-lateral #ini-jogo .ini-nivel-card #ini-meta'), depoisDoXp: !!(nc && nc.querySelector('.ini-nivel-c .ini-nivel-bar') && m.previousElementSibling && m.previousElementSibling.matches('.ini-nivel-c') && !nc.querySelector('.ini-conq-card, .ini-selos') && m.parentElement === nc),
+        txt: m ? m.innerText.replace(/\s+/g, ' ') : '', soltaNoTopo: !!(h && h.querySelector('#ini-meta, .ini-meta, .ini-meta-card')) || [...document.querySelectorAll('#v-painel .ini-meta-card, #v-painel .ini-meta')].some(x => !x.closest('.ini-lateral')),
+        q: q && hp ? { pai: q.parentElement === h, vizinho: q.previousElementSibling === hp, centro: Math.abs((r(q).top + r(q).bottom) / 2 - (r(hp).top + r(hp).bottom) / 2), dir: Math.round(r(h).right - r(q).right), filhos: h.children.length } : null,
+        barra: m && m.querySelector('.ini-meta-bar i') ? getComputedStyle(m.querySelector('.ini-meta-bar i')).backgroundColor : null, xp: nc && nc.querySelector('.ini-nivel-bar i') ? getComputedStyle(nc.querySelector('.ini-nivel-bar i')).backgroundColor : null,
+        fundo: nc ? getComputedStyle(nc).backgroundColor : null, cores: { t: cor('.ini-meta-t'), n: cor('.ini-meta-n'), pct: cor('.ini-meta-pct'), link: cor('.ini-meta-mais > summary') },
+        kpiGap: Math.round(r(document.querySelector('#v-painel .ini-kpis')).top - r(h).bottom), form: !!(m && m.querySelector('[data-ini-meta-form]')) }; });
+    for (const tema of ['light', 'dark']) {
+      await P.emulateMedia({ colorScheme: tema }); await P.waitForTimeout(250);
+      const mt = await metaNo();
+      if (tema === 'light') {
+        chk(mt.naCartao && mt.depoisDoXp && /Meta da semana · equipe/.test(mt.txt) && /de 100 pontos validados/.test(mt.txt) && /\d+%/.test(mt.txt) && /Como conta\?/.test(mt.txt), `a meta da semana é a 2ª seção do cartão do nível, abaixo do XP, na coluna da direita: ${JSON.stringify(mt.txt)}`);
+        chk(!mt.soltaNoTopo, 'nenhum cartão de meta solto no cabeçalho');
+        chk(mt.q && mt.q.pai && mt.q.vizinho && mt.q.filhos === 2 && mt.q.centro <= 4 && mt.q.dir <= 2, `cabeçalho = saudação + "?" na mesma linha, o "?" à direita: ${JSON.stringify(mt.q)}`);
+        chk(mt.form, 'admin muda a meta ali mesmo (Nova meta / Salvar a meta)');
+        chk(mt.barra && mt.xp && mt.barra !== mt.xp && /^rgb\(\d+, (1[5-9]\d|2\d\d)/.test(mt.barra), `barra da meta verde, diferente da barra do XP: ${mt.barra} × ${mt.xp}`);
+      }
+      const ruins = Object.entries(mt.cores).filter(([, c]) => !c || contraste(c, mt.fundo) < 4.5).map(([k, c]) => `${k}=${c} (${c ? contraste(c, mt.fundo).toFixed(1) : '-'})`);
+      chk(!ruins.length, `${tema}: textos da meta legíveis no azul-marinho (contraste ≥ 4,5) ${ruins.join(', ')} fundo=${mt.fundo}`);
+    }
+    await P.emulateMedia({ colorScheme: 'light' });
+    // admin muda a meta no cartão
+    await P.click('#ini-meta .ini-meta-mais > summary'); await P.fill('#ini-meta [data-ini-meta-form] input[name="meta"]', '120'); await P.click('#ini-meta [data-ini-meta-form] button'); await P.waitForTimeout(1200);
+    chk(/de 120 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), 'admin salva a nova meta no cartão (de 120 pontos)');
+    await api(P, '/api/painel/meta', { method: 'PUT', body: JSON.stringify({ valor: 100 }) });
+    // jogo desligado: somem a meta e o nível
+    py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','0')\")");
+    await abrirHome(P);
+    const off = await P.evaluate(() => ({ meta: !!document.querySelector('#ini-meta'), nivel: !!document.querySelector('.ini-nivel-card'), jogoOculto: document.getElementById('ini-jogo').hidden }));
+    chk(!off.meta && !off.nivel && off.jogoOculto, `jogo desligado: sem meta e sem cartão do nível ${JSON.stringify(off)}`);
+    py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','1')\")");
+    await abrirHome(P);
     // ---------- maquete: ajuda fechada, ícones, caminho horizontal, donut, selos, nível ----------
     const mq = await P.evaluate(() => { const r = e => e.getBoundingClientRect(), aj = document.querySelector('#v-painel > .ajuda-caixa');
       const passos = [...document.querySelectorAll('#ini-caminho .ini-step')].map(b => { const x = r(b); return [Math.round(x.top), Math.round(x.width)]; });
@@ -173,10 +213,10 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     chk(JSON.stringify(saude.r2.vis) === '["qnap","site"]' && saude.r2.frase && saude.r2.pill === 'crítico', `com falha: o que falha vem primeiro, com o selo e a frase: ${JSON.stringify(saude.r2)}`);
 
     // ---------- progresso e conquistas ----------
-    chk(/Meta da semana/.test(await P.innerText('#ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-meta')), 'meta coletiva da semana no alto ("de 100 pontos validados")');
+    chk(/Meta da semana/.test(await P.innerText('#ini-jogo #ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), 'meta coletiva da semana no cartão do nível ("de 100 pontos validados")');
     chk(/Nível 1/.test(await P.innerText('#ini-jogo')) && /XP/.test(await P.innerText('#ini-jogo')) && !!(await P.$('#ini-jogo #ini-ranking')), 'nível pessoal com XP; Ranking da equipe (mês) ligado por padrão');
     await P.click('#ini-jogo .ini-conq-todas > summary'); await P.click('#ini-jogo [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
-    chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !/Nível 1/.test(await P.innerText('#ini-jogo')), '"Ocultar conquistas" esconde o nível e as conquistas');
+    chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !/Nível 1/.test(await P.innerText('#ini-jogo')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), '"Ocultar conquistas" esconde o nível e as conquistas; a meta da equipe continua na coluna');
     await P.click('#ini-jogo [data-ini-conquistas="0"]'); await P.waitForTimeout(1200);
     chk(/Nível 1/.test(await P.innerText('#ini-jogo')), '"Mostrar de novo" traz de volta');
 
@@ -198,6 +238,7 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     if (le) {
       await abrirHome(le.page);
       chk(!(await le.page.$('#ini-tarefas [data-ini-aba="minha"]')) && !(await le.page.$('#ini-lista .ini-ignorar')) && !(await le.page.$('#ini-lista [data-ini-acao]')), 'leitura: sem "Minha fila", sem "⋯" e sem botão de ação');
+      chk(/de \d+ pontos validados/.test(await le.page.innerText('#ini-jogo .ini-nivel-card #ini-meta').catch(() => '')) && !(await le.page.$('#ini-meta [data-ini-meta-form]')) && !(await le.page.$('#v-painel .ini-hello #ini-meta')), 'leitura: a meta da equipe na coluna da direita, sem o formulário de admin');
       await le.ctx.close();
     } else chk(true, '(semente sem usuário de leitura: pulado)');
 
@@ -209,6 +250,9 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     chk(ov.doc <= 0 && ov.v <= 0 && !ov.largos.length, `390 px: nenhuma rolagem lateral ${JSON.stringify(ov)}`);
     const pilha = await cel.page.evaluate(() => { const a = document.querySelector('.ini-col-princ').getBoundingClientRect(), b = document.querySelector('.ini-lateral').getBoundingClientRect(); return b.top >= a.bottom - 1; });
     chk(pilha, '390 px: a coluna da direita desce para baixo (tudo empilhado)');
+    const cm = await cel.page.evaluate(() => { const r = s => document.querySelector(s).getBoundingClientRect(), q = r('#v-painel .ini-hello .ini-q'), h = r('#v-painel .ini-hello-p'), m = r('#ini-jogo #ini-meta'), x = r('#ini-jogo .ini-nivel-c');
+      return { qLinha: q.top < h.bottom && q.bottom > h.top, metaAbaixoXp: m.top >= x.bottom - 1, dentro: m.left >= 0 && m.right <= innerWidth }; });
+    chk(cm.qLinha && cm.metaAbaixoXp && cm.dentro, `390 px: "?" na linha da saudação; a meta logo abaixo do XP, no cartão ${JSON.stringify(cm)}`);
     await cel.ctx.close();
     chk(!erros.length, 'nenhum erro de JavaScript: ' + erros.slice(0, 5).join(' | '));
   } catch (e) { chk(false, 'exceção: ' + (e && e.stack || e)); }
