@@ -1659,6 +1659,11 @@ def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
             raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
         campos.append("fechado_por=?"); vals.append(ator if d.situacao in ("corrigido", "fechado", "ignorado") else None)   # UX-03: quem fechou
+        campos.append("fase=NULL")   # CAMP-PROB-UX: rota antiga = a fase volta a ser deduzida da situação (nunca se contradizem)
+        if d.situacao in ("corrigido", "fechado") and e["situacao"] in ("aberto", "em_correcao"):
+            from .central_problemas import precisa_revisao
+            if precisa_revisao(con, e["categoria"]):   # com a revisão por outra pessoa ligada, este tipo só fecha pela Central (enviar para revisão)
+                raise HTTPException(409, "Este tipo de problema precisa da revisão de outra pessoa: resolva pela tela Problemas (Enviar para revisão)")
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":

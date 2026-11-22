@@ -218,6 +218,47 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   mas não criou a página deste arquiteto… o site cria as páginas que faltam uma vez por hora") e vem com os botões que resolvem
   (**Completar os dados do arquiteto**, **Ver os projetos**, **Vincular arquiteto**).
 
+## Central de Problemas (CAMP-PROB-UX, 22/11/2026 — documento do Rafael "Redesenho da Central de Problemas")
+- O título da página continua **Problemas** (o nome do menu; o mockup dizia "Central de Problemas": a troca é decisão do Rafael). Subtítulo:
+  "**N itens precisam de análise, conferência ou decisão.**"
+- Cartões (como no mockup: número, ícone à direita, rótulo): **Problemas em aberto** (a dica diz "N pedem ação · N avisos"), **Críticos**,
+  **Em análise**, **Aguardando conferência** (= fase Aguardando revisão), **Resolvidos (30 dias)**. Cada cartão abre a lista filtrada.
+- Abas (pílulas, a ativa cheia de azul, com a contagem entre parênteses): **Prioridades** · **Minha fila** · **Todos** · **Concluídos**. Filtros rápidos: **Críticos**, **Sem responsável**, **Aguardando minha
+  revisão**, **Mais antigos**, **Resolvíveis agora**, **Avisos**, **Podem já estar resolvidos**. Botões **Filtros** (gaveta no celular:
+  **Fechar**, **Ver resultados**), **Limpar filtros**, **Salvar visão**, **Visões salvas (N)**, **Apagar esta visão**, **Ordenar por**
+  (**Prioridade**, **Mais recentes**, **Mais antigos**, **Mexidos por último**), **Por página**, "**Mostrando X–Y de N problemas**", páginas numeradas com ← →.
+- Severidade (sempre texto + cor + ícone): **Crítico** (!, vermelho; = "bloqueia"), **Médio** (▲, âmbar; = "corrigir"), **Baixo** (i, azul;
+  = "aviso"). Severidade é o impacto; a **fase** é o andamento do trabalho — conceitos diferentes.
+- Fases: **Novo** → **Em triagem** → **Em análise** → **Aguardando revisão** → **Resolvido**, e **Aguardando informação**, **Devolvido**,
+  **Reaberto**, **Duplicado**, **Inválido**. Na linha: ícone de calendário com "há N dias", ícone de pessoa com o responsável ou **Sem responsável**, a pílula da severidade, **N problemas nesta folha** (UX-64), o motivo da prioridade ("Crítico: bloqueia a
+  publicação · autoria conflitante", "aguardando revisão há N dias", "avisado por visitante do site", "projeto no site com este
+  problema"), **resolução rápida**, **pelo sistema**. UMA ação: **Analisar** / **Continuar** / **Revisar** / **Ver**, e **⋯** (**Pegar para mim**,
+  **Copiar link**, **Só este projeto**). O motivo é a frase da Home ("Prioridade alta porque impede a publicação e aguarda há N dias")
+  mais o impacto ("· autoria conflitante").
+- Títulos curtos (o que está errado): **Autoria não confirmada**, **Folha pode ser de outro projeto**, **Registro duplicado no acervo**,
+  **Folha virada**, **Folha digitalizada pelo verso**, **Código errado**, **Informação errada ou faltando**, **Crédito errado ou faltando**,
+  **Arquivo da imagem danificado**, **Problema relatado**, **Folha retirada pelo CAMP Vision**, **Folha recusada na importação**.
+- Painel: **Contexto**, **Qual é o problema?**, **Fontes e hipóteses** (autoria: "O painel não sugere autoria nem fonte"), **Evidências**,
+  **O que precisa ser decidido?** ("Para resolver: conclusão + evidência ou justificativa" / "+ fonte ou evidência"), **Resposta**
+  (**Modelo de decisão**, **Salvar o texto como modelo**, **Conclusão / parecer**, **Evidência**, **Hipótese a que se refere**,
+  **Justificativa ou motivo**, **Adicionar evidência**), botões **Resolver**, **Enviar para revisão**, **Aprovar e resolver**, **Devolver**,
+  **Começar análise**, **Retomar a análise**, **Em triagem**, **Suspender: aguardando informação**, **Não é problema**, **Duplicado do nº**
+  + **Juntar como duplicado**, **Reabrir** (com **Justificativa para reabrir**), **Pegar para mim**, **Devolver**, **Atribuir a…** (só
+  admin; a regra da Home), **Histórico**. Confirmações
+  discretas: "Resolução validada", "Problema enviado para revisão", "Devolvido para quem resolveu", "Problema reaberto", "Fechado: não é
+  problema", "Juntado como duplicado". Rascunho: "O rascunho é salvo sozinho enquanto você escreve" / "Rascunho salvo às HH:MM (UTC)".
+- **Mais ⋯**: **Contadores por fundo** ("A proporção é sobre as folhas já avaliadas…"; colunas **Abertos**, **Críticos**, **Folhas
+  avaliadas**, **Avaliadas com problema**), **Modelos de decisão**, **Mensagens repetidas…**, **Limpeza geral…**. Lote: **Atribuir a**
+  (**Ninguém (tirar)**) + **Atribuir**, **Selecionar os N desta página**.
+- Coluna da direita (começa no topo, ao lado do título): **Seu progresso na resolução** (selo hexagonal, **Ver metas**; o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
+  **Mostrar de novo**, a mesma preferência da Home), **Meta da semana** (da equipe, "N de M pontos validados", a mesma da Home),
+  **Conquistas recentes** (**Ver todas**; selos coloridos; as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
+  **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (semana)** só com
+  `jogo.ranking_equipe` ligado e sempre com "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém.",
+  **Atividade recente** (ícones: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
+  pessoas, pelo sistema, novos).
+- Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, "ranking" ligado por padrão.
+
 ## Regras de texto
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
@@ -282,8 +323,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   ficou sem leitura por resposta quebrada do modelo."
 - UX-70: o número do menu é o da tela que ele abre, e o menu diz o que conta (dica ao passar o mouse). **Material novo** = aba
   "**Precisam de você**" ("Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro."); **Problemas** =
-  aba "**Abertos**" ("Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos."). No resumo de Problemas:
-  "**N pedem ação: é o número do menu Problemas e da aba Abertos. Contando os N avisos, são N abertos no total; N marcados como bloqueio.**"
+  aba "**Prioridades**" (antes "Abertos"; CAMP-PROB-UX: "Bloqueiam ou pedem correção, na ordem da prioridade (é o número do menu)"). No
+  cartão **Em aberto** de Problemas: "**N pedem ação · N avisos**" (Em aberto = os dois juntos; o menu conta só os que pedem ação).
 - Alertas (UX-07): cada assunto mostra **normal**, **atenção**, **crítico** ou **não medido** (minúsculas, como chip). "Não medido" só
   quando a medição falhou ou não existe, e sempre com o porquê na frase ("Não medido: o endereço do site não está configurado…").
 - Preservação (UX-02): o bloco do topo de Máquinas diz quantas cópias as imagens têm, em frase simples: "Suas imagens têm duas cópias"

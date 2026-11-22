@@ -33,7 +33,8 @@ TEMPO_TETO_H = 14 * 24           # depois de 14 dias parado o tempo não soma ma
 NIVEIS = ((60, "critico", "Crítico"), (45, "alto", "Alto"), (25, "medio", "Médio"), (0, "baixo", "Baixo"))
 _NA_FRASE = {"critico": "crítica", "alto": "alta", "medio": "média", "baixo": "baixa"}   # "Prioridade alta porque…"
 # gravidade (0..1) e bloqueio (0..1) pelo tipo da ação da linha; a frase do bloqueio entra no "porquê"
-_GRAV = {"decisao": 0.6, "erro": 0.8, "fila_erro": 0.9, "reler": 0.6, "destino": 0.5, "importar": 0.4, "conferir": 0.5, "aprovar": 0.5,
+_GRAV = {"problema": 0.5, "aviso": 0.15,   # CAMP-PROB-UX: problema que pede correção e aviso (a Central de Problemas usa esta mesma nota)
+         "decisao": 0.6, "erro": 0.8, "fila_erro": 0.9, "reler": 0.6, "destino": 0.5, "importar": 0.4, "conferir": 0.5, "aprovar": 0.5,
          "publicar": 0.5, "projeto": 0.4, "pedido": 0.5, "emprestimo": 0.6, "rota": 0.5}
 _BLOQ = {"decisao": (0.5, "o projeto espera a resposta"), "erro": (1.0, "impede a publicação"), "fila_erro": (1.0, "o lote parou no CAMP Vision"),
          "reler": (1.0, "a leitura do lote parou"), "destino": (1.0, "impede a conferência"), "importar": (1.0, "impede a conferência"),
@@ -198,41 +199,50 @@ def pessoas(u: dict = Depends(auth.exige("operador"))) -> list[dict]:
         con.close()
 
 
+def atribuir_tarefa(con, tarefa_id: str, usuario_id: int | None, u: dict, titulo: str | None = None) -> dict | None:
+    """A regra única de responsável (Home e Central de Problemas): operador pega para si ou devolve a que é dele; admin/master atribui a
+    qualquer pessoa ativa que edita. Grava o evento 'tarefa_atribuida' / 'tarefa_devolvida'. Levanta HTTPException; não faz commit.
+    Devolve o novo responsável ({id, nome, origem}) ou None."""
+    admin = u["papel"] in ("admin", "master")
+    atual = con.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (tarefa_id,)).fetchone()
+    titulo = (titulo or "").strip()[:200] or None
+    if usuario_id is None:
+        if not atual:
+            return None
+        if not admin and atual[0] != u["id"]:
+            raise HTTPException(403, "Só quem pegou a tarefa (ou um admin) pode devolvê-la")
+        con.execute("DELETE FROM tarefa_responsavel WHERE tarefa_id=?", (tarefa_id,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('tarefa',?,'tarefa_devolvida',?,?)",
+                    (tarefa_id, u["email"], json.dumps({"titulo": titulo, "antes": atual[0]}, ensure_ascii=False)))
+        return None
+    if not admin and usuario_id != u["id"]:
+        raise HTTPException(403, "Atribuir a outra pessoa é de admin: você pode pegar a tarefa para você")
+    if not admin and atual and atual[0] != u["id"]:
+        raise HTTPException(409, "Esta tarefa já está com outra pessoa: peça a ela ou a um admin")
+    p = con.execute("SELECT id, nome FROM usuario WHERE id=? AND ativo=1 AND papel IN ('operador','admin','master')", (usuario_id,)).fetchone()
+    if not p:
+        raise HTTPException(400, "Escolha uma pessoa ativa que edita o painel")
+    if atual and atual[0] == p[0]:
+        return {"id": p[0], "nome": p[1], "origem": "painel"}
+    con.execute("""INSERT INTO tarefa_responsavel (tarefa_id, usuario_id, atribuido_por) VALUES (?,?,?)
+                   ON CONFLICT(tarefa_id) DO UPDATE SET usuario_id=excluded.usuario_id, atribuido_por=excluded.atribuido_por, atribuido_em=datetime('now')""",
+                (tarefa_id, p[0], u["email"]))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('tarefa',?,'tarefa_atribuida',?,?)",
+                (tarefa_id, u["email"], json.dumps({"titulo": titulo, "para": p[1], "para_id": p[0], "antes": atual[0] if atual else None}, ensure_ascii=False)))
+    return {"id": p[0], "nome": p[1], "origem": "painel"}
+
+
 @router.put("/painel/tarefas/{tarefa_id}/responsavel")
 def atribuir(tarefa_id: str, d: Responsavel, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Atribuir (ou devolver) uma tarefa da fila. Operador: pega para si ou devolve a que é dele. Admin/master: atribui a qualquer pessoa
     que edita. Fica no Histórico de ações (evento 'tarefa_atribuida' / 'tarefa_devolvida')."""
     if not _RE_TAREFA.match(tarefa_id or ""):
         raise HTTPException(400, "Tarefa desconhecida")
-    admin = u["papel"] in ("admin", "master")
     con = connect()
     try:
-        atual = con.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (tarefa_id,)).fetchone()
-        titulo = (d.titulo or "").strip()[:200] or None
-        if d.usuario_id is None:
-            if not atual:
-                return {"ok": True, "responsavel": None}
-            if not admin and atual[0] != u["id"]:
-                raise HTTPException(403, "Só quem pegou a tarefa (ou um admin) pode devolvê-la")
-            con.execute("DELETE FROM tarefa_responsavel WHERE tarefa_id=?", (tarefa_id,))
-            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('tarefa',?,'tarefa_devolvida',?,?)",
-                        (tarefa_id, u["email"], json.dumps({"titulo": titulo, "antes": atual[0]}, ensure_ascii=False)))
-            con.commit()
-            return {"ok": True, "responsavel": None}
-        if not admin and d.usuario_id != u["id"]:
-            raise HTTPException(403, "Atribuir a outra pessoa é de admin: você pode pegar a tarefa para você")
-        if not admin and atual and atual[0] != u["id"]:
-            raise HTTPException(409, "Esta tarefa já está com outra pessoa: peça a ela ou a um admin")
-        p = con.execute("SELECT id, nome FROM usuario WHERE id=? AND ativo=1 AND papel IN ('operador','admin','master')", (d.usuario_id,)).fetchone()
-        if not p:
-            raise HTTPException(400, "Escolha uma pessoa ativa que edita o painel")
-        con.execute("""INSERT INTO tarefa_responsavel (tarefa_id, usuario_id, atribuido_por) VALUES (?,?,?)
-                       ON CONFLICT(tarefa_id) DO UPDATE SET usuario_id=excluded.usuario_id, atribuido_por=excluded.atribuido_por, atribuido_em=datetime('now')""",
-                    (tarefa_id, p[0], u["email"]))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('tarefa',?,'tarefa_atribuida',?,?)",
-                    (tarefa_id, u["email"], json.dumps({"titulo": titulo, "para": p[1], "para_id": p[0], "antes": atual[0] if atual else None}, ensure_ascii=False)))
+        r = atribuir_tarefa(con, tarefa_id, d.usuario_id, u, d.titulo)
         con.commit()
-        return {"ok": True, "responsavel": {"id": p[0], "nome": p[1], "origem": "painel"}}
+        return {"ok": True, "responsavel": r}
     finally:
         con.close()
 
@@ -311,10 +321,17 @@ def eventos_validados(con, desde: str | None = None) -> list[dict]:
     # problema: corrigido (não "ignorado"), com a frase do que foi feito; quem conta é quem o marcou como corrigido (o último evento)
     for r in con.execute("SELECT id, gravidade, resolvido_em FROM erro WHERE situacao='corrigido' AND LENGTH(TRIM(COALESCE(resolucao,'')))>=3"
                          " AND resolvido_em IS NOT NULL" + w.format(col="resolvido_em"), p):
-        ev = con.execute("""SELECT ator FROM evento WHERE entidade='erro' AND codigo=? AND tipo='editado' AND detalhe LIKE '%"corrigido"%'
-                            ORDER BY id DESC LIMIT 1""", (str(r[0]),)).fetchone()
-        if ev and ev[0] in emails:
-            out.append({"tipo": "problema_critico_resolvido" if r[1] == "bloqueia" else "problema_resolvido", "email": ev[0], "quando": r[2], "ref": f"erro:{r[0]}"})
+        # CAMP-PROB-UX: a Central de Problemas resolve pelo evento 'fase' (para "resolvido"); com revisão, o crédito é de quem resolveu
+        ev = con.execute("""SELECT ator, detalhe FROM evento WHERE entidade='erro' AND codigo=? AND ((tipo='editado' AND detalhe LIKE '%"corrigido"%')
+                            OR (tipo='fase' AND detalhe LIKE '%"para": "resolvido"%')) ORDER BY id DESC LIMIT 1""", (str(r[0]),)).fetchone()
+        quem = ev[0] if ev else None
+        if ev and ev[1] and '"credito"' in ev[1]:
+            try:
+                quem = json.loads(ev[1]).get("credito") or quem
+            except ValueError:
+                pass
+        if quem in emails:
+            out.append({"tipo": "problema_critico_resolvido" if r[1] == "bloqueia" else "problema_resolvido", "email": quem, "quando": r[2], "ref": f"erro:{r[0]}"})
     return out
 
 
