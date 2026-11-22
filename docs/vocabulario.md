@@ -253,11 +253,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Coluna da direita (começa no topo, ao lado do título): **Seu progresso na resolução** (selo hexagonal, **Ver metas**; o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
   **Mostrar de novo**, a mesma preferência da Home), **Meta da semana** (da equipe, "N de M pontos validados", a mesma da Home),
   **Conquistas recentes** (**Ver todas**; selos coloridos; as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
-  **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (semana)** só com
-  `jogo.ranking_equipe` ligado e sempre com "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém.",
+  **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (mês)** (ligado por padrão,
+  decisão do Rafael de 22/11/2026; o mesmo da Home: posição, nome e "N pontos" validados no mês) com o **?** que diz "Pontos validados de cada pessoa
+  neste mês…" e "Reconhecimento, não avaliação: não serve para avaliar desempenho. Nunca use estes números para avaliar ninguém.",
   **Atividade recente** (ícones: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
   pessoas, pelo sistema, novos).
-- Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, "ranking" ligado por padrão.
+- Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, ranking sem o aviso de que não serve para avaliar desempenho.
 
 ## Regras de texto
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
@@ -393,7 +394,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Entenda esta página** (antes "Como funciona esta página", só na Home): inteira na 1ª vez; depois do primeiro uso chega fechada numa linha e não
   reabre a cada visita; **Entendi** tira até a linha; o **?** traz inteira. Assuntos: **Os números do topo**, **O que fazer agora**,
   **Está tudo funcionando?**. Ajuda curta das seções: "**Como a fila é ordenada?**", "**O que significam as cores?**".
-- **Indicadores**: **decisões pendentes** (só com decisão), **lotes para conferir** ("N folhas no total"), **lotes esperam um admin** (admin) ou
+- **Indicadores**: **decisões pendentes** (só com decisão), **folhas para conferir** ("em N lotes"), **folhas esperam um admin** (admin; "em N
+  lotes: N para aprovar, N para publicar"; decisão do Rafael, 22/11/2026: onde há as duas medidas, o número grande são as folhas) ou
   **lotes para importar** (operador e leitura), **folhas conferidas hoje** ("média de N por dia de trabalho nas últimas 2 semanas"). Sem medida:
   "**Sem dados**" (nunca 0). Os que abrem lista têm a seta →.
 - **O que fazer agora**: filtros **Todas · Decidir · Conferir · Publicar · Resolver · Responder · Melhorar a base** (com o total real; Decidir
@@ -437,8 +439,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   "**Frente aos N dias anteriores**" só quando o período anterior teve alguma folha conferida; **Ver relatório completo**.
 - **Seu progresso**: "**Nível N · <nome>**" (Primeiros passos · Olhar atento · Mão firme · Guardião do Acervo · Memória viva · Referência do
   acervo), "**N / M XP**", **Suas conquistas** (marcos pessoais, nunca comparação), "**Próxima: …**", "N dias seguidos com trabalho validado"
-  (fato neutro, sem cobrança), **Como os pontos são contados?**, **Ocultar conquistas** / **Mostrar de novo**. Quadro **Equipe nesta semana**
-  só se um admin ligar. **Pontos validados**: só ações que continuam valendo (desfez, o ponto some); descartar decisão e "não era problema" não contam.
+  (fato neutro, sem cobrança), **Como os pontos são contados?**, **Ocultar conquistas** / **Mostrar de novo**. **Ranking da equipe (mês)**
+  (ligado por padrão; "N pontos" validados no mês por pessoa, com a posição; o **?** diz que não serve para avaliar desempenho e que "Um admin desliga
+  o ranking em Configurações"; vazio: "Ninguém pontuou neste mês ainda."). Em **Configurações › Progresso e ranking**: a caixa "**Mostrar o Ranking
+  da equipe (mês) na Home e em Problemas**" (qualquer admin; avisos "Ranking da equipe ligado" / "Ranking da equipe desligado"). **Pontos validados**: só ações que continuam valendo (desfez, o ponto some); descartar decisão e "não era problema" não contam.
 - **Qualidade da base**: "**O que mais baixa o índice**" com as duas medidas mais baixas, "faltam N folhas" e o caminho (**Registrar os direitos
   nos fundos →**, **Dar título às folhas →**, **Ver os projetos →**).
 - **Está tudo funcionando?**: tudo normal = "**Tudo funcionando · N sistemas normais**" (e "· N sem medida") com "**Ver cada sistema (…)**"

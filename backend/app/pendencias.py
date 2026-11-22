@@ -241,7 +241,8 @@ def chave_adiar_lote(lote_id) -> str:
 def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None = None) -> dict:
     """{decisoes, decisoes_pastas, decisoes_estacao, lotes_importar, lotes_conferir, folhas_conferir, lotes_aprovar, lotes_publicar,
     prontos_publicar, publicando_parcial, travados_direitos, travados_projetos, erros_bloqueantes, pedidos_aguardando,
-    lotes_processando, lotes_lendo, lotes_na_fila, lotes_erro, publicando, material_novo, esperam_admin}.
+    lotes_processando, lotes_lendo, lotes_na_fila, lotes_erro, publicando, material_novo, esperam_admin,
+    folhas_aprovar, folhas_publicar, folhas_esperam_admin}.
     decisoes = perguntas abertas; decisoes_pastas = quantas vezes elas chegaram (a mesma pergunta repetida pela estação vira UMA decisão, com várias chaves)."""
     L = [l for l in lotes(con) if not l.get("dispensado") and l.get("fundo_codigo") != "F000"]   # UX-35: o lote dispensado sai das listas e das contagens de TODOS; 11/11: Convidado também
     if usuario_id:                                  # os lotes que ESTA pessoa adiou ("Agora não") saem da lista e das contagens dela
@@ -294,6 +295,11 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     # (importar, conferir, aprovar, publicar, com erro, ler de novo). Antes o menu contava só importar + conferir (16) e a aba, 17.
     n["lotes_precisam_de_voce"] = sum(1 for l in L if l["fase"] in cg.FASES_PEDEM_PESSOA or l.get("leitura_interrompida"))
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
+    # CAMP-HOME-UX (decisão do Rafael, 22/11/2026): os cartões da Home mostram folhas E lotes. Campos novos, opcionais: as folhas
+    # (as que ainda estão no projeto do lote, a mesma conta de "itens_total") dos lotes que esperam aprovação e publicação.
+    n["folhas_aprovar"] = sum(l["itens_total"] or 0 for l in por.get("aprovar", []))
+    n["folhas_publicar"] = sum(l["itens_total"] or 0 for l in publicar)
+    n["folhas_esperam_admin"] = n["folhas_aprovar"] + n["folhas_publicar"]
     # UX-19 + UX-03 + UX-05: "itens que pedem ação de você" (os números do menu, a saudação e a Home), com o que esta pessoa
     # escondeu por 7 dias fora da conta dela: UMA regra, em contagens.pedem_acao
     cg.pedem_acao(con, n, dec, usuario_id)

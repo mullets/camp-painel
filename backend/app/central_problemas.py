@@ -684,7 +684,7 @@ def conquistas_qualidade(con, u: dict) -> list[dict]:
             cq("fundo", "Fundo organizado", "Marco coletivo: fundo que teve problemas e hoje não tem nenhum aberto.", fundos_ok, 1, True)]
 
 
-AVISO_RANKING = "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém."
+from .home_trabalho import AVISO_RANKING  # noqa: E402 — o mesmo aviso do Ranking da equipe na Home e aqui
 
 
 ROTULO_EVENTO = {"criado": "registrou", "fase": "mudou a fase", "evidencia": "adicionou evidência", "atribuido": "atribuiu", "duplicado_juntado": "juntou como duplicado",
@@ -787,7 +787,7 @@ def rota_por_fundo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
 
 @router.get("/progresso")
 def rota_progresso(u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """O progresso da Home (UM sistema de pontos: meta da semana, nível, conquistas, quadro da equipe só se ligado) + as conquistas de
+    """O progresso da Home (UM sistema de pontos: meta da semana, nível, conquistas, Ranking da equipe do mês, ligado por padrão) + as conquistas de
     qualidade da Central (sem pontos) + a atividade recente dos problemas (do histórico)."""
     from .home_trabalho import progresso as progresso_home
     con = connect()

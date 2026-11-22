@@ -11,7 +11,7 @@
    que continua conferida, lote aprovado que continua aprovado, decisão respondida, problema corrigido com a frase do que foi feito).
    Desfez (reabriu a revisão, reabriu o problema, desaprovou o lote)? O ponto some sozinho, porque a conta é sempre refeita do estado
    atual. Meta coletiva da semana (`meta.semana`, admin muda), nível pessoal, conquistas que não comparam pessoas, "ocultar conquistas"
-   por pessoa e, só se um admin ligar (`jogo.ranking_equipe`, padrão desligado), o quadro da equipe. Sem cobrança por dias parados.
+   por pessoa e o Ranking da equipe do mês (`jogo.ranking_equipe`, ligado por padrão; um admin desliga). Sem cobrança por dias parados.
 """
 from __future__ import annotations
 
@@ -256,6 +256,8 @@ PONTOS_ROTULO = {"folha_conferida": ("folha conferida (e que continua conferida)
                  "problema_critico_resolvido": ("problema que bloqueava, corrigido com a frase do que foi feito", "problemas que bloqueavam, corrigidos")}
 NIVEIS_XP = ((0, "Primeiros passos"), (100, "Olhar atento"), (300, "Mão firme"), (700, "Guardião do Acervo"), (1600, "Memória viva"), (3000, "Referência do acervo"))
 META_PADRAO = 100
+# o "?" do Ranking da equipe (Home e Problemas): reconhecimento, nunca avaliação
+AVISO_RANKING = "Reconhecimento, não avaliação: não serve para avaliar desempenho. Nunca use estes números para avaliar ninguém."
 
 
 def _cfg(con, chave: str, padrao: str = "") -> str:
@@ -297,6 +299,17 @@ def inicio_semana_utc(agora_sp: datetime | None = None) -> str:
     sp = agora_sp or _sp_agora()
     seg = datetime(sp.year, sp.month, sp.day) - timedelta(days=sp.weekday())
     return (seg + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def inicio_mes_utc(agora_sp: datetime | None = None) -> str:
+    """Dia 1 do mês, 00:00 de São Paulo, em UTC (o Ranking da equipe é do mês)."""
+    sp = agora_sp or _sp_agora()
+    return (datetime(sp.year, sp.month, 1) + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def ranking_ligado(con) -> bool:
+    """`jogo.ranking_equipe`: ligado por padrão (decisão do Rafael, 22/11/2026; migração 243). Um admin desliga em Configurações."""
+    return _cfg(con, "jogo.ranking_equipe", "1").strip().lower() not in ("0", "false", "nao", "não")
 
 
 def eventos_validados(con, desde: str | None = None) -> list[dict]:
@@ -369,7 +382,7 @@ def _dia_sp(ts: str) -> str:
 
 
 def progresso(con, u: dict, ocultar: bool | None = None) -> dict:
-    """Meta coletiva da semana, nível e conquistas da pessoa (se ela não ocultou) e, só com `jogo.ranking_equipe`=1, o quadro da equipe."""
+    """Meta coletiva da semana, nível e conquistas da pessoa (se ela não ocultou) e, com `jogo.ranking_equipe` ligado (o padrão), o Ranking da equipe (mês)."""
     tab = pontos(con)
     desde = inicio_semana_utc()
     todos = eventos_validados(con)
@@ -404,12 +417,17 @@ def progresso(con, u: dict, ocultar: bool | None = None) -> dict:
             ganhas.append({"id": "semana_consistente", "rotulo": "Semana consistente (3 dias com trabalho validado)"})
         out["eu"] = {**nivel_xp(xp), "xp_semana": sum(tab[e["tipo"]] for e in meus if str(e["quando"]) >= desde), "contagens": cont,
                      "conquistas": ganhas, "proxima": prox, "dias_seguidos": _dias_seguidos(dias)}
-    if _cfg(con, "jogo.ranking_equipe", "0").strip() == "1" and u.get("papel") != "leitura":
+    if ranking_ligado(con) and u.get("papel") != "leitura":
+        # CAMP-HOME-UX (decisão do Rafael, 22/11/2026): Ranking da equipe (MÊS), ligado por padrão (migração 243); só pontos validados
+        # que continuam valendo (os mesmos eventos: desfez, o ponto some). Posição = ordem da lista. Campos novos opcionais: equipe_desde, equipe_periodo.
+        mes = inicio_mes_utc()
         nomes = {r[0]: r[1] for r in con.execute("SELECT email, nome FROM usuario WHERE email IS NOT NULL")}
         soma: dict = {}
-        for e in semana:
-            soma[e["email"]] = soma.get(e["email"], 0) + tab[e["tipo"]]
+        for e in todos:
+            if str(e["quando"]) >= mes:
+                soma[e["email"]] = soma.get(e["email"], 0) + tab[e["tipo"]]
         out["equipe"] = [{"nome": nomes.get(k, k), "pontos": v} for k, v in sorted(soma.items(), key=lambda kv: (-kv[1], nomes.get(kv[0], kv[0])))]
+        out["equipe_desde"], out["equipe_periodo"], out["aviso_ranking"] = mes, "mes", AVISO_RANKING
     return out
 
 
@@ -440,5 +458,33 @@ def mudar_meta(d: Meta, u: dict = Depends(auth.exige("admin"))) -> dict:
                     (u["email"], json.dumps({"antes": {"valor": antes}, "depois": {"valor": str(int(d.valor))}}, ensure_ascii=False)))
         con.commit()
         return {"ok": True, "meta": int(d.valor)}
+    finally:
+        con.close()
+
+
+class Ranking(BaseModel):
+    ligado: bool
+
+
+RANKING_DESCRICAO = "Ranking da equipe (mês): pontos validados de cada pessoa no mês, na Home e em Problemas (1 = ligado, o padrão; 0 = desligado)"
+
+
+@router.put("/painel/ranking")
+def mudar_ranking(d: Ranking, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Liga ou desliga o Ranking da equipe (mês) na Home e em Problemas. Admin muda (Configurações); fica no Histórico.
+    A chave genérica (PUT /api/config) é só do master; esta rota deixa qualquer admin desligar, como a meta da semana."""
+    valor = "1" if d.ligado else "0"
+    con = connect()
+    try:
+        antes = _cfg(con, "jogo.ranking_equipe", "1")
+        con.execute("""INSERT INTO configuracao (chave, valor, descricao) VALUES ('jogo.ranking_equipe', ?, ?)
+                       ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor, atualizado_em=datetime('now'), atualizado_por=?""",
+                    (valor, RANKING_DESCRICAO, u["email"]))
+        # banco onde a chave ainda não existia: o INSERT acima não grava quem mudou (o ON CONFLICT não rodou)
+        con.execute("UPDATE configuracao SET atualizado_por=?, atualizado_em=datetime('now') WHERE chave='jogo.ranking_equipe' AND atualizado_por IS NULL", (u["email"],))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config','jogo.ranking_equipe','alterada',?,?)",
+                    (u["email"], json.dumps({"antes": {"valor": antes}, "depois": {"valor": valor}}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "ligado": d.ligado}
     finally:
         con.close()

@@ -1,6 +1,6 @@
 // UX-05 no navegador de verdade (Playwright + Chromium): a MESMA métrica mostra o MESMO número em todas as telas.
-// Prova: o número do menu "Precisa de você" = o da saudação = /api/pendencias.precisa_de_voce; o cartão "lotes para conferir" da Home
-// = lotes_conferir; em Material novo o filtro "Chegando" e o resumo ("N chegando") dizem o mesmo número, "Precisam de você" = as linhas
+// Prova: o número do menu "Precisa de você" = o da saudação = /api/pendencias.precisa_de_voce; o cartão "folhas para conferir" da Home
+// = folhas_conferir, "em N lotes" = lotes_conferir; em Material novo o filtro "Chegando" e o resumo ("N chegando") dizem o mesmo número, "Precisam de você" = as linhas
 // mostradas e "N registros" não conta as linhas de grupo; Máquinas diz o mesmo material novo; o topo herda o pior estado
 // (QNAP com 12% livre deixa o ponto do topo em atenção, não "ok"); Home e Material novo dizem "atualizado há X". Nenhum erro no console.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
@@ -55,7 +55,8 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     chk(badge === pend.precisa_de_voce, `menu "Precisa de você" = ${pend.precisa_de_voce} (mostra ${badge})`);
     chk(pend.precisa_de_voce ? new RegExp('^' + pend.precisa_de_voce + ' coisas? pedem? sua atenção hoje').test(saud) : /Nada pede sua atenção/.test(saud), `a saudação diz o MESMO número do menu: "${saud}"`);
     const kpi = await page.evaluate(() => { const b = document.querySelector('.ini-kpi[data-ini-rota="filas/conferir"] .v'); return b ? b.textContent : ''; });
-    chk(num(kpi) === pend.lotes_conferir, `cartão "lotes para conferir" da Home = ${pend.lotes_conferir} (mostra ${kpi})`);
+    const kpiD = await page.evaluate(() => { const b = document.querySelector('.ini-kpi[data-ini-rota="filas/conferir"] .d'); return b ? b.textContent : ''; });
+    chk(num(kpi) === pend.folhas_conferir && num(kpiD) === pend.lotes_conferir, `cartão "folhas para conferir" da Home = ${pend.folhas_conferir}, "em ${pend.lotes_conferir} lotes" (mostra ${kpi} / ${kpiD})`);
     chk(/atualizado (agora|há)/.test(await txt('#v-painel .ph')), 'Home: "atualizado há X" ao lado dos números de "O que fazer agora"');
 
     // ---- topo: o pior estado ----
@@ -79,7 +80,7 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     const cheg = (await page.evaluate(() => FILAS_SRV.filter(l => filaNaAba(l, 'chegando')).length));
     chk(await chipN('chegando') === cheg, `aba "Chegando" (${await chipN('chegando')}) = as linhas que ela mostra (${cheg})`);
     chk(await chipN('chegando') === pend.lotes_processando + pend.lotes_importar, `"Chegando" = CAMP Vision lendo + falta importar das contagens (${pend.lotes_processando}+${pend.lotes_importar})`);
-    chk(await chipN('conferir') === pend.lotes_conferir, `aba "Para conferir" (${await chipN('conferir')}) = ${pend.lotes_conferir} (o cartão da Home)`);
+    chk(await chipN('conferir') === pend.lotes_conferir, `aba "Para conferir" (${await chipN('conferir')}) = ${pend.lotes_conferir} (o "em N lotes" do cartão da Home)`);
     await page.click('#fila-chips [data-fila-filtro="gente"]'); await page.waitForTimeout(400);
     const vis = await page.locator('#filas-body tr[data-fase]').count();
     chk(await chipN('gente') === vis, `"Precisam de você" (${await chipN('gente')}) = as linhas mostradas (${vis})`);

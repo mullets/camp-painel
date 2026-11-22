@@ -127,8 +127,8 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press('j'); await page.keyboard.press('j');
     chk(await page.evaluate(() => { const k = document.querySelector('#err-body .kb-atual'); return !!k && k === document.querySelectorAll('#err-body [data-err-linha]')[1]; }), 'J desce na lista (fora de campo de texto)');
-    // coluna da direita e gráficos de dados reais; sem ranking por padrão
-    chk(await page.$eval('#cp-lateral', el => /Seu progresso na resolução/.test(el.textContent) && /Meta da semana/.test(el.textContent) && /Conquistas/.test(el.textContent) && /Atividade recente/.test(el.textContent) && !/Ranking da equipe/.test(el.textContent)), 'progresso, meta, conquistas e atividade recente; ranking escondido (desligado por padrão)');
+    // coluna da direita e gráficos de dados reais; Ranking da equipe (mês) ligado por padrão (decisão do Rafael, migração 243)
+    chk(await page.$eval('#cp-lateral', el => /Seu progresso na resolução/.test(el.textContent) && /Meta da semana/.test(el.textContent) && /Conquistas/.test(el.textContent) && /Atividade recente/.test(el.textContent) && /Ranking da equipe/.test(el.textContent)), 'progresso, meta, conquistas, Ranking da equipe (ligado por padrão) e atividade recente');
     chk(await page.$eval('#cp-graf-tipo', el => !!el.querySelector('svg.cp-donut')) && await page.$eval('#cp-graf-sem', el => /Evolução de resolução/.test(el.textContent)), 'gráficos "Problemas por tipo" e "Evolução de resolução"');
     await ctx.close();
     // celular 390

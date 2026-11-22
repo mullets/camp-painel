@@ -163,11 +163,12 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 ## 15. Home em Ação, Operação e Resultados (CAMP-HOME-UX, 22/11/2026, documento do Rafael)
 - O menu superior (dados do usuário, estado das coisas, temperatura) e o menu lateral **não mudam** (pedido explícito do Rafael); o teste compara a marcação do topo.
 - Prioridade da fila = nota 0–100 explicável (pesos do §8: gravidade 40, tempo 20 com teto de 14 dias, bloqueio 20, prazo/risco 20); fórmula em `COMO_FUNCIONA.md` D.2.1.3.
-- Gamificação só com eventos validados e recontados do estado atual (desfez, o ponto some); meta coletiva; conquistas não competitivas e ocultáveis; **ranking individual desligado por padrão** (`jogo.ranking_equipe`); nada de cobrança por sequência.
+- Gamificação só com eventos validados e recontados do estado atual (desfez, o ponto some); meta coletiva; conquistas não competitivas e ocultáveis; **Ranking da equipe (mês) LIGADO por padrão** (decisão do Rafael, 22/11/2026: `jogo.ranking_equipe` = 1, migração 243; qualquer admin desliga em Configurações; só pontos validados; o "?" sempre diz que não serve para avaliar desempenho); nada de cobrança por sequência.
+- Cartões da Home com as duas medidas (Para conferir, Esperam um admin): o número grande são as **folhas**, a linha de baixo "em N lotes" (decisão do Rafael, 22/11/2026). Decisões continuam decisões; "folhas conferidas hoje" continua folhas.
 
 ## 20. Central de Problemas (CAMP-PROB-UX, 22/11/2026, documento do Rafael)
 - O topo (usuário, situação, temperatura), a faixa do sistema e o menu não mudam. O título continua **Problemas** (nome do menu).
 - A coluna `erro.situacao` continua a regra de todo o resto; a `fase` (Novo → … → Resolvido) só detalha o trabalho e cai sempre numa situação antiga (`central_problemas.FASE_SITUACAO`). Fase NULL ou mexida por rota antiga = deduzida da situação.
 - Resolver exige conclusão + evidência ou justificativa; **autoria e crédito exigem fonte** (o painel nunca sugere autoria nem fonte).
 - **Revisão por outra pessoa** (`problemas.revisao_outra_pessoa`) nasce **desligada**.
-- Reusa a Home (§15): responsável em `tarefa_responsavel` (`erro:<id>`, mesmas regras de "Pegar para mim"/admin "Atribuir a…"), a nota de prioridade de `home_trabalho.prioridade` e UM sistema de pontos (`home_trabalho.eventos_validados`, recontado do estado; meta `meta.semana`; ranking `jogo.ranking_equipe` desligado). Detalhe: `COMO_FUNCIONA.md` D.2.4 e D.4.3b.
+- Reusa a Home (§15): responsável em `tarefa_responsavel` (`erro:<id>`, mesmas regras de "Pegar para mim"/admin "Atribuir a…"), a nota de prioridade de `home_trabalho.prioridade` e UM sistema de pontos (`home_trabalho.eventos_validados`, recontado do estado; meta `meta.semana`; Ranking da equipe do mês `jogo.ranking_equipe`, ligado por padrão). Detalhe: `COMO_FUNCIONA.md` D.2.4 e D.4.3b.
