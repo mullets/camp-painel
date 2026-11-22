@@ -2091,6 +2091,12 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 .doa-det .act{flex-wrap:wrap;align-items:flex-end}.doa-notas{margin:6px 0;padding-left:18px}
 .doa-texto textarea{width:100%;font-family:var(--mono);font-size:var(--fs-sm2);white-space:pre}   /* CAMP-DOA-TEXTO */
 @media (max-width:900px){#v-doacoes .doa-local{display:none}}
+/* CAMP-DOA-CENTRAL (22/11): com o detalhe da doação aberto (gaveta à direita), a 1366 px a coluna "Próximo passo" ficava cortada e a tabela
+   rolava para o lado. Com a gaveta aberta: a coluna "Recebida" sai (a data e o protocolo estão no detalhe), o e-mail e a etapa quebram em
+   linhas e o próximo passo ocupa o espaço que sobra, quebrando em linhas. Sem rolagem lateral a 1366 e 1440 px. */
+.main.with-drawer #v-doacoes .doa-col-rec,.main.with-drawer #v-doacoes td.doa-dt{display:none}
+.main.with-drawer #v-doacoes #doa-lista small{overflow-wrap:anywhere}.main.with-drawer #v-doacoes #doa-lista .tag{white-space:normal}
+.main.with-drawer #v-doacoes .doa-prox{max-width:none;min-width:9em}
 /* CAMP-DOA-CENTRAL: linha de etapas, próximos passos, arquivos e histórico da doação */
 .doa-abas{margin:4px 0 0}.doa-abas b{font-weight:600;color:var(--ink3);margin-left:2px}.doa-abas button.on b{color:inherit}#v-doacoes .doa-prox{font-size:var(--fs-sm);max-width:240px}
 .doa-passos{list-style:none;margin:8px 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:6px}.doa-passos li{display:grid;grid-template-columns:auto 1fr;column-gap:6px;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:var(--r-md);font-size:var(--fs-sm);color:var(--ink3);background:var(--surface)}
@@ -3009,7 +3015,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
     <div class="panel"><div class="filterbar"><input id="doa-q" type="search" placeholder="nome, e-mail, arquiteto ou escritório, protocolo, cidade" aria-label="Buscar"><span class="help" id="doa-cnt"></span></div>
       <div class="tabs doa-abas" id="doa-abas" role="tablist" aria-label="Situação das doações"><button type="button" role="tab" class="on" aria-selected="true" data-doa-aba="abertas">Em andamento <b id="doa-t-abertas"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="recebidos">Recebidos <b id="doa-t-recebidos"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="encerradas">Não aprovadas e arquivadas <b id="doa-t-encerradas"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="">Todas <b id="doa-t-total"></b></button></div>
       <div class="tw"><table>
-      <thead><tr><th>Recebida</th><th>Quem oferece</th><th>Acervo</th><th>Etapa</th><th>Próximo passo</th></tr></thead>
+      <thead><tr><th class="doa-col-rec">Recebida</th><th>Quem oferece</th><th>Acervo</th><th>Etapa</th><th class="doa-col-prox">Próximo passo</th></tr></thead>
       <tbody id="doa-lista"><tr><td class="empty">Carregando…</td></tr></tbody>
     </table></div></div>
     <details class="panel" id="doa-aut"><summary><b>Assinatura eletrônica (Autentique)</b> <span class="help" id="doa-aut-sit"></span></summary>
