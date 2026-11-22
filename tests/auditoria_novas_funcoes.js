@@ -612,11 +612,11 @@ w.route_to('estacoes'); await sleep(2800);
   const rodando={estado:'rodando',etapa:'folhas',feitas:3,total:5,folha_atual:'F900-P0001-1970-S01-D00004',s_por_folha:25,faltam_s:50,falhas:[],log:[{em:'2026-10-10 00:54:51',texto:'Dossiê criado no site'}]};
   let h=txtH(H('F900-P0001',rodando));
   chk(/3 de 5/.test(h)&&/agora: F900-P0001-1970-S01-D00004/.test(h)&&/cerca de 25 s por folha/.test(h)&&/faltam cerca de 50 s/.test(h)&&/Dossiê criado no site/.test(h)&&/Você pode fechar esta janela/.test(h),'a tarefa rodando deveria mostrar "3 de 5", a folha atual, ~25 s por folha, o que falta, o histórico e que dá para fechar: '+h.slice(0,260));
-  chk(/✔ Criar a página do projeto no site/.test(h)&&/⏳ Enviar as folhas/.test(h)&&/→ Liberar/.test(h),'os passos deveriam estar com ✔ (feito), ⏳ (agora) e → (adiante): '+h.slice(0,200));
+  chk(/✔ Criar a página do projeto no site/.test(h)&&/◷ Enviar as folhas/.test(h)&&/→ Liberar/.test(h),'os passos deveriam estar com ✔ (feito), ◷ (agora) e → (adiante): '+h.slice(0,200));
   h=txtH(H('F900-P0001',{...rodando,estado:'falhou',etapa:'folhas',folha_atual:null,falhas:[{codigo:'F900-P0001-1970-S01-D00002',erro:'WordPress recusou a imagem'}],resultado:{ok:false,mensagem:'1 folha não subiu ao site; nada foi publicado.'}}));
   chk(/não terminou/.test(h)&&/F900-P0001-1970-S01-D00002 WordPress recusou a imagem/.test(h)&&/Tentar de novo \(continua de onde parou\)/.test(h)&&/✖ Enviar as folhas/.test(h),'a tarefa que falhou deveria dizer qual folha e por quê, com "Tentar de novo (continua de onde parou)": '+h.slice(0,240));
   h=txtH(H('F900-P0001',{estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Dossiê + 5 folhas publicados.'},decorrido_s:65}));
-  chk(/✔ Dossiê \+ 5 folhas publicados\./.test(h)&&/Levou 1 min 5 s/.test(h)&&!/⏳/.test(h)&&/Fechar/.test(h),'a tarefa pronta deveria dizer o resultado e o tempo total: '+h.slice(0,200));
+  chk(/✔ Dossiê \+ 5 folhas publicados\./.test(h)&&/Levou 1 min 5 s/.test(h)&&!/◷/.test(h)&&/Fechar/.test(h),'a tarefa pronta deveria dizer o resultado e o tempo total: '+h.slice(0,200));
   // acompanhamento de verdade (respostas simuladas): rodando -> pronto; fechar a janela no meio não quebra nada
   const fetchOrig=w.fetch; let gets=0; const R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
   w.fetch=(u,o={})=>{ if(/\/publicar-tudo\?tarefa=1$/.test(String(u)))return R({tarefa_id:9}); if(/\/api\/tarefas\/9$/.test(String(u))){gets++;return R(gets===1?{...rodando,id:9}:{id:9,estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Dossiê + 5 folhas publicados.'},decorrido_s:20})} return fetchOrig(u,o) };

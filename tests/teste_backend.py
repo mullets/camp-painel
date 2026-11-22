@@ -12393,7 +12393,7 @@ def filho(modo):
         e_ = c.execute("SELECT situacao, revisado_por, fechado_por FROM erro WHERE id=?", (e_aut,)).fetchone()
         ver("outra pessoa aprova: Resolvido, revisado por ela; os pontos (crítico: 30) vão para quem resolveu", rr4.status_code == 200 and tuple(e_) == ("corrigido", "bia@camp.arq.br", "bia@camp.arq.br")
             and pts(ana) - p_ana0 == 30 and pts(bia) - p_bia0 == 0, f"{tuple(e_)} ana+{pts(ana) - p_ana0} bia+{pts(bia) - p_bia0}")
-        ver("a revisão conta na conquista Revisor cuidadoso de quem revisou", next(q for q in bia.get("/api/problemas/progresso").json()["conquistas_qualidade"] if q["chave"] == "revisor")["feito"] == 1, "")
+        ver("a revisão conta no marco “5 revisões aprovadas” de quem revisou", next(q for q in bia.get("/api/problemas/progresso").json()["conquistas_qualidade"] if q["chave"] == "revisor")["feito"] == 1, "")
         ver("autoria resolvida tira a marca da folha (como a rota antiga)", c.execute("SELECT autoria_divergente FROM item WHERE codigo=?", (F(1),)).fetchone()[0] in (0, None), "")
         c.execute("UPDATE configuracao SET valor='1' WHERE chave='jogo.ranking_equipe'"); c.commit()
         Pr = bia.get("/api/problemas/progresso").json()
@@ -15482,6 +15482,13 @@ def filho(modo):
         ver("'não era problema' e decisão descartada NÃO contam ponto; decisão respondida conta", pe3["eu"]["contagens"]["problema_resolvido"] == 0 and pe3["eu"]["contagens"]["problema_critico_resolvido"] == 0 and pd1 == 1, f"{pe3['eu']['contagens']} decisões={pd1}")
         c.execute("UPDATE item SET revisado_por='campvision' WHERE codigo=?", ("F026-P0001-1972-S01-D00002",)); c.commit()
         ver("o que não foi feito por uma pessoa do painel (CAMP Vision, regra automática) não conta", op.get("/api/painel/progresso").json()["eu"]["contagens"]["folha_conferida"] == 2)
+        # CAMP-HOME-UX (tom sério, Rafael: "é algo bem sério"): a tela mostra pontos da semana e do mês e os marcos com data (sem nível nem XP)
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        pq = op.get("/api/painel/progresso").json()["eu"]
+        hoje_sp = (_dt.now(_tz.utc).replace(tzinfo=None) - _td(hours=3)).date().isoformat()
+        ver("'Seu trabalho': pontos validados na semana e no mês; cada marco tem a data (dia de São Paulo) em que foi alcançado",
+            pq.get("pontos_semana") == pq["xp_semana"] == 2 and pq.get("pontos_mes") == 2
+            and all(m.get("quando") == hoje_sp for m in pq["conquistas"] if m["id"] != "semana_consistente") and any(m["id"] == "folha_1" for m in pq["conquistas"]), str(pq))
         # ----- meta, ocultar, ranking, tabela de pontos -----
         m1, m2 = op.put("/api/painel/meta", json={"valor": 50}), adm.put("/api/painel/meta", json={"valor": 50})
         ver("meta da semana: só admin muda (operador 403), fica no Histórico e o progresso usa o novo valor", m1.status_code == 403 and m2.status_code == 200

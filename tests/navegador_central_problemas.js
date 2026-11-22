@@ -128,7 +128,21 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     await page.keyboard.press('j'); await page.keyboard.press('j');
     chk(await page.evaluate(() => { const k = document.querySelector('#err-body .kb-atual'); return !!k && k === document.querySelectorAll('#err-body [data-err-linha]')[1]; }), 'J desce na lista (fora de campo de texto)');
     // coluna da direita e gráficos de dados reais; Ranking da equipe (mês) ligado por padrão (decisão do Rafael, migração 243)
-    chk(await page.$eval('#cp-lateral', el => /Seu progresso na resolução/.test(el.textContent) && /Meta da semana/.test(el.textContent) && /Conquistas/.test(el.textContent) && /Atividade recente/.test(el.textContent) && /Ranking da equipe/.test(el.textContent)), 'progresso, meta, conquistas, Ranking da equipe (ligado por padrão) e atividade recente');
+    // tom sério (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): "Seu trabalho" (pontos da semana e do mês +
+    // meta da equipe), "Marcos" em texto, ranking em tabela e "Atividade recente" com ícone neutro; nada de nível, XP, selo, hexágono ou troféu
+    const lat = await page.$eval('#cp-lateral', el => { const t = s => [...el.querySelectorAll('.cp-lat-h h2')].map(h => h.textContent.replace(/\s+/g, ' ').trim()); const ic = [...el.querySelectorAll('.cp-ativ-ic')];
+      return { tit: t(), txt: el.innerText, trab: (el.querySelector('#cp-trabalho') || {}).innerText || '', marcos: el.querySelector('#cp-marcos') ? { arte: el.querySelectorAll('#cp-marcos svg, #cp-marcos img, #cp-marcos [class*="badge"]').length, tot: (el.querySelector('#cp-marcos .marcos-tot') || {}).textContent || '' } : null,
+        arte: el.querySelectorAll('.cp-hex, .cp-badge, svg.cp-hex, .cp-lat-h h2 svg').length, tabela: !!el.querySelector('#cp-ranking table.rank-tab'), barra: !!el.querySelector('#cp-trabalho #cp-meta .ini-bar i'),
+        icCores: [...new Set(ic.map(x => getComputedStyle(x).backgroundColor))], icTinta: [...new Set(ic.map(x => getComputedStyle(x).color))] }; });
+    chk(JSON.stringify(lat.tit.slice(0, 4)) === JSON.stringify(['Seu trabalho', 'Marcos', 'Pontos validados no mês · equipe', 'Atividade recente']), `coluna da direita: Seu trabalho · Marcos · ranking · Atividade recente ${JSON.stringify(lat.tit)}`);
+    chk(/Pontos validados nesta semana/.test(lat.trab) && /no mês/.test(lat.trab) && /Meta da semana/.test(lat.trab) && /de \d+ pontos validados \(\d+%\)/.test(lat.trab) && lat.barra, `"Seu trabalho": pontos da semana e do mês e a meta da equipe na barra padrão ${JSON.stringify(lat.trab)}`);
+    chk(lat.marcos && lat.marcos.arte === 0 && /folhas? conferidas? · \d+ lotes? aprovados?/.test(lat.marcos.tot), `"Marcos" em texto, sem selo nem ícone ${JSON.stringify(lat.marcos)}`);
+    chk(lat.arte === 0 && lat.tabela && !/\bXP\b|Nível|Guardião|Catalogador|Conquistas recentes|Seu progresso/i.test(lat.txt), `sem nível, XP, selo, hexágono nem troféu; ranking numa tabela (${lat.arte} figuras)`);
+    chk(lat.icCores.length <= 1 && lat.icTinta.length <= 1, `atividade recente: ícone só para o tipo, em cor neutra ${JSON.stringify([lat.icCores, lat.icTinta])}`);
+    py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','0')\")");
+    await page.evaluate(() => cpCarregarLateral()); await page.waitForTimeout(600);
+    chk(await page.$eval('#cp-lateral', el => !el.querySelector('#cp-trabalho, #cp-marcos, #cp-meta') && /Atividade recente/.test(el.textContent)), 'jogo desligado: somem "Seu trabalho", a meta e "Marcos" (a atividade recente fica)');
+    py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','1')\")");
     chk(await page.$eval('#cp-graf-tipo', el => !!el.querySelector('svg.cp-donut')) && await page.$eval('#cp-graf-sem', el => /Evolução de resolução/.test(el.textContent)), 'gráficos "Problemas por tipo" e "Evolução de resolução"');
     await ctx.close();
     // celular 390

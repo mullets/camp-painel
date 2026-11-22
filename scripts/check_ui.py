@@ -111,6 +111,25 @@ for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
             linha = conteudo.count("\n", 0, m.start()) + 1
             errors.append(f"vocabulário: '{m.group(0)}' em {arq.relative_to(ROOT)}:{linha} — {dica}")
 
+# --- CAMP-HOME-UX (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): tom sério e profissional.
+# Nada de nível/título de jogo, XP, medalha, selo, troféu, emoji ou comemoração na interface (docs/padroes.md §15, docs/vocabulario.md
+# "Tom"). Os comentários do código ficam de fora (podem citar a regra); o que vale é o que chega à tela.
+_sem_coment = re.sub(r"/\*.*?\*/|<!--.*?-->", " ", text, flags=re.S)
+_sem_coment = re.sub(r"(?m)^\s*//.*$", " ", _sem_coment)
+for _pad, _dica in ((r"Guardião do Acervo|Primeiros passos|Olhar atento|Mão firme|Memória viva|Referência do acervo", "título de nível de jogo"),
+                    (r"(?<![\w-])XP(?![\w-])", "XP (use 'pontos validados')"),
+                    (r"Nível (?:\d+|\$\{[^}]*\})\s*·", "'Nível N · …' (sem níveis na tela: 'Seu trabalho')"),
+                    (r"Suas conquistas|Conquistas recentes|Seu progresso na resolução|dias? de sequência", "nome antigo da gamificação (use 'Seu trabalho' / 'Marcos')"),
+                    (r"Parabéns|[Cc]onfete|confetti", "comemoração (confirmação discreta, sem festa)"),
+                    (r"INI_MEDALHA|INI_SELO|ini-medalha|ini-selo|ini-nivel-card|cp-badge|CP_HEX|cp-hex|fc-medalha|cpIc\('trofeu'", "arte de medalha, selo, hexágono ou troféu"),
+                    (r"[A-Za-zÀ-ú]!['\"`<]", "frase com exclamação (tom sério: ponto final)"),
+                    ("[\U0001F000-\U0001FAFF⌚⌛⏩-⏳⏸-⏺☔☕♈-♓♿⚓⚡⚪⚫⚽⚾"
+                     "⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓-❕❗➕-➗"
+                     "➰➿⬛⬜⭐⭕️]", "emoji (use texto, ✓/✕/! ou um ícone de traço neutro)")):
+    for m in re.finditer(_pad, _sem_coment):
+        _ln = _sem_coment.count("\n", 0, m.start()) + 1
+        errors.append(f"tom: '{m.group(0)}' na interface ({HTML.relative_to(ROOT)}:{_ln}) — {_dica}; sem elementos infantis ou de jogo (padroes.md §15)")
+
 # --- atalhos do menu: a tabela NAV_ATALHOS segue a ORDEM VISUAL do menu (dígitos 1-9 em sequência; UX-28: letras podem vir entre eles) ---
 mapa = re.search(r"const NAV_ATALHOS=\{([^}]*)\}", text)
 menu = re.search(r'<nav class="nav" id="nav">(.*?)</nav>', text, re.S)

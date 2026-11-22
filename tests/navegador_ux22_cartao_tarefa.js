@@ -79,11 +79,11 @@ c.commit()`, DB]);
     chk(+r.pesoTitulo >= 600 && r.corTitulo === r.corTexto, `título do cartão em destaque (peso ${r.pesoTitulo}, cor ${r.corTitulo}), não com cara de cabeçalho de seção cinza`);
     chk(r.recuo >= 16 && r.corPassos !== r.corTitulo, `lista de passos com recuo (${r.recuo} px) e cor secundária (${r.corPassos} × ${r.corTitulo})`);
     chk(r.btnX !== null && Math.abs(r.btnX - r.h3X) <= 2, `botão "Abrir F009-P0092" alinhado à esquerda com o título (${r.btnX} × ${r.h3X})`);
-    chk(/⏳ Publicando F009-P0092/.test(r.chip) && !EMAIL.test(r.chip), `chip do topo sem e-mail: ${JSON.stringify(r.chip)}`);
+    chk(/◷ Publicando F009-P0092/.test(r.chip) && !EMAIL.test(r.chip), `chip do topo sem e-mail: ${JSON.stringify(r.chip)}`);
 
     // ---- o aviso de andamento na própria tela (seguirTarefa) também não gruda o título na etapa ----
     const aviso = await page.evaluate(() => { const d = document.createElement('div'); d.className = 'aviso-local rodando';
-      d.innerHTML = `<div class="t"><b>⏳ Sincronizando com o site…</b>${andamentoTarefaHTML({ etapa: 'Lendo coleções, folhas e páginas do site', total: 0, feitas: 0, decorrido_s: 65 })}</div>`;
+      d.innerHTML = `<div class="t"><b>◷ Sincronizando com o site…</b>${andamentoTarefaHTML({ etapa: 'Lendo coleções, folhas e páginas do site', total: 0, feitas: 0, decorrido_s: 65 })}</div>`;
       document.body.appendChild(d); const s = d.innerText; d.remove(); return s; });
     chk(/Sincronizando com o site…\s*\n\s*Lendo coleções, folhas e páginas do site · 1 min 5 s até agora/.test(aviso), `aviso na tela: título e etapa em linhas separadas (${JSON.stringify(aviso)})`);
     chk(!erros.length, 'nenhum erro no console' + (erros.length ? ': ' + erros.slice(0, 3).join(' | ') : ''));

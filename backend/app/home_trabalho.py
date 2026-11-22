@@ -409,13 +409,20 @@ def progresso(con, u: dict, ocultar: bool | None = None) -> dict:
         meus = [e for e in todos if e["email"] == u.get("email")]
         xp = sum(tab[e["tipo"]] for e in meus)
         cont = {k: sum(1 for e in meus if e["tipo"] == k) for k in tab}
-        ganhas = [{"id": i, "rotulo": r} for i, r, t, n in CONQUISTAS if cont.get(t, 0) >= n]
+        # CAMP-HOME-UX (tom sério): cada marco leva a data em que foi alcançado (o n-ésimo evento validado daquele tipo, dia de São Paulo)
+        quando_tipo = {k: sorted(str(e["quando"]) for e in meus if e["tipo"] == k) for k in tab}
+        ganhas = [{"id": i, "rotulo": r, "quando": _dia_sp(quando_tipo[t][n - 1])} for i, r, t, n in CONQUISTAS if cont.get(t, 0) >= n]
         prox = next(({"id": i, "rotulo": r, "feito": cont.get(t, 0), "de": n} for i, r, t, n in CONQUISTAS if cont.get(t, 0) < n and cont.get(t, 0) > 0), None)
         dias = {_dia_sp(e["quando"]) for e in meus}
         dias_semana = {_dia_sp(e["quando"]) for e in meus if str(e["quando"]) >= desde}
         if len(dias_semana) >= 3:
             ganhas.append({"id": "semana_consistente", "rotulo": "Semana consistente (3 dias com trabalho validado)"})
-        out["eu"] = {**nivel_xp(xp), "xp_semana": sum(tab[e["tipo"]] for e in meus if str(e["quando"]) >= desde), "contagens": cont,
+        semana_eu = sum(tab[e["tipo"]] for e in meus if str(e["quando"]) >= desde)
+        mes_ini = inicio_mes_utc()
+        # nível e XP continuam calculados (compatibilidade), mas a tela NÃO os mostra (Rafael, 22/11/2026: "é algo bem sério"): ela usa
+        # pontos_semana, pontos_mes, contagens e os marcos com data. Campos novos opcionais: pontos_semana, pontos_mes, conquistas[].quando.
+        out["eu"] = {**nivel_xp(xp), "xp_semana": semana_eu, "pontos_semana": semana_eu,
+                     "pontos_mes": sum(tab[e["tipo"]] for e in meus if str(e["quando"]) >= mes_ini), "contagens": cont,
                      "conquistas": ganhas, "proxima": prox, "dias_seguidos": _dias_seguidos(dias)}
     if ranking_ligado(con) and u.get("papel") != "leitura":
         # CAMP-HOME-UX (decisão do Rafael, 22/11/2026): Ranking da equipe (MÊS), ligado por padrão (migração 243); só pontos validados

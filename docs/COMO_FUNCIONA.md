@@ -2978,7 +2978,7 @@ O `index.html` tem três níveis de resposta para ações (comentário "H4"): me
 
 1. Faz `POST url?tarefa=1` (ou `&tarefa=1`). Se a chamada falhar, mostra o erro no lugar e no toast.
 2. Chama `vigiarTarefas()` (atualiza o chip) e `seguirTarefa(tarefa_id, o)`.
-3. `seguirTarefa` consulta `GET /api/tarefas/{id}` a cada **1,2 s**. Enquanto `rodando`, mostra no lugar (acima do elemento `o.antes`) "⏳ título…" com barra de progresso, "N de M", etapa, folha atual, tempo decorrido e "faltam cerca de ...", mais o aviso "Pode sair desta tela".
+3. `seguirTarefa` consulta `GET /api/tarefas/{id}` a cada **1,2 s**. Enquanto `rodando`, mostra no lugar (acima do elemento `o.antes`) "◷ título…" com barra de progresso, "N de M", etapa, folha atual, tempo decorrido e "faltam cerca de ...", mais o aviso "Pode sair desta tela".
 4. Até 5 falhas de rede seguidas são toleradas (espera 2 s entre elas); depois disso, ou com 404, mostra "Perdi o acompanhamento desta tarefa".
 5. No fim, mostra "✔/✖ <texto final>", as falhas (até 10), o HTML extra de `o.fim(t)` (o próximo passo) e um toast. Se a pessoa estava vendo, marca como vista.
 
@@ -2987,7 +2987,7 @@ Quem usa `rodarTarefa`: sincronizar (`sincronizarAgora`), enviar folhas, BagIt, 
 **O chip do topo (`#tarefas-chip`):**
 
 1. `vigiarTarefas()` chama `GET /api/tarefas` a cada **3 s** se há tarefa rodando, **20 s** se não há, e **60 s** com a aba escondida. Volta a consultar quando a aba fica visível.
-2. Com tarefa rodando: "⏳ Publicando F022-P0009 · 3 de 5" (ou "N tarefas em andamento").
+2. Com tarefa rodando: "◷ Publicando F022-P0009 · 3 de 5" (ou "N tarefas em andamento").
 3. Sem tarefa rodando e com tarefa terminada não vista: "✔/✖ <texto final>" e "· e mais N", com o botão **×** ("Já vi").
 4. Clicar no chip abre a gaveta "Tarefas" (`abrirTarefas`), com "Em andamento" e "Suas tarefas das últimas 24 h" (cartões com log e o botão "Abrir <projeto>" para `publicar`/`enviar_folhas`).
 5. "Visto" é guardado na preferência do usuário `tarefas.vista` (o maior `terminada_em` já visto), com `PUT /api/auth/eu/preferencias`. Assim o aviso não volta em outro computador.
@@ -3730,7 +3730,7 @@ Toda tela segue as mesmas sete regras, e o `check_ui.py` reprova variantes antig
    - `soOk:true` — só um botão (ex.: senha temporária).
    Enter confirma (fora de textarea), Esc cancela, clique fora cancela.
 4. **Tarefas no servidor** (ações longas): `rodarTarefa(url, opt, {titulo, antes, id, fim})` faz `POST url?tarefa=1`, recebe `tarefa_id` e `seguirTarefa` consulta `GET /api/tarefas/{id}` a cada 1,2 s, mostrando barra, etapa, "agora: código", tempo decorrido e estimado. Ao terminar, o aviso no lugar vira ✔/✖ com as falhas, e sai um toast.
-   - O chip do topo `#tarefas-chip` (`vigiarTarefas`, `GET /api/tarefas` a cada 3 s com tarefa rodando, 20 s parado, 60 s com a aba escondida) mostra "⏳ Publicando F022-P0009 · 3 de 5" ou "✔ … ×" até a pessoa dar "Já vi" (preferência `tarefas.vista`).
+   - O chip do topo `#tarefas-chip` (`vigiarTarefas`, `GET /api/tarefas` a cada 3 s com tarefa rodando, 20 s parado, 60 s com a aba escondida) mostra "◷ Publicando F022-P0009 · 3 de 5" ou "✔ … ×" até a pessoa dar "Já vi" (preferência `tarefas.vista`).
    - Clicar no chip abre "Tarefas" (`abrirTarefas`): em andamento e as das últimas 24 h.
    - Usam tarefa: publicar (publicação guiada), enviar folhas ao site (`/subir-folhas`), importar todas da Fila (`/api/filas/importar-todas`), varrer QNAP, sincronizar com o site, pacote BagIt, puxar uso do acervo.
 
@@ -4199,7 +4199,7 @@ Dados: `GET /api/projetos/{c}/detalhe` (leitura): projeto, itens (folhas), erros
 3. **Próximo passo** (`#pj-proximo`, `carregarProximoPasso` → `GET /api/projetos/{c}/proximo-passo`, mesma fase da Fila):
    - com lote: a régua dos 7 passos ("você está aqui", "parado: …") e uma frase + **um** botão: Importar folhas (operador) → Começar a conferir + "Aprovar todas (N)" (operador; `POST /api/lotes/{id}/conferir-todas`) → Aprovar lote (admin) → Publicar (admin; ou o botão que resolve o requisito humano que falta: direitos, bloqueios, teste) → "Tudo certo: já publicado" com o link;
    - sem lote: "Publicado" com o link, "Falta resolver: …" ou "Pronto para publicar";
-   - se há publicação rodando (`GET /api/projetos/{c}/tarefa`): "⏳ Publicando… 3 de 5" com "Acompanhar".
+   - se há publicação rodando (`GET /api/projetos/{c}/tarefa`): "◷ Publicando… 3 de 5" com "Acompanhar".
    - Depois de importar/conferir/aprovar, `avisoResultadoLote` deixa o resultado na tela com o próximo passo (folhas novas, atualizadas, já conferidas mantidas, recodificadas pela releitura, que esperam decisão, que não entraram).
 4. **Abas** (`.tabs.pj-tabs`, `pdTab`): Folhas (N), Publicação, Dados do projeto, Problemas (N), Pedidos (N), Histórico. As abas Publicação e Dados ficam sempre na página (escondidas), porque outras partes as atualizam; o `check_ui.py` exige `data-pj-aba="publicacao"`, `data-pj-aba="dados"`, `id="pj-proximo"` e `id="pd-pub"`.
    - **Folhas** (`renderItensProjeto`): "N no painel · M no site" (com "Importar N folhas só no site" → `POST /api/projetos/{c}/importar-folhas`); barra fixa com "Conferidas X de Y", filtros Todas / A conferir / Com problema / No site e tamanho P/M/G; grade por série (S01…S07, Sem série) com miniaturas (`cardItemProjeto`: prévia do QNAP `GET /api/itens/{c}/previa` ou miniatura do site; etiquetas conferida/corrigida/a conferir/retida, autoria divergente, duplicata, espelhada?, rascunho, despublicado, só no site, capa). Folha de lote em revisão abre a **revisão** (`abrirRevisaoItem`: imagem, o que o CAMP Vision apontou, "Está certo e próxima", "Salvar correção", girar/espelhar, duplicata, "Não publicar esta folha" — `POST /api/itens/{c}/revisao`, `/girar`, `/espelhar`, `/retencao`, `/duplicata-de`); as demais vão para a página da folha. Abaixo: "Revisão do lote" (`carregarRevisaoLote`, `GET /api/projetos/{c}/revisao`), consenso de ano/endereço/cliente do lote (`GET /api/projetos/{c}/consenso`, `POST …/consenso/aplicar`, operador), o que o CAMP Vision entregou em `catalogacao/` (`GET /api/lotes/{id}/saidas-cv`, respostas `POST …/saidas-cv/resposta`) e "Encontradas no QNAP, ainda não catalogadas" (`GET /api/projetos/{c}/folhas-qnap`).
