@@ -4341,6 +4341,27 @@ Rafael, com os dados reais (1.220 abertos, 134 críticos, quase todos "Folha pod
 
 **Linha mais limpa**: branca (só a borda esquerda e a pílula com a cor), a frase da prioridade foi para a dica da pílula, o contexto numa linha com reticências (o texto inteiro na dica e no painel), "Sem responsável" some quando o filtro já é esse. **Atividade recente** e Histórico: todo evento tem rótulo (`TITULO_EVENTO`, `ROTULO_EVENTO`, `CP_EVT`; ex.: `fechado_na_conferencia` = "Resolvido na conferência"); evento sem rótulo vira "Registrou uma mudança", nunca o código. Embaixo, **Ignorados** e **Possíveis projetos duplicados** dizem o que são e que não entram nos números de cima. Testes: modo `problemas_rapido` e `tests/navegador_problemas_rapido.js`.
 
+### D.4.3e As decisões rápidas com os dados reais (CAMP-PROB-REAL, 22/11/2026)
+
+Rafael, com o print da produção (Críticos, agrupado, 133 problemas): "tá bem ruim de UI e UX, nem consigo alterar as coisas". Os grupos só tinham "Ver uma a uma", as linhas só "Analisar" e toda miniatura era "sem imagem": o CAMP-PROB-RAPIDO só foi testado com folhas sintéticas.
+
+**Causas** (provadas com `tests/semear_problemas_real.py`, que cria os problemas pelo caminho da produção: pacote + `erros.json` lidos por `importar_lote`):
+- A folha que o CAMP Vision retira ("fora da publicação até decisão": projeto divergente ou sem identificação) **não entra na tabela de folhas** e tem DOIS problemas: o da retirada (`campvision:retirado:<folha>`, corrigir, tipo `retirada`) e o do `erros.json` (`campvision:erros:…`, **bloqueia**, código = a folha, tipo `comum`). `tipo_rapido` só dava decisão com `folha_existe` ou tipo `retirada`: o do erros.json (o único que aparece em Críticos) ficava sem botão.
+- `miniaturas()` só dava URL com `pendencias.previa` preenchido ou `arquivo_jpg` http(s); na produção `arquivo_jpg` é caminho do QNAP e a prévia vem vazia (ou sem a chave, nos lotes antigos).
+
+**O que mudou** (`problemas_rapido.py`; campos novos e opcionais):
+- `url_previa`: a imagem pela MESMA rota de sempre (`/api/itens/{c}/previa`: prévia do CAMP Vision, JPG do QNAP ou, para a folha retirada, a prévia do pacote / o JPG da pasta do lote). Nada de QNAP na listagem; `q=1` faz a rota responder 204 quando não acha imagem (a tela mostra "sem imagem", sem 404 no console). O painel do problema usa a mesma URL. No grupo, até 8 miniaturas, carregadas sob demanda.
+- `fora_do_painel`: folha retirada (código no formato do painel, origem CAMP Vision, fora da tabela). Decisões: **É deste projeto** (`_deste_projeto_retirada`: devolve ao lote, fecha os problemas da folha; entra no painel na próxima importação) e **É de outro projeto (fica fora)** (ação `fica_fora`, modelo "Fica fora deste projeto": o mesmo efeito do botão da página do projeto; os problemas do CAMP Vision da folha fecham como Resolvido). Mover não existe para ela: `rapido.mover_porque_nao` diz por quê.
+- Grupo: as ações comuns a todos (`deste_projeto`, `fica_fora`, `mover`) e `rapido.nota`/`rapido.motivo` com o porquê do que falta.
+- `rapido_motivo`: toda linha aberta sem decisão rápida diz por quê ("Está em “Aguardando revisão”…", "O problema é do projeto inteiro…", "Seu acesso é só de leitura…").
+- A resposta de `POST /api/problemas/rapido` traz `fechados` (todos os problemas que a ação fechou, inclusive os irmãos da mesma folha): a tela tira as linhas deles.
+
+**Topo** (Rafael: "nem consigo alterar as coisas"): abas normais com selo de contagem; **Resolver em sequência**, **Agrupar** e **Ordenar por** num grupo que não quebra; filtro rápido com 0 some (o ativo fica); a faixa dos filtros ativos é uma linha fina; cartões mais baixos. A 1ª linha aparece em 1366×768 sem rolar.
+
+**Diagnóstico no servidor** (só leitura, sem dado de pessoa): `python3 scripts/diagnostico_problemas_rapido.py [banco] [N]` — por gravidade e caso (folha no painel, fora do painel retirada, sem folha) e, para os N primeiros: código, fase, situação, origem, começo da chave, se a folha existe, o tipo de `arquivo_jpg` e as chaves das pendências.
+
+Testes: modo `problemas_real` e `tests/navegador_problemas_real.js`.
+
 ### D.4.4 O que bloqueia a publicação
 
 A regra é uma só (`backend/app/publicacao.py`, `condicoes_projeto`), usada pelo botão Publicar, pela publicação em lote, pela do fundo inteiro, pela autorização, pelo guia e pelo painel:
