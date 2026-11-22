@@ -131,7 +131,7 @@ print(json.dumps({"ontem": ontem.isoformat(), "de30": (ontem - timedelta(days=29
     await esperarModulo('#ini-visitas');
     await P.unroute('**/api/visitas/evolucao*');
     // ---------- posição na Home ----------
-    const pos = await P.evaluate(() => { const r = document.getElementById('ini-ritmo').closest('section'), v = document.getElementById('ini-visitas').closest('section'); return { logo: r.nextElementSibling === v, col: r.parentElement === v.parentElement, w: v.getBoundingClientRect().width }; });
+    const pos = await P.evaluate(() => { const r = document.getElementById('ini-ritmo').closest('section'), v = document.getElementById('ini-visitas'); return { logo: r.nextElementSibling === v,   /* maquete: #ini-visitas guarda os dois cartões (visitas e projetos) */ col: r.parentElement === v.parentElement, w: v.getBoundingClientRect().width }; });
     chk(pos.logo && pos.col, 'Home: o resumo fica logo abaixo do gráfico de folhas conferidas por dia, na mesma coluna', JSON.stringify(pos));
     // 05/11 (plano de redesenho §12): a Home tem só o RESUMO (total, evolução, top 5, 7/30/90 dias e o link); o módulo completo fica na tela
     const hTxt = await P.locator('#ini-visitas').innerText();

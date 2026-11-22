@@ -43,7 +43,10 @@ const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!o
     // ---- 1ª página: caixa inteira; Entendi grava no servidor ----
     await ir(page, 'painel');
     let c = await caixa(page, 'painel');
-    chk(c && !c.recolhida && c.entendiVisivel, '1ª vez: a caixa "Como funciona esta página" vem inteira, com "Entendi": ' + JSON.stringify(c));
+    /* CAMP-HOME-UX maquete (22/11/2026): na Home a caixa chega sempre fechada numa linha; aberta, tem o "Entendi" de sempre */
+    chk(c && c.recolhida && !c.aberta, '1ª vez na Home: a caixa chega fechada numa linha (maquete): ' + JSON.stringify(c));
+    await page.click('#v-painel > .ajuda-caixa > summary'); await page.waitForTimeout(200);
+    chk((await caixa(page, 'painel') || {}).entendiVisivel, 'aberta, a caixa tem "Entendi"');
     await page.click('#v-painel [data-ajuda-fechar="painel"]'); await page.waitForTimeout(800);
     chk(!(await caixa(page, 'painel')), '"Entendi" fecha a caixa');
 

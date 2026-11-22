@@ -89,16 +89,16 @@ async function abrirHome(page) {
     await P.waitForSelector('#ini-qualidade .qb-geral', { timeout: 8000 }).catch(() => {});
     await P.waitForTimeout(1500);
     const vis = sel => P.locator(sel).first().isVisible();
-    const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2, :scope > .ini-res > section > .ph h2')].map(h => h.textContent.trim())));
-    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Folhas conferidas por dia — últimas 2 semanas', 'Visitas ao site'])   /* redesenho §11 (05/11): o ritmo ganhou o título descritivo */,
+    const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2, :scope > .ini-res > section > .ph h2, :scope > .ini-res > .ini-vis > section > .ph h2, :scope > section > h2.ini-sr')].map(h => h.textContent.trim())));
+    chk(colunas.length === 2 && JSON.stringify(colunas[0].filter(h => h !== 'Projetos mais visitados')) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Folhas conferidas por dia — últimas 2 semanas', 'Visitas ao site'])   /* maquete: "Projetos mais visitados" é outro cartão, só com dados */   /* redesenho §11 (05/11): o ritmo ganhou o título descritivo */,
       `UX-30 desfeito: coluna da esquerda com o ritmo depois do caminho e, 03/11 (pedido do Rafael), as visitas logo abaixo do ritmo: ${JSON.stringify(colunas[0])}`);
-    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Seu progresso', 'Qualidade da base', 'Quanto do acervo já está no site', 'Está tudo funcionando?', 'Melhorias de hoje', 'Hoje']),
+    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Seu progresso', 'Está tudo funcionando?', 'Qualidade da base', 'Quanto do acervo já está no site', 'Melhorias de hoje', 'Hoje'])   /* maquete do Rafael (22/11): sistemas logo depois do progresso */,
       `UX-30 desfeito + CAMP-HOME-UX (prioridade do documento de 22/11): coluna da direita completa (progresso, qualidade, publicação, sistemas, melhorias, Hoje): ${JSON.stringify(colunas[1])}`);
     const recolhido = await P.evaluate(() => ({ det: ['ini-qualidade', 'ini-melhorias', 'ini-ritmo', 'ini-t-site', 'ini-visitas'].filter(id => { const e = document.getElementById(id); return !e || !!e.closest('details'); }), numeros: !!document.getElementById('ini-numeros') }));
     chk(!recolhido.det.length && !recolhido.numeros, `UX-30 desfeito: nenhum bloco recolhido "Números do acervo" na Home: ${JSON.stringify(recolhido)}`);
     const visiveis = [];
     for (const sel of ['#ini-qualidade .qb-geral', '#ini-melhorias', '#ini-ritmo', '#ini-t-site', '#v-painel .ini-prog', '#ini-visitas']) if (await vis(sel)) visiveis.push(sel);
-    chk(visiveis.length === 6 && /Folhas/.test(await P.locator('#v-painel .ini-prog').innerText()), `UX-30 desfeito: qualidade, melhorias, ritmo, % no site e visitas visíveis sem clicar em nada: ${visiveis.join(', ')}`);
+    chk(visiveis.length === 6 && /folhas/i.test(await P.locator('#v-painel .ini-prog').innerText()), `UX-30 desfeito: qualidade, melhorias, ritmo, % no site e visitas visíveis sem clicar em nada: ${visiveis.join(', ')}`);
     const visT = await P.evaluate(() => ({ tag: (document.getElementById('ini-vis-tag') || {}).textContent || '', t: (document.getElementById('ini-visitas') || {}).textContent || '' }));
     chk(visT.tag === 'desligado', `Visitas ao site com o GA desligado mostra "desligado" como antes: ${JSON.stringify(visT).slice(0, 160)}`);
     chk(chamadasGA.length === 0, `UX-12: com o GA desligado a Home não chamou /api/analytics (${chamadasGA.length})`);
