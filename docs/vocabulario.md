@@ -417,8 +417,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 
 ## Home em três partes: Ação, Operação e Resultados (CAMP-HOME-UX, documento do Rafael de 22/11/2026)
 - A barra do topo (busca, área da página, clima, tarefas, estado das máquinas, menu da pessoa) e a faixa do sistema **não mudam**; o menu lateral também não.
-- **Cabeçalho**: a foto (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data; à direita o cartão **Meta da semana** ("**N%**",
-  "**Meta da semana · equipe**", "**N de M pontos validados**", barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
+- **Cabeçalho**: a foto (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data e, na mesma linha à direita, o **?**. A
+  **Meta da semana** fica na coluna da direita, no cartão do nível ("**Meta da semana · equipe**", "**N de M pontos validados**", "**N%**",
+  barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
 - **Indicadores**: os mesmos 4; todos são botões; o "**?**" e a dica "**Como conta:** …" dizem a regra da contagem. **folhas conferidas hoje**
   leva ao gráfico de Resultados.
 - **O que fazer agora**: abas **Minha fila** (o que está com você: atribuído, pego por você, ou problema que você relatou) · **Todos** ·
@@ -450,8 +451,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 
 ## Home no desenho da maquete (CAMP-HOME-UX, maquete do Rafael de 22/11/2026)
 - Barra do topo e menu lateral **não mudam**. **Entenda esta página** chega sempre fechada numa linha (o **?** abre a caixa inteira).
-- **Cabeçalho**: foto grande (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data; cartão **Meta da semana** com o alvo,
-  "**N de M pontos validados**", o **N%** grande, a barra verde e **Como conta?**.
+- **Cabeçalho**: foto grande (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data e o **?** na mesma linha (sem cartão de meta).
 - **Indicadores**: ícone colorido (pasta · camadas · triângulo · ✓), número grande, rótulo e a linha cinza; a seta e o "?" aparecem ao passar o mouse.
 - **O que fazer agora**: abas com o número em selo e, à direita, "**Ordenar:**"; cada linha = barra colorida, miniatura, nome, linha cinza
   ("Tipo · lote · código · fundo · responsável"), selo **Crítico** / **Alto** / **Médio** / **Baixo**, "**Há N dias**" / "**Há N h**" /
@@ -464,7 +464,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Visitas ao site**: à esquerda **Visitas no período**, **Média por dia** e a variação "**vs. período anterior**"; à direita o gráfico.
   Sem dados: "**Dados de audiência temporariamente indisponíveis**" numa caixa compacta, com **Tentar de novo**. **Projetos mais visitados**
   é outro cartão ("os 5 primeiros", **Ver análise completa de visitas →**).
-- **Coluna da direita**: cartão azul-marinho "**Nível N · <nome>**", "N / M XP", "**Faltam N XP para o nível N+1**"; **Suas conquistas** com 3
+- **Coluna da direita**: cartão azul-marinho "**Nível N · <nome>**", "N / M XP", "**Faltam N XP para o nível N+1**" e, abaixo de uma linha, a
+  2ª seção "**Meta da semana · equipe**" com o alvo, "**N de M pontos validados**", o **N%** e a barra verde, **Como conta?** (leitura e
+  conquistas ocultas: o mesmo cartão só com a meta; jogo desligado: some tudo); **Suas conquistas** com 3
   selos (**N folhas conferidas** · **N lotes aprovados** · **N dias de sequência**; cinza quando zero) e **Ver todas →** (os marcos, Próxima,
   Como os pontos são contados?, **Ocultar conquistas**). **Está tudo funcionando?**: uma linha por sistema, ✓ e "**Online**" (cópias:
   "**Em dia**"); o que falha vem primeiro com o selo e a frase; **Ver detalhes e histórico →**. **Qualidade da base**: o índice, "**↓ −N p.p.**"
