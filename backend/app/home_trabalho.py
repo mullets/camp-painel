@@ -90,7 +90,7 @@ def prioridade(item: dict, grupo: str | None = None) -> dict:
     if btxt and b >= 0.5:
         motivos.append(btxt)
     te = "" if base else _txt_espera(esp)
-    if te and tipo != "emprestimo" and (t >= 0.07 or not motivos):   # empréstimo: os dias já estão no "venceu há"                                     # 1 dia ou mais (ou é o único motivo)
+    if te and not (rtxt and tipo in ("emprestimo", "pedido")) and (t >= 0.07 or not motivos):   # empréstimo e pedido atrasado: o tempo já está no motivo                                     # 1 dia ou mais (ou é o único motivo)
         motivos.append(te)
     if base:
         motivos = ["melhora a base, quando sobrar tempo"]

@@ -1548,17 +1548,17 @@ button.ini-kpi{cursor:pointer}button.ini-kpi:hover{border-color:var(--blue);back
 .ini-meta-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:10px 14px;display:grid;gap:4px}
 .ini-meta-l1{display:flex;align-items:baseline;justify-content:space-between;gap:8px}.ini-meta-t{font-weight:600;font-size:var(--fs-md)}
 .ini-meta-pct{font:600 var(--fs-lg)/1.2 var(--mono);color:var(--blue)}.ini-meta-n{margin:0;font-size:var(--fs-md);color:var(--ink2)}.ini-meta-n b{color:var(--ink)}
-.ini-meta-bar{margin:2px 0}.ini-meta-mais>summary{font-size:var(--fs-sm2)}
+.ini-meta-bar{margin:2px 0}.ini-meta-l2{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}.ini-meta-mais .mais-lista{right:0;left:auto}@media (max-width:1499px){.ini-fazer>.ph .ini-fazer-hint{display:none}}.ini-meta-mais>summary{font-size:var(--fs-sm2)}
 .ini-meta-form{display:flex;flex-wrap:wrap;gap:6px;align-items:end;margin-top:6px}.ini-meta-form input{width:110px;padding:4px 8px;border:1px solid var(--line);border-radius:var(--r);font:inherit;color:var(--ink);background:var(--surface)}
 .ini-pontos{width:100%;border-collapse:collapse;font-size:var(--fs-sm2)}.ini-pontos caption{text-align:left;font-weight:600;padding:4px 0}.ini-pontos td{padding:3px 0;border-top:1px solid var(--line2)}.ini-pontos td.num{text-align:right;font-variant-numeric:tabular-nums;padding-left:10px}
 .ini-kpi .ini-kpi-q{position:absolute;bottom:10px;right:12px;width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:var(--fs-2xs);color:var(--ink2);font-weight:600}
 .ini-kpi .ini-kpi-regra{display:none;position:absolute;left:8px;right:8px;top:calc(100% + 6px);z-index:6;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);box-shadow:0 8px 22px rgba(0,0,0,.18);font-size:var(--fs-sm2);font-weight:400;color:var(--ink2);line-height:1.45}
 .ini-kpi .ini-kpi-regra b{color:var(--ink)}
 button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{display:block}
-.ini-fila-barra{display:grid;gap:0}.ini-fila-barra .ini-abas{border-bottom:1px solid var(--line2)}.ini-fila-barra .ini-abas .btn[aria-pressed="true"]{font-weight:600}
+.ini-fila-barra{display:grid;gap:0}#v-painel .ini-fila-barra .abas-sit{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}#v-painel .ini-fila-barra .abas-sit .btn{flex:none}.ini-fazer>.ph .ini-fazer-hint{margin-left:auto}.ini-fila-barra .ini-abas{border-bottom:1px solid var(--line2)}.ini-fila-barra .ini-abas .btn[aria-pressed="true"]{font-weight:600}
 .ini-fila-barra .ini-filtros{padding:2px 0 4px;align-items:center}.ini-fila-barra .ini-filtros .btn{padding:4px 8px;font-size:var(--fs-sm2)}
 .ini-filtros-rot{font-size:var(--fs-sm);color:var(--ink2);padding:0 6px 0 8px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
-#v-painel .ini-task{grid-template-columns:4px 56px minmax(0,1fr) auto}#v-painel .ini-task-fim{flex-direction:column;align-items:flex-end;gap:6px}.ini-task-meta{display:flex;gap:4px 10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#v-painel .ini-task{grid-template-columns:4px 56px minmax(0,1fr) auto}#v-painel .ini-task-fim{flex-direction:column;align-items:flex-end;gap:6px}.ini-task-meta{display:flex;flex-direction:column;gap:2px;align-items:flex-end;text-align:right}#v-painel .ini-task{padding:10px 16px;gap:2px 12px}.ini-fazer>.ph{padding-top:10px;padding-bottom:10px}
 .ini-task>.mini{align-self:center}
 .ini-prio{font-weight:600}.ini-prio-motivo{display:block;color:var(--ink2)}
 .ini-resp{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm2);color:var(--ink);white-space:nowrap}.ini-resp.sem{color:var(--ink3);font-style:italic}
@@ -1586,7 +1586,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .ini-saude-resto[open]>summary{color:var(--ink2)}
 @media (max-width:1279px){.ini-meta{flex-basis:260px}}
 @media (max-width:760px){.ini-hello{flex-wrap:wrap}.ini-meta{order:3;flex:1 1 100%}.av.ini-av{width:36px;height:36px}
-  #v-painel .ini-task{grid-template-columns:4px 44px minmax(0,1fr)}#v-painel .ini-task>.mini{width:44px;height:33px}#v-painel .ini-task-fim{grid-column:2 / -1;flex-direction:row;align-items:center;justify-content:space-between}
+  #v-painel .ini-task{grid-template-columns:4px 44px minmax(0,1fr)}#v-painel .ini-task>.mini{width:44px;height:33px}#v-painel .ini-task-fim{grid-column:2 / -1;flex-direction:row;align-items:center;justify-content:space-between}#v-painel .ini-task-meta{align-items:flex-start;text-align:left}
   .ini-res-h{flex-direction:column;align-items:flex-start}#v-painel .ini-fila-barra .abas-sit{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}#v-painel .ini-fila-barra .abas-sit .btn{flex:none}}
 @media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:1100px){.ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -8367,10 +8367,10 @@ let PAINEL_PG=null;
 function iniBarraHTML(v,max,rot){const w=max?Math.min(100,100*v/max):0;return `<div class="ini-bar ini-meta-bar" role="img" aria-label="${escHtml(rot)}"><i data-w="${w.toFixed(2)}"></i></div>`}
 function iniMetaHTML(pg){if(pg===undefined)return '<div class="ini-meta-card" aria-busy="true"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado||!pg.semana)return '';
   const s=pg.semana,adm=EU&&['admin','master'].includes(EU.papel),pts=qtd(s.feito,'ponto','pontos');
-  return `<div class="ini-meta-card" id="ini-meta-card"><div class="ini-meta-l1"><span class="ini-meta-t">Meta da semana</span><b class="ini-meta-pct">${fmtN(s.pct)}%</b></div>
-    <p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados da equipe</p>${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`)}
+  return `<div class="ini-meta-card" id="ini-meta-card"><div class="ini-meta-l1"><span class="ini-meta-t">Meta da semana <small class="ini-nota">· equipe</small></span><b class="ini-meta-pct">${fmtN(s.pct)}%</b></div>
+    ${iniBarraHTML(s.feito,s.meta,`Meta da semana: ${pts} de ${fmtN(s.meta)}, ${s.pct}%`)}<div class="ini-meta-l2"><p class="ini-meta-n"><b>${fmtN(s.feito)}</b> de ${fmtN(s.meta)} pontos validados</p>
     <details class="mais-menu ini-meta-mais"><summary class="ini-link">Como conta?</summary><div class="mais-lista ini-ajuda-txt" role="note"><p>${escHtml(pg.regra)}</p><p>Semana de segunda a domingo (horário de São Paulo). Nesta semana: ${escHtml(Object.entries(s.por_tipo||{}).filter(([,n])=>n).map(([k,n])=>`${fmtN(n)} ${s.por_tipo_rotulo[k]}`).join(' · ')||'nenhuma ação validada ainda')}.</p>${iniPontosTabelaHTML(pg)}
-    ${adm?`<form class="ini-meta-form" data-ini-meta-form><label>Nova meta (pontos) <input type="number" min="1" max="100000" step="1" name="meta" value="${escHtml(s.meta)}" required></label><button type="submit" class="btn sm">Salvar a meta</button></form>`:''}</div></details></div>`}
+    ${adm?`<form class="ini-meta-form" data-ini-meta-form><label>Nova meta (pontos) <input type="number" min="1" max="100000" step="1" name="meta" value="${escHtml(s.meta)}" required></label><button type="submit" class="btn sm">Salvar a meta</button></form>`:''}</div></details></div></div>`}
 function iniPontosTabelaHTML(pg){return `<table class="ini-pontos"><caption>Pontos por ação validada</caption><tbody>${Object.entries(pg.pontos||{}).map(([k,v])=>`<tr><td>${escHtml((pg.pontos_rotulo||{})[k]||k)}</td><td class="num">${fmtN(v)}</td></tr>`).join('')}</tbody></table>`}
 function iniJogoHTML(pg){if(pg===undefined)return '<div class="pb"><span class="ini-skel"></span></div>';if(!pg||!pg.ligado)return '';
   if(EU&&EU.papel==='leitura')return `<div class="pb"><p class="ini-nota">Nível e conquistas são de quem edita o painel. A meta da semana, no alto, é da equipe toda.</p></div>${iniEquipeHTML(pg)}`;

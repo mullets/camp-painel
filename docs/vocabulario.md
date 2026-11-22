@@ -375,7 +375,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Home em três partes: Ação, Operação e Resultados (CAMP-HOME-UX, documento do Rafael de 22/11/2026)
 - A barra do topo (busca, área da página, clima, tarefas, estado das máquinas, menu da pessoa) e a faixa do sistema **não mudam**; o menu lateral também não.
 - **Cabeçalho**: a foto (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data; à direita o cartão **Meta da semana** ("**N%**",
-  "**N de M pontos validados da equipe**", barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
+  "**Meta da semana · equipe**", "**N de M pontos validados**", barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
 - **Indicadores**: os mesmos 4; todos são botões; o "**?**" e a dica "**Como conta:** …" dizem a regra da contagem. **folhas conferidas hoje**
   leva ao gráfico de Resultados.
 - **O que fazer agora**: abas **Minha fila** (o que está com você: atribuído, pego por você, ou problema que você relatou) · **Todos** ·
