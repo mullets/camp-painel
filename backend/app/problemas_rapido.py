@@ -10,7 +10,7 @@ Rafael, olhando a Central com os dados reais: "Decisões simples e rápidas pode
   (`home_trabalho.eventos_validados`, recontados do estado: desfez, o ponto some). O efeito na folha usa o código que já existia: "É deste
   projeto" (`rotas_revisao.deste_projeto`), marcar cópia (`rotas_mesclar.marcar_duplicata_em`), desmarcar (`liberar_bloqueios_de_duplicata`),
   editar a folha (`rotas_itens.editar_item`) e **mover pela rota de mover de sempre** (`rotas_mesclar.mover_itens`, só admin, com simulação antes).
-- **Desfazer** (10 s na tela, 30 min no servidor): o mesmo `erro_desfazer` das ações em massa (só quem fez ou um admin, uma vez). Guarda o
+- **Desfazer** (8 s no aviso da tela, 30 min no servidor): o mesmo `erro_desfazer` das ações em massa (só quem fez ou um admin, uma vez). Guarda o
   problema (situação, fase, conclusão), os campos da folha que a ação mudou e a devolução criada; o mover volta pela mesma rota de mover
   (simulação primeiro) e o problema reabre seguindo a folha.
 - **Tipos sensíveis** (autoria, crédito e, com a revisão por outra pessoa ligada, os tipos dela) não têm resolução rápida: só o painel.

@@ -10590,7 +10590,7 @@ function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.se
 /* ===== CAMP-PROB-RAPIDO (22/11/2026). Rafael: "Decisões simples e rápidas podem ser clicks aí mesmo para resolver, não?"
    Na linha: "Folha pode ser de outro projeto" (É deste projeto · Mover para <sugerido> · Escolher outro projeto… · Abrir), duplicata (É a mesma
    folha · São diferentes), dado simples (campo + Salvar) e "Não é problema…" (motivo pronto). Cada uma resolve pelo fluxo da Central (conclusão do
-   modelo de decisão, a ação como justificativa, quem e quando, pontos da Home) e deixa o Desfazer por 10 s; a linha sai e os números se acertam
+   modelo de decisão, a ação como justificativa, quem e quando, pontos da Home) e deixa o Desfazer no aviso (8 s, o teto do UX-22); a linha sai e os números se acertam
    sem recarregar a lista. Mover vai pela rota de mover de sempre (admin), com simulação antes. Grupos: o mesmo projeto + o mesmo tipo numa linha.
    "Resolver em sequência": um por vez, teclas 1/2/3, J/K pula, Esc sai. Servidor: backend/app/problemas_rapido.py. */
 const CP_NAO_MOTIVOS=[['sem_efeito','O aviso não muda nada na folha'],['ja_certo','A folha já está certa'],['repetido','É o mesmo caso de outro problema já tratado']];
