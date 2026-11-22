@@ -2130,7 +2130,8 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-hdr h1{white-space:nowrap}
 .cp-lateral{display:flex;flex-direction:column;gap:14px;min-width:0}
 .cp-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;vertical-align:-3px}
-.cp-cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.cp-cartoes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@container (max-width:600px){.cp-cartoes{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
 .cp-cartao{display:grid;grid-template-columns:1fr auto;grid-template-areas:"n ic" "rot rot";align-items:center;align-content:start;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .cp-cartao:hover{border-color:var(--blue)}
 .cp-cartao:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -2169,7 +2170,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
 .cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
 .cp-lista{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
-.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:12px 14px 12px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
+.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
 .cp-linha:hover{border-color:var(--blue)}
 .cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
 .cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -2180,7 +2181,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .sev-critico .cp-sev-ic{background:var(--surface);color:var(--red);box-shadow:0 0 0 2px var(--red-soft)}
 .sev-medio .cp-sev-ic{background:var(--amber-soft);color:var(--amber)}
 .sev-baixo .cp-sev-ic{background:var(--blue-soft);color:var(--blue);font-family:Georgia,serif}
-.cp-corpo{min-width:0;display:flex;flex-direction:column;gap:4px}
+.cp-corpo{min-width:0;display:flex;flex-direction:column;gap:3px}
 .cp-tit b{font-size:var(--fs-body)}
 .cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
 .cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2190,7 +2191,10 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-meta{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2)}
 .cp-chip-cod,.cp-chip-tipo{border:1px solid var(--line2);border-radius:var(--r-pill);padding:1px 10px;background:var(--surface);font-size:var(--fs-2xs);color:var(--ink);text-decoration:none}
 a.cp-chip-cod:hover{border-color:var(--blue)}
-.cp-razao{font-size:var(--fs-2xs);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-razao{font-size:var(--fs-2xs);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0;min-width:90px}
+.cp-meta{flex-wrap:nowrap}
+.cp-meta>*:not(.cp-razao){flex:0 0 auto;white-space:nowrap}
+@container (max-width:560px){.cp-meta{flex-wrap:wrap}}
 .cp-quando{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-2xs);color:var(--ink2);min-width:0}
 .cp-quando>span{display:flex;gap:6px;align-items:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cp-quando .cp-ic{width:15px;height:15px;color:var(--ink3)}
@@ -10178,8 +10182,7 @@ function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.se
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(e.titulo)}</b> <small class="cp-id">nº ${escHtml(e.id)}</small></div>
       <div class="cp-ctx">${ctxTit}${ctxTit?' · ':''}<span class="cp-desc">${escHtml(e.descricao)}</span></div>
       ${e.resolvido_sozinho&&ab?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}
-      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div>
-      ${ab&&pr.razao?`<div class="cp-razao" title="Nota ${escHtml(pr.nota)} de 100">${escHtml(pr.razao)}</div>`:''}</div>
+      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml(pr.razao+' (nota '+pr.nota+' de 100)')}">${escHtml(pr.razao)}</span>`:''}</div></div>
     <div class="cp-quando"><span>${cpIc('cal')}${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span><span>${cpIc('pessoa')}${resp}</span></div>
     <span class="cp-sev-tag">${escHtml(e.severidade_rotulo)}</span>
     <div class="cp-acoes"><button type="button" class="btn sm ${pri?'pri ':''}cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
