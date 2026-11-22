@@ -2077,9 +2077,9 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 
 /* CAMP-PROB-UX (22/11/2026): Central de Problemas. O topo, a faixa do sistema e o menu não mudam. */
 .cp-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:var(--gap-card);align-items:start}
-.cp-principal{min-width:0;display:flex;flex-direction:column;gap:var(--sp-4,16px)}
+.cp-principal{min-width:0;display:flex;flex-direction:column;gap:var(--sp-4,16px);container-type:inline-size}
 .cp-lateral{display:flex;flex-direction:column;gap:var(--sp-4,16px);min-width:0}
-.cp-cartoes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.cp-cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:12px}
 .cp-cartao{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit;min-width:0}
 .cp-cartao:hover,.cp-c-abrir:hover{border-color:var(--blue)}
 .cp-cartao:focus-visible,.cp-c-abrir:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -2206,7 +2206,17 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-modelo{border:1px solid var(--line);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:6px;margin:6px 0}
 .cp-modelo.off{opacity:.6}
 .cp-fundos td,.cp-fundos th{white-space:nowrap}
-@media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}.cp-cartoes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
+.with-drawer .cp-layout{grid-template-columns:minmax(0,1fr)}
+.with-drawer .cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+@container (max-width:560px){
+  .cp-linha{grid-template-columns:22px minmax(0,1fr);padding:12px 10px 12px 8px}
+  .cp-linha .cp-sel{grid-column:1;grid-row:1}
+  .cp-linha .cp-sev-ic{grid-column:1;grid-row:2}
+  .cp-linha .cp-corpo{grid-column:2;grid-row:1/3}
+  .cp-linha .cp-acoes{grid-column:1/-1;flex-direction:row;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+  .cp-graficos{grid-template-columns:minmax(0,1fr)}
+}
 @media (max-width:720px){
   .cp-cartoes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cp-c-res{grid-column:1/-1}

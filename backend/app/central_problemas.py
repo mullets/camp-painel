@@ -377,9 +377,10 @@ def resumo(con, f: Filtros, u: dict) -> dict:
         w, p = _where(ff, u, esc)
         abas[a] = _conta(con, w, p)
     chips = {}
-    base = f.model_copy(update={"chip": None})
-    for c in ("critico", "sem_responsavel", "minha_revisao", "antigos", "rapidos", "avisos"):
-        w, p = _where(base.model_copy(update={"chip": c}), u, esc)
+    ativos = [x.strip() for x in (f.chip or "").split(",") if x.strip() and x.strip() != "talvez"]
+    base = f.model_copy(update={"chip": ",".join(ativos) or None})
+    for c in ("critico", "sem_responsavel", "minha_revisao", "antigos", "rapidos", "avisos"):   # quantos ficam se este filtro rápido entrar junto dos ativos
+        w, p = _where(base.model_copy(update={"chip": ",".join(dict.fromkeys(ativos + [c]))}), u, esc)
         chips[c] = _conta(con, w, p)
     w, p = _where(base, u, esc)
     if base.aba != "concluidos":
