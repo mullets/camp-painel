@@ -69,7 +69,7 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     const d99 = (await api('/api/erros?situacao=todos&q=D00099')).json[0];
     chk(d99 && d99.situacao === 'corrigido' && /^Resolvido sozinho: Um admin devolveu/.test(d99.resolucao || ''), '... e ficou registrada como "Resolvido sozinho" com o porquê');
     const d77 = (await api('/api/problemas?aba=concluidos&q=D00077')).json.itens[0];
-    chk(d77 && d77.resolvido_pelo_sistema && /não existe mais/.test(d77.resolucao || '') && (await page.$('[data-cp-chip="talvez"]')), 'a folha que não existe mais fecha sozinha ("pelo sistema", em Concluídos); o que só TALVEZ está resolvido tem o filtro "Podem já estar resolvidos"');
+    chk(d77 && d77.resolvido_pelo_sistema && /não existe mais/.test(d77.resolucao || '') && (await page.evaluate(() => CP_CHIPS.some(c => c[0] === 'talvez'))), 'a folha que não existe mais fecha sozinha ("pelo sistema", em Concluídos); o que só TALVEZ está resolvido tem o filtro "Podem já estar resolvidos"');
     await linha('D00005').locator('.cp-cta').click(); await page.waitForSelector('#d-body .cp-ident');
     chk(/Abra a folha e use Virar/.test(await page.textContent('#d-body')) && (await page.locator('#d-body button.err-acao').count()) === 1 && /Abrir a folha para girar/.test(await page.textContent('#d-body button.err-acao')), 'o painel diz o que fazer e tem UM botão que resolve ("Abrir a folha para girar")');
     await page.keyboard.press('Escape'); await page.waitForTimeout(300);

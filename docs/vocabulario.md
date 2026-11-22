@@ -223,7 +223,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   "**N itens precisam de análise, conferência ou decisão.**"
 - Cartões (como no mockup: número, ícone à direita, rótulo): **Problemas em aberto** (a dica diz "N pedem ação · N avisos"), **Críticos**,
   **Em análise**, **Aguardando conferência** (= fase Aguardando revisão), **Resolvidos (30 dias)**. Cada cartão abre a lista filtrada.
-- Abas (pílulas, a ativa cheia de azul, com a contagem entre parênteses): **Prioridades** · **Minha fila** · **Todos** · **Concluídos**. Filtros rápidos: **Críticos**, **Sem responsável**, **Aguardando minha
+- Abas (sublinhado azul na ativa e a contagem num selo, como as abas das listas; CAMP-PROB-REAL): **Prioridades** · **Minha fila** · **Todos** · **Concluídos**. Filtros rápidos: **Críticos**, **Sem responsável**, **Aguardando minha
   revisão**, **Mais antigos**, **Resolvíveis agora**, **Avisos**, **Podem já estar resolvidos**. Botões **Filtros** (gaveta no celular:
   **Fechar**, **Ver resultados**), **Limpar filtros**, **Salvar visão**, **Visões salvas (N)**, **Apagar esta visão**, **Ordenar por**
   (**Prioridade**, **Mais recentes**, **Mais antigos**, **Mexidos por último**), **Por página**, "**Mostrando X–Y de N problemas**", páginas numeradas com ← →.
@@ -275,6 +275,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   Embaixo: **Ignorados** ("Escondidos por você por 7 dias e os fechados como “não era problema” nos últimos 30 dias…") e **Possíveis projetos
   duplicados** ("N pares de projetos do mesmo fundo com nome parecido, para conferir sem pressa…"). Atividade: **Resolvido na conferência**,
   **Passou a aviso**, **Ação desfeita**, **Mensagem repetida juntada**, **Reaberto sozinho**, **Seguiu a folha**; "resolveu na lista: É deste projeto".
+- **Com os dados reais** (CAMP-PROB-REAL, 22/11/2026): folha retirada pelo CAMP Vision: **É deste projeto** e **É de outro projeto (fica fora)**; no grupo,
+  **Todas são de outro projeto (ficam fora)** ("As N folhas são de outro projeto? Elas continuam fora de <projeto> e do site…", **Sim, ficam fora deste
+  projeto**); o código diz "(fora do painel)"; "Não dá para mover: esta folha ainda não entrou no painel (o CAMP Vision a deixou fora do lote)" (no grupo,
+  "estas folhas ainda não entraram"); sem decisão: "**Por que não tem decisão rápida:** …". Filtro rápido com 0 não aparece (o ativo sempre aparece).
 
 ## Regras de texto
 - **Tom sério e profissional** (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): nada de nível,

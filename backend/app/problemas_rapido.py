@@ -42,14 +42,20 @@ MODELO = {
     "mesma_folha": ("duplicata", "Marcada como cópia", "A folha foi marcada como cópia da original; só a original vai ao site."),
     "diferentes": ("duplicata", "Não é repetida", "Conferido lado a lado: as folhas são diferentes."),
     "metadado": ("metadado", "Dado corrigido", "O dado foi corrigido conforme o documento."),
+    # CAMP-PROB-REAL: a folha que o CAMP Vision deixou fora do lote é mesmo de outro projeto (o mesmo "É de outro projeto…" da página do projeto)
+    "fica_fora": ("projeto_errado", "Fica fora deste projeto", "Conferido: a folha é de outro projeto e fica fora deste (a retirada do CAMP Vision está certa). "
+                  "Para levá-la ao projeto certo, o CAMP Vision precisa reidentificar o lote."),
 }
 MOTIVOS_NAO = {"sem_efeito": "Conferido na lista: o aviso não muda nada na folha.",
                "ja_certo": "Conferido na lista: a folha já está certa.",
                "repetido": "Conferido na lista: é o mesmo caso de outro problema já tratado."}
 ROTULO_ACAO = {"deste_projeto": "É deste projeto", "mover": "Mover para outro projeto", "mesma_folha": "É a mesma folha",
-               "diferentes": "São diferentes", "metadado": "Salvar o dado", "nao_e_problema": "Não é problema"}
+               "diferentes": "São diferentes", "metadado": "Salvar o dado", "nao_e_problema": "Não é problema", "fica_fora": "É de outro projeto (fica fora)"}
 CAMPOS = {"ano_folha": "Ano da folha", "titulo": "Título da folha"}
-ACOES = ("deste_projeto", "mesma_folha", "diferentes", "metadado", "nao_e_problema")
+ACOES = ("deste_projeto", "mesma_folha", "diferentes", "metadado", "nao_e_problema", "fica_fora")
+_DOC = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-8]|S99)-D(\d{4,6})$")     # o mesmo CODIGO_DOCUMENTO do importador
+MINI_LADO = 240
+MOVER_FORA = "não dá para mover: esta folha ainda não entrou no painel (o CAMP Vision a deixou fora do lote)"
 _CARIMBO = re.compile(r"carimbo diz\s*:?\s*[\"'“‘«]([^\"'”’»]{2,160})", re.I)
 _FOLHA = re.compile(r"\bF\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}\b")
 
@@ -84,7 +90,7 @@ def tipo_rapido(x: dict) -> str | None:
     from .importador_lote import fala_de_projeto_divergente
     cat = x.get("categoria")
     if cat == "projeto_errado" or (x.get("origem") == "campvision" and fala_de_projeto_divergente(x.get("descricao"))):
-        if x.get("folha") and (x.get("folha_existe") or x.get("tipo") == "retirada"):
+        if x.get("folha") and (x.get("folha_existe") or fora_do_painel(x)):
             return "outro_projeto"
         return None
     if cat == "duplicata" and x.get("folha_existe"):
@@ -92,6 +98,17 @@ def tipo_rapido(x: dict) -> str | None:
     if cat == "metadado" and x.get("folha_existe") and campo_metadado(x.get("descricao")):
         return "metadado"
     return None
+
+
+def fora_do_painel(x: dict) -> bool:
+    """CAMP-PROB-REAL: a folha que o CAMP Vision RETIROU do lote ("fora da publicação até decisão") não está na tabela de folhas. Na produção ela
+    tem DOIS problemas abertos: o da retirada (chave campvision:retirado:<folha>, 'corrigir') e o do erros.json (código = a folha, 'bloqueia',
+    chave campvision:erros:…). Antes só o primeiro tinha ação: o filtro Críticos mostrava só o segundo, sem nenhum botão. "É deste projeto"
+    vale para os dois (`rotas_revisao._deste_projeto_retirada` procura por código OU chave)."""
+    f = x.get("folha")
+    if not f or x.get("folha_existe") or x.get("folha_atual") or not _DOC.match(str(f)):
+        return False
+    return x.get("tipo") == "retirada" or x.get("origem") == "campvision"
 
 
 def motivo_sensivel(con, categoria: str) -> str | None:
@@ -102,21 +119,50 @@ def motivo_sensivel(con, categoria: str) -> str | None:
     return None
 
 
-def miniaturas(con, folhas) -> dict:
-    """A prévia de cada folha, com a MESMA regra do painel do problema (só quando há imagem: prévia do CAMP Vision ou a do site)."""
+def url_previa(codigo: str, item=None, lado: int = 0) -> str | None:
+    """CAMP-PROB-REAL: a imagem da folha pela MESMA rota que o resto do painel usa (`GET /api/itens/{c}/previa`: a prévia do CAMP Vision em
+    _campvision/preview, o JPG da folha no QNAP (`arquivo_jpg`) ou, para a folha retirada que não está no painel, a prévia do pacote / o JPG
+    da pasta do lote). Antes só havia URL com `pendencias.previa` preenchido ou `arquivo_jpg` http(s): na produção `arquivo_jpg` é caminho
+    do QNAP e a prévia muitas vezes vem vazia, então TODA miniatura era "sem imagem". Não abre arquivo nenhum aqui (nada de QNAP na listagem):
+    None só quando é certo que não há imagem (folha no painel sem prévia e sem JPG); o resto a tela mostra e, se a rota não achar, o aviso neutro."""
+    if not codigo:
+        return None
+    q = (f"?t={lado}&q=1" if lado else "?q=1")    # q=1: sem imagem, a rota responde 204 (a tela esconde a figura ou mostra "sem imagem"; sem 404 no console)
+    if item is None:
+        return f"/api/itens/{codigo}/previa{q}" if _DOC.match(str(codigo)) else None
+    try:
+        pend = json.loads(item["pendencias"] or "{}") if isinstance(item["pendencias"], str) else {}
+    except ValueError:
+        pend = {}
+    pend = pend if isinstance(pend, dict) else {}
+    jpg = str(item["arquivo_jpg"] or "")
+    if not pend.get("previa") and jpg.startswith(("http://", "https://")):
+        return jpg
+    if pend.get("previa") or jpg:
+        return f"/api/itens/{codigo}/previa{q}"
+    from .importador_lote import fala_de_projeto_divergente
+    if any(fala_de_projeto_divergente(t) for k in ("sinais", "bloqueios") for t in (pend.get(k) or []) if isinstance(pend.get(k), list)):
+        return f"/api/itens/{codigo}/previa{q}"     # a rota procura a imagem na pasta do lote (CAMP-069)
+    return None
+
+
+def miniaturas(con, folhas, lado: int = MINI_LADO) -> dict:
+    """A miniatura de cada folha (`url_previa`): as que estão no painel e as que o CAMP Vision deixou fora do lote."""
     out = {}
     folhas = [f for f in dict.fromkeys(folhas) if f]
+    achadas = set()
     for i in range(0, len(folhas), 400):
         parte = folhas[i:i + 400]
         for r in con.execute(f"SELECT codigo, arquivo_jpg, pendencias FROM item WHERE codigo IN ({','.join('?' * len(parte))})", parte):
-            try:
-                pend = json.loads(r["pendencias"] or "{}") if isinstance(r["pendencias"], str) else {}
-            except ValueError:
-                pend = {}
-            if isinstance(pend, dict) and pend.get("previa"):
-                out[r["codigo"]] = f"/api/itens/{r['codigo']}/previa"
-            elif str(r["arquivo_jpg"] or "").startswith(("http://", "https://")):
-                out[r["codigo"]] = r["arquivo_jpg"]
+            achadas.add(r["codigo"])
+            u = url_previa(r["codigo"], r, lado)
+            if u:
+                out[r["codigo"]] = u
+    for f in folhas:
+        if f not in achadas:
+            u = url_previa(f, None, lado)
+            if u:
+                out[f] = u
     return out
 
 
@@ -159,22 +205,25 @@ def anotar(con, itens: list[dict], u: dict, sug: _Sugestoes | None = None) -> No
     papel = u.get("papel")
     pode, admin = papel in ("operador", "admin", "master"), papel in ("admin", "master")
     sug = sug or _Sugestoes(con)
-    mini = miniaturas(con, [x.get("folha") for x in itens if x.get("folha") and x.get("folha_existe")])
+    mini = miniaturas(con, [x.get("folha") for x in itens if x.get("folha") and (x.get("folha_existe") or fora_do_painel(x))])
     dups = {}
     fl = [x["folha"] for x in itens if x.get("categoria") == "duplicata" and x.get("folha_existe")]
     if fl:
         dups = {r[0]: r[1] for r in con.execute(f"SELECT codigo, duplicata_de FROM item WHERE codigo IN ({','.join('?' * len(fl))})", fl)}
     for x in itens:
         x["miniatura"] = mini.get(x.get("folha"))
+        x["rapido_motivo"] = None
         if not x.get("aberto"):
             x["rapido"] = None
             continue
         sens = motivo_sensivel(con, x.get("categoria"))
         if sens:
             x["rapido"] = {"sensivel": True, "motivo": sens, "acoes": [], "nao_e_problema": False}
+            x["rapido_motivo"] = sens
             continue
         if x.get("fase") not in FASES_RAPIDAS:
             x["rapido"] = None
+            x["rapido_motivo"] = f"Está em “{x.get('fase_rotulo') or x.get('fase')}”: continue pelo painel ({x.get('cta') or 'Continuar'})."
             continue
         t = tipo_rapido(x)
         r = {"tipo": t, "acoes": [], "nao_e_problema": pode}
@@ -184,7 +233,13 @@ def anotar(con, itens: list[dict], u: dict, sug: _Sugestoes | None = None) -> No
             if x.get("folha_existe"):
                 if admin:
                     r["acoes"] += ["mover", "escolher"]
+                else:
+                    r["mover_porque_nao"] = "mover a folha para outro projeto é com um admin"
                 r["sugestao"] = sug(x.get("fundo_codigo"), x.get("projeto_codigo"), car)
+            else:          # CAMP-PROB-REAL: retirada pelo CAMP Vision, fora do painel: devolver ao lote ou deixar fora (mover não existe para ela)
+                r["fora_do_painel"] = True
+                r["acoes"] += ["fica_fora"]
+                r["mover_porque_nao"] = MOVER_FORA
         elif t == "duplicata":
             orig = dups.get(x["folha"])
             if not orig:
@@ -198,6 +253,30 @@ def anotar(con, itens: list[dict], u: dict, sug: _Sugestoes | None = None) -> No
         if not pode:
             r["acoes"], r["nao_e_problema"] = [], False
         x["rapido"] = r
+        if not r["acoes"]:
+            x["rapido_motivo"] = por_que_sem_acao(x, t, pode)
+
+
+def por_que_sem_acao(x: dict, t: str | None, pode: bool) -> str:
+    """CAMP-PROB-REAL (diagnóstico): por que esta linha não tem decisão rápida. Nenhuma linha fica sem ação sem dizer por quê."""
+    if not pode:
+        return "Seu acesso é só de leitura: quem resolve é a equipe (operador ou admin)."
+    cat, f = x.get("categoria"), x.get("folha")
+    from .importador_lote import fala_de_projeto_divergente
+    if cat == "projeto_errado" or (x.get("origem") == "campvision" and fala_de_projeto_divergente(x.get("descricao"))):
+        if not f:
+            return "O problema é do projeto inteiro (não diz qual folha): abra o projeto e confira as folhas."
+        if x.get("folha_atual"):
+            return f"A folha mudou de código (agora é {x['folha_atual']}): abra o problema para conferir."
+        if not _DOC.match(str(f)):
+            return f"O código da folha ({f}) não está no formato do painel: abra o problema."
+        return "Esta folha não está no painel e não foi o CAMP Vision que a retirou: abra o problema para conferir."
+    if cat == "duplicata":
+        return "A folha não está no painel: abra o problema." if not x.get("folha_existe") else "Escolha no painel qual é a original."
+    if cat == "metadado" and x.get("folha_existe"):
+        return "O dado que falta não é ano nem título: abra o problema e corrija na folha."
+    rot = (x.get("tipo_rotulo") or "este tipo").lower()
+    return f"“{x.get('tipo_rotulo') or 'Este tipo'}” ainda não tem decisão rápida na lista: abra o problema (Analisar)." if rot else "Abra o problema (Analisar)."
 
 
 def agrupar_linhas(itens: list[dict], minimo: int = 2) -> list[dict]:
@@ -237,13 +316,25 @@ def rapido_do_grupo(g: dict, u: dict) -> None:
     """As ações do grupo inteiro (a partir das de cada membro): só "Folha pode ser de outro projeto" tem ação para todas; o resto, "Ver uma a uma"."""
     m = g["membros"]
     rs = [x.get("rapido") or {} for x in m]
+    g["miniaturas"] = [x.get("miniatura") for x in m[:8]]
     if all(r.get("tipo") == "outro_projeto" for r in rs) and rs:
-        acoes = [a for a in ("deste_projeto", "mover") if all(a in r.get("acoes", []) for r in rs)]
+        acoes = [a for a in ("deste_projeto", "fica_fora", "mover") if all(a in r.get("acoes", []) for r in rs)]
         sugs = {json.dumps(r.get("sugestao"), sort_keys=True) for r in rs}
-        g["rapido"] = {"tipo": "outro_projeto", "acoes": acoes, "sugestao": rs[0].get("sugestao") if len(sugs) == 1 else None,
-                       "carimbos": sorted({r.get("carimbo") for r in rs if r.get("carimbo")})[:5]}
+        fora = sum(1 for r in rs if r.get("fora_do_painel"))
+        nota = None
+        if "mover" not in acoes:   # CAMP-PROB-REAL: diz por que não há "Mover todas para…" (antes o grupo só tinha "Ver uma a uma")
+            nota = ("Não dá para mover: estas folhas ainda não entraram no painel (o CAMP Vision as deixou fora do lote)." if fora == len(rs) else
+                    f"Não dá para mover o grupo: {fora} das {len(rs)} folhas ainda não entraram no painel; mova uma a uma as que estão no painel." if fora else
+                    "Mover: " + (rs[0].get("mover_porque_nao") or "não vale para todas") + ".")
+        g["rapido"] = {"tipo": "outro_projeto", "acoes": acoes, "sugestao": rs[0].get("sugestao") if len(sugs) == 1 and "mover" in acoes else None,
+                       "carimbos": sorted({r.get("carimbo") for r in rs if r.get("carimbo")})[:5], "fora_do_painel": fora == len(rs), "nota": nota}
+        if not acoes:
+            g["rapido"]["motivo"] = next((x.get("rapido_motivo") for x in m if x.get("rapido_motivo")), "As folhas do grupo pedem decisões diferentes: veja uma a uma.")
     else:
-        g["rapido"] = {"tipo": None, "acoes": []}
+        sem = [x for x in m if not (x.get("rapido") or {}).get("acoes")]
+        mot = next((x.get("rapido_motivo") for x in sem if x.get("rapido_motivo")), None)
+        g["rapido"] = {"tipo": None, "acoes": [], "motivo": ("Sem decisão para o grupo inteiro: " + (mot or "cada problema pede a sua.")) if mot or sem else
+                       "Cada problema tem a sua decisão: veja uma a uma."}
 
 
 # ---------------- guardar o antes (para o Desfazer) ----------------
@@ -355,6 +446,18 @@ def _aplicar_um(con, x: dict, acao: str, d, u: dict, extras: list[dict]) -> None
             extras.append({"evento": {"entidade": "item", "codigo": folha, "tipo": "projeto_confirmado_desfeito",
                                       "detalhe": {"desfeito_por": "Desfazer da ação rápida", "erro": x["id"]}}})
         return
+    if acao == "fica_fora":
+        # o mesmo efeito do "É de outro projeto…" da página do projeto (fpOutro): a folha continua fora; os problemas do CAMP Vision sobre ela fecham
+        _resolver(con, x, acao, u, f" Fica fora de {x.get('projeto_codigo')}" + (f" · {x.get('projeto_titulo')}" if x.get("projeto_titulo") else "") + ".")
+        from .importador_lote import fala_de_projeto_divergente
+        texto, _tit = texto_modelo(con, acao)
+        for r in con.execute("""SELECT id, categoria, descricao, chave FROM erro WHERE origem='campvision' AND situacao IN ('aberto','em_correcao') AND id<>?
+                                AND (codigo=? OR chave=?)""", (x["id"], folha, f"campvision:retirado:{folha}")).fetchall():
+            if r["chave"] == f"campvision:retirado:{folha}" or r["categoria"] == "projeto_errado" or fala_de_projeto_divergente(r["descricao"]):
+                con.execute("""UPDATE erro SET situacao='corrigido', fase='resolvido', fase_em=datetime('now'), resolvido_em=datetime('now'), resolucao=?,
+                               fechado_por=?, motivo_pendencia=NULL WHERE id=?""", (f"É de outro projeto: {texto}"[:2000], u["email"], r["id"]))
+                cp._evento(con, r["id"], "fase", u["email"], {"de": None, "para": "resolvido", "rapido": acao, "junto_de": x["id"], "credito": u["email"]})
+        return
     if acao == "mesma_folha":
         orig = (x.get("rapido") or {}).get("original")
         _resolver(con, x, acao, u, f" Cópia de {orig}.")
@@ -421,7 +524,8 @@ def rota_rapida(d: Rapida, tarefas: BackgroundTasks, u: dict = Depends(auth.exig
                     _resolver(con, x, "metadado", u, f" {r.get('campo_rotulo')}: {extras[0]['metadado']['depois']}.")
                 else:
                     _aplicar_um(con, x, d.acao, d, u, extras)
-            antes = _entradas_erros(con, antes_e) + _entradas_itens(con, antes_i) + extras
+            entradas_e = _entradas_erros(con, antes_e)
+            antes = entradas_e + _entradas_itens(con, antes_i) + extras
             tok = _guardar(con, u["email"], d.acao, "corrigido" if d.acao != "nao_e_problema" else "ignorado", antes)
             con.commit()
         except Exception:
@@ -430,7 +534,9 @@ def rota_rapida(d: Rapida, tarefas: BackgroundTasks, u: dict = Depends(auth.exig
         n = len(validos)
         # curto e neutro (Rafael: "não quero que fique infantil o sistema, é algo bem sério"): "Resolvido." / "3 resolvidos."
         msg = ("Fechado: não é problema." if n == 1 else f"{n} fechados: não é problema.") if d.acao == "nao_e_problema" else ("Resolvido." if n == 1 else f"{n} resolvidos.")
-        return {"ok": True, "acao": d.acao, "resolvidos": [x["id"] for x in validos], "pulados": pulados, "desfazer": tok, "mensagem": msg}
+        # `fechados` (campo novo, opcional): todos os problemas que a ação fechou, inclusive os da mesma folha (a tela tira as linhas deles também)
+        return {"ok": True, "acao": d.acao, "resolvidos": [x["id"] for x in validos], "pulados": pulados, "desfazer": tok, "mensagem": msg,
+                "fechados": sorted({e["id"] for e in entradas_e if e.get("depois") not in ("aberto", "em_correcao")})}
     finally:
         con.close()
 
