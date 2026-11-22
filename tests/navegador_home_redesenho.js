@@ -8,6 +8,10 @@
 //  - sistemas: uma linha verde quando tudo está normal; o que falha aparece aberto;
 //  - nível e conquistas com "Ocultar conquistas"; nenhum quadro da equipe por padrão;
 //  - a barra do topo é a MESMA do main (marcação idêntica, mesmos ids); 390 px sem rolagem lateral; nenhum erro de JavaScript.
+// CAMP-HOME-UX maquete (22/11/2026, "tá faltando um monte de elemento"): a mesma Home no desenho da maquete do Rafael — "Entenda esta página"
+//  fechada numa linha; indicadores com ícone; linha da fila curta ("Há 19 dias", a frase da prioridade na dica); caminho em 7 cartões LADO A
+//  LADO com ✓ verde no que está zerado; coluna da direita na ordem da maquete (nível azul-marinho, 3 selos, sistemas com "Online", qualidade,
+//  donut do site, melhorias de hoje); visitas sem dados = aviso compacto.
 // Uso (servidor PRÓPRIO, porta 8931):
 //   CAMP_DB_PATH=/dev/shm/t/h.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/dev/shm/t/h.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8931)
@@ -66,7 +70,38 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
         princ: !!document.querySelector('.ini-col-princ [data-ini-parte="acao"]') && !!document.querySelector('.ini-col-princ [data-ini-parte="resultados"] #ini-ritmo'), lat: !!document.querySelector('.ini-lateral #ini-jogo') } });
     const crescente = a => a.every((v, i) => v >= 0 && (!i || a[i - 1] < v));
     chk(crescente([ordem.hello, ordem.meta, ordem.kpis, ordem.acao, ordem.op, ordem.res, ordem.ritmo]) && ordem.princ, `Ação → Operação → Resultados, nesta ordem, na coluna principal: ${JSON.stringify(ordem)}`);
-    chk(ordem.lat && crescente([ordem.jogo, ordem.qb, ordem.site, ordem.saude, ordem.mh, ordem.hoje]), 'coluna da direita: progresso, qualidade, publicação, sistemas, melhorias, hoje');
+    chk(ordem.lat && crescente([ordem.jogo, ordem.saude, ordem.qb, ordem.site, ordem.mh, ordem.hoje]), 'coluna da direita na ordem da maquete: progresso, sistemas, qualidade, publicação, melhorias, hoje');
+    // ---------- maquete: ajuda fechada, ícones, caminho horizontal, donut, selos, nível ----------
+    const mq = await P.evaluate(() => { const r = e => e.getBoundingClientRect(), aj = document.querySelector('#v-painel > .ajuda-caixa');
+      const passos = [...document.querySelectorAll('#ini-caminho .ini-step')].map(b => { const x = r(b); return [Math.round(x.top), Math.round(x.width)]; });
+      const nc = document.querySelector('#ini-jogo .ini-nivel-card');
+      return { aj: aj ? { rec: aj.classList.contains('ajuda-recolhida'), open: aj.open, alt: Math.round(r(aj).height) } : null,
+        icones: [...document.querySelectorAll('#v-painel .ini-kpi .ini-kpi-ic svg')].length, kpiTop: [...new Set([...document.querySelectorAll('#v-painel .ini-kpi')].map(k => Math.round(r(k).top)))].length,
+        passos, ok: [...document.querySelectorAll('#ini-caminho .ini-passo')].map(l => [l.classList.contains('zero'), !!l.querySelector('.ini-passo-ok svg')]),
+        donut: (() => { const d = document.querySelector('#ini-cobertura [data-cob="folhas"].ini-donut-row'); return d ? { pct: +d.dataset.pct, txt: d.querySelector('.ini-cob-pct').textContent, n: d.querySelector('.ini-cob-n').textContent, leg: [...d.querySelectorAll('.ini-donut-leg li')].map(x => x.textContent.trim()), arcos: d.querySelectorAll('circle.ini-donut-s').length } : null; })(),
+        selos: [...document.querySelectorAll('#ini-jogo .ini-selos .ini-selo')].map(x => x.textContent.trim().replace(/\s+/g, ' ')),
+        nivel: nc ? { fundo: getComputedStyle(nc).backgroundColor, txt: nc.innerText } : null,
+        mh: document.querySelector('#ini-melhorias #ini-mh-hoje') ? document.querySelector('#ini-melhorias #ini-mh-hoje').innerText : null,
+        ordemNaAba: !!document.querySelector('#ini-tarefas .ini-abas-linha #ini-ordem'),
+        abaAtiva: getComputedStyle(document.querySelector('#ini-tarefas .ini-abas [aria-pressed="true"]')).backgroundColor,
+        linhaAlt: Math.round(r(document.querySelector('#ini-lista .ini-task')).height), espera: (document.querySelector('#ini-lista .ini-task .ini-espera [aria-hidden]') || {}).textContent || '',
+        motivoVisivel: (() => { const m = document.querySelector('#ini-lista .ini-task .ini-prio-motivo,#ini-lista .ini-task .ini-motivo'); return m ? r(m).width > 2 : null; })() }; });
+    const pa0 = (await api(P, '/api/painel?fila=prioridade')).json, pg0 = (await api(P, '/api/painel/progresso')).json, ns0 = pa0.no_site.folhas;
+    chk(mq.aj && mq.aj.rec && !mq.aj.open && mq.aj.alt < 60, `"Entenda esta página" chega fechada numa linha (${JSON.stringify(mq.aj)})`);
+    chk(mq.icones === 4 && mq.kpiTop === 1, `4 indicadores com ícone, numa linha só (${mq.icones}, linhas ${mq.kpiTop})`);
+    chk(mq.passos.length === 7 && new Set(mq.passos.map(x => x[0])).size === 1 && Math.max(...mq.passos.map(x => x[1])) - Math.min(...mq.passos.map(x => x[1])) <= 2, `caminho HORIZONTAL: 7 cartões iguais na mesma linha ${JSON.stringify(mq.passos)}`);
+    chk(mq.ok.every(([z, ic]) => z === ic) && mq.ok.some(([z]) => z), `passo zerado tem o ✓ verde (e só ele) ${JSON.stringify(mq.ok)}`);
+    const pctEsp = 100 * ns0.no_ar / ns0.total;
+    chk(mq.donut && Math.abs(mq.donut.pct - pctEsp) < .01 && mq.donut.n.includes(`${ns0.no_ar.toLocaleString('pt-BR')} de ${ns0.total.toLocaleString('pt-BR')} folhas publicadas`) && mq.donut.leg.length === 3 && /^No site/.test(mq.donut.leg[0]) && /^Em preparo/.test(mq.donut.leg[1]) && /^A publicar/.test(mq.donut.leg[2])
+      && ns0.no_ar + ns0.a_publicar + ns0.em_preparo === ns0.total, `donut do site com o % e "N de M folhas publicadas" no meio e a legenda No site · Em preparo · A publicar ${JSON.stringify([mq.donut, ns0])}`);
+    const ct = pg0.eu.contagens;
+    chk(mq.selos.length === 3 && mq.selos[0].startsWith(String(ct.folha_conferida)) && mq.selos[1].startsWith(String(ct.lote_aprovado)) && mq.selos[2].startsWith(String(pg0.eu.dias_seguidos)) && /folhas? conferidas?/.test(mq.selos[0]) && /lotes? aprovados?/.test(mq.selos[1]),
+      `3 selos com os números de verdade do progresso ${JSON.stringify([mq.selos, ct, pg0.eu.dias_seguidos])}`);
+    chk(mq.nivel && mq.nivel.fundo !== 'rgba(0, 0, 0, 0)' && mq.nivel.fundo !== 'rgb(255, 255, 255)' && new RegExp(`Faltam ${pg0.eu.ate - pg0.eu.xp} XP para o nível ${pg0.eu.nivel + 1}`).test(mq.nivel.txt), `nível num cartão escuro, com "Faltam N XP para o nível N+1" ${JSON.stringify(mq.nivel)}`);
+    const fhoje = (pg0.hoje || {}).folha_conferida || 0;
+    chk(mq.mh !== null && (fhoje ? new RegExp(`${fhoje} folhas? conferidas?`).test(mq.mh) : /Nenhuma melhoria registrada hoje|edições? na base/.test(mq.mh)), `melhorias de hoje com o que a equipe fez hoje (${JSON.stringify(mq.mh)}, hoje=${fhoje})`);
+    chk(mq.ordemNaAba && mq.abaAtiva !== 'rgba(0, 0, 0, 0)', `"Ordenar" na linha das abas; a aba ativa tem fundo azul-claro (${mq.abaAtiva})`);
+    chk(mq.linhaAlt <= 80 && /^Há (menos de 1 h|\d+ h|\d+ dias)$/.test(mq.espera) && mq.motivoVisivel === false, `linha curta: "Há N dias" e a frase da prioridade na dica, não na linha (${mq.linhaAlt}px, "${mq.espera}")`);
     const acima = await P.evaluate(() => { const r = document.querySelector('[data-ini-parte="acao"] .ph').getBoundingClientRect(); return r.top < innerHeight; });
     chk(acima, '"O que fazer agora" começa acima da dobra (1366×900)');
 
@@ -130,26 +165,29 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     const saude = await P.evaluate(() => { const o = window.iniSaudeLinhas;
       window.iniSaudeLinhas = () => [{ id: 'qnap', nome: 'QNAP', c: 'g', frase: 'ok' }, { id: 'campvision', nome: 'CAMP Vision', c: 'g', frase: 'ok' }, { id: 'site', nome: 'Site público', c: 'g', frase: 'ok' }, { id: 'estacoes', nome: 'Estações de captura', c: 'g', frase: 'ok' }];
       PAINEL_EST = PAINEL_EST || {}; iniSaudeAtualizar(); const el = document.getElementById('ini-saude'), vis = [...el.querySelectorAll('.ini-srv')].filter(x => x.checkVisibility()).length;
-      const r1 = { ok: !!el.querySelector('.ini-saude-ok'), txt: (el.querySelector('.ini-saude-ok') || {}).textContent || '', vis, alt: Math.round(el.querySelector('.ini-saude-lista').getBoundingClientRect().height) };
+      const r1 = { vis, online: [...el.querySelectorAll('.ini-srv .ini-pill')].filter(x => x.textContent === 'Online').length, frases: [...el.querySelectorAll('.ini-srv-t p')].filter(x => x.getBoundingClientRect().width > 2).length, alt: Math.round(el.querySelector('.ini-saude-lista').getBoundingClientRect().height) };
       window.iniSaudeLinhas = () => [{ id: 'qnap', nome: 'QNAP', c: 'r', frase: 'desconectado' }, { id: 'site', nome: 'Site público', c: 'g', frase: 'ok' }];
-      iniSaudeAtualizar(); const r2 = { ok: !!el.querySelector('.ini-saude-ok'), vis: [...el.querySelectorAll('.ini-srv')].filter(x => x.checkVisibility()).map(x => x.dataset.srv) };
+      iniSaudeAtualizar(); const q = el.querySelector('.ini-srv[data-srv="qnap"]'); const r2 = { vis: [...el.querySelectorAll('.ini-srv')].filter(x => x.checkVisibility()).map(x => x.dataset.srv), frase: /desconectado/.test(q.innerText), pill: q.querySelector('.ini-pill').textContent };
       window.iniSaudeLinhas = o; iniSaudeAtualizar(); return { r1, r2 }; });
-    chk(saude.r1.ok && /Tudo funcionando · 4 sistemas normais/.test(saude.r1.txt) && saude.r1.vis === 0 && saude.r1.alt < 120, `tudo normal: UMA linha verde, a lista recolhida: ${JSON.stringify(saude.r1)}`);
-    chk(!saude.r2.ok && JSON.stringify(saude.r2.vis) === '["qnap"]', `com falha: só o que falha aparece aberto: ${JSON.stringify(saude.r2)}`);
+    chk(saude.r1.vis === 4 && saude.r1.online === 4 && saude.r1.frases === 0 && saude.r1.alt < 170, `tudo normal: uma linha por sistema com ✓ e "Online", sem frase (na dica): ${JSON.stringify(saude.r1)}`);
+    chk(JSON.stringify(saude.r2.vis) === '["qnap","site"]' && saude.r2.frase && saude.r2.pill === 'crítico', `com falha: o que falha vem primeiro, com o selo e a frase: ${JSON.stringify(saude.r2)}`);
 
     // ---------- progresso e conquistas ----------
     chk(/Meta da semana/.test(await P.innerText('#ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-meta')), 'meta coletiva da semana no alto ("de 100 pontos validados")');
     chk(/Nível 1/.test(await P.innerText('#ini-jogo')) && /XP/.test(await P.innerText('#ini-jogo')) && !(await P.$('#ini-jogo .ini-equipe')), 'nível pessoal com XP; nenhum quadro da equipe por padrão');
-    await P.click('#ini-jogo [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
+    await P.click('#ini-jogo .ini-conq-todas > summary'); await P.click('#ini-jogo [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
     chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !/Nível 1/.test(await P.innerText('#ini-jogo')), '"Ocultar conquistas" esconde o nível e as conquistas');
     await P.click('#ini-jogo [data-ini-conquistas="0"]'); await P.waitForTimeout(1200);
     chk(/Nível 1/.test(await P.innerText('#ini-jogo')), '"Mostrar de novo" traz de volta');
 
     // ---------- Resultados: período comum ----------
     const pedRitmo = []; P.on('request', r => { if (/\/api\/painel\/ritmo\?dias=30/.test(r.url())) pedRitmo.push(1); });
-    await P.click('#v-painel [data-ini-per="30"]'); await P.waitForTimeout(1500);
+    await P.selectOption('#ini-per', '30'); await P.waitForTimeout(1500);
     chk(pedRitmo.length >= 1 && /últimos 30 dias/.test(await P.innerText('#ini-t-ritmo')), 'o período dos Resultados (30 dias) muda o ritmo');
-    await P.click('#v-painel [data-ini-per="14"]'); await P.waitForTimeout(600);
+    await P.selectOption('#ini-per', '14'); await P.waitForTimeout(600);
+    // visitas sem dados do Google Analytics (semente): aviso compacto, não a caixa vermelha grande
+    const vis = await P.evaluate(() => { const v = document.querySelector('#ini-visitas .ini-vazio-c'); return v ? { alt: Math.round(v.getBoundingClientRect().height), t: v.innerText, tentar: !!v.querySelector('[data-vm-tentar]') } : null; });
+    chk(!vis || (vis.alt < 140 && /Dados de audiência temporariamente indisponíveis/.test(vis.t) && vis.tentar), `visitas indisponíveis: aviso compacto com "Tentar de novo" ${JSON.stringify(vis)}`);
 
     // ---------- teclado ----------
     await P.focus('#ini-tarefas [data-ini-aba="todos"]'); await P.keyboard.press('Tab');
