@@ -2431,6 +2431,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
 .cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-ctx .lnk{color:var(--ink2)}
+#d-body .cp-ctx,.cp-tri .cp-ctx{white-space:normal}   /* no painel o contexto quebra a linha; na lista fica numa linha só, com reticências */
 .cp-desc{overflow-wrap:anywhere}
 .cp-sep{color:var(--ink3);margin:0 2px}
 .cp-meta{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2)}
@@ -10425,7 +10426,7 @@ async function errVerRepetidos(){let s;try{s=await API('/api/erros/mesclar-repet
    lista: J desce, K sobe, Enter abre o item escolhido, I ignora o item escolhido (esconder por 7 dias, com Desfazer). Sem item
    escolhido com J/K, o I continua abrindo Arquitetos; conferindo uma folha (outra tela) R/K/Enter seguem sendo da revisão. */
 let KB_ATUAL=null;
-function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body [data-err-linha]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
+function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body [data-err-linha],#err-body [data-cp-grupo]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
 function kbMarcar(el){document.querySelectorAll('.kb-atual').forEach(x=>{if(x!==el)x.classList.remove('kb-atual')});KB_ATUAL=el;if(!el)return;el.classList.add('kb-atual');if(!el.hasAttribute('tabindex'))el.tabIndex=-1;el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'})}
 async function kbIgnorar(v,el){if(v==='painel'){const b=el.querySelector('[data-ini-adiar]');if(b)b.click();else toast('Este item não tem "Ignorar"');return}
   const id=+el.dataset.errLinha,e=ERR_LISTA.find(x=>x.id===id);if(!e)return;if(!ERR_ABERTO(e)){toast('Este problema já está fechado');return}
@@ -10438,8 +10439,8 @@ document.addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey||/INPU
   const L=kbLinhas(v),atual=KB_ATUAL&&L.includes(KB_ATUAL)?KB_ATUAL:null;
   if(k==='j'||k==='k'){if(!L.length)return;e.preventDefault();e.stopPropagation();const i=atual?L.indexOf(atual):-1;kbMarcar(L[k==='j'?Math.min(L.length-1,i+1):Math.max(0,i<0?0:i-1)]);return}
   if(!atual)return;   /* Enter/I sem item escolhido: o comportamento de sempre */
-  if(k==='Enter'){if(e.target!==atual&&e.target!==document.body)return;e.preventDefault();e.stopPropagation();if(v==='erros')abrirErro(+atual.dataset.errLinha);else{const b=atual.querySelector('[data-ini-acao]')||atual;b.click()}return}
-  if(k==='i'){e.preventDefault();e.stopPropagation();if(EU&&EU.papel==='leitura'){toast('Quem só vê não ignora itens');return}const prox=L[L.indexOf(atual)+1]||L[L.indexOf(atual)-1]||null;kbIgnorar(v,atual);KB_ATUAL=null;setTimeout(()=>{const L2=kbLinhas(v);if(L2.length)kbMarcar(prox&&L2.includes(prox)?prox:L2[Math.min(L2.length-1,Math.max(0,L.indexOf(atual)))])},900)}},true);
+  if(k==='Enter'){if(e.target!==atual&&e.target!==document.body)return;e.preventDefault();e.stopPropagation();if(v==='erros'){if(atual.dataset.cpGrupo)atual.querySelector('[data-cp-g="ver"]')?.click();else abrirErro(+atual.dataset.errLinha)}else{const b=atual.querySelector('[data-ini-acao]')||atual;b.click()}return}
+  if(k==='i'){e.preventDefault();e.stopPropagation();if(EU&&EU.papel==='leitura'){toast('Quem só vê não ignora itens');return}if(atual.dataset.cpGrupo){toast('Abra o grupo (Enter) e ignore um a um');return}const prox=L[L.indexOf(atual)+1]||L[L.indexOf(atual)-1]||null;kbIgnorar(v,atual);KB_ATUAL=null;setTimeout(()=>{const L2=kbLinhas(v);if(L2.length)kbMarcar(prox&&L2.includes(prox)?prox:L2[Math.min(L2.length-1,Math.max(0,L.indexOf(atual)))])},900)}},true);
 /* UX-03: Problemas › Ignorados (n): o que você escondeu por 7 dias (volta sozinho; "Mostrar de novo") e o que foi fechado como
    "não era problema" pelo Ignorar nos últimos 30 dias (quem, quando e por quê; "Reabrir"). Recolhido. */
 async function errCarregarIgnorados(){const el=document.getElementById('err-ignorados');if(!el)return;let d;try{d=await API('/api/erros/ignorados')}catch(_){el.hidden=true;return}
