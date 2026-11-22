@@ -221,17 +221,16 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Central de Problemas (CAMP-PROB-UX, 22/11/2026 — documento do Rafael "Redesenho da Central de Problemas")
 - O título da página continua **Problemas** (o nome do menu; o mockup dizia "Central de Problemas": a troca é decisão do Rafael). Subtítulo:
   "**N itens precisam de análise, conferência ou decisão.**"
-- Cartões: **Em aberto** ("N pedem ação · N avisos"), **Críticos** ("bloqueiam a publicação"), **Em análise** ("triagem, análise, aguardando
-  informação"), **Aguardando revisão** ("dependem de validação"), **Resolvidos hoje / em 7 dias / em 30 dias** (botões **Hoje**, **Semana**,
-  **30 dias**; "N pelo sistema (o painel conferiu)"). Cada cartão abre a lista filtrada.
-- Abas: **Prioridades** · **Minha fila** · **Todos** · **Concluídos**. Filtros rápidos: **Críticos**, **Sem responsável**, **Aguardando minha
+- Cartões (como no mockup: número, ícone à direita, rótulo): **Problemas em aberto** (a dica diz "N pedem ação · N avisos"), **Críticos**,
+  **Em análise**, **Aguardando conferência** (= fase Aguardando revisão), **Resolvidos (30 dias)**. Cada cartão abre a lista filtrada.
+- Abas (pílulas, a ativa cheia de azul, com a contagem entre parênteses): **Prioridades** · **Minha fila** · **Todos** · **Concluídos**. Filtros rápidos: **Críticos**, **Sem responsável**, **Aguardando minha
   revisão**, **Mais antigos**, **Resolvíveis agora**, **Avisos**, **Podem já estar resolvidos**. Botões **Filtros** (gaveta no celular:
   **Fechar**, **Ver resultados**), **Limpar filtros**, **Salvar visão**, **Visões salvas (N)**, **Apagar esta visão**, **Ordenar por**
-  (**Prioridade**, **Mais recentes**, **Mais antigos**, **Mexidos por último**), **Por página**, "**Mostrando X–Y de N**".
+  (**Prioridade**, **Mais recentes**, **Mais antigos**, **Mexidos por último**), **Por página**, "**Mostrando X–Y de N problemas**", páginas numeradas com ← →.
 - Severidade (sempre texto + cor + ícone): **Crítico** (!, vermelho; = "bloqueia"), **Médio** (▲, âmbar; = "corrigir"), **Baixo** (i, azul;
   = "aviso"). Severidade é o impacto; a **fase** é o andamento do trabalho — conceitos diferentes.
 - Fases: **Novo** → **Em triagem** → **Em análise** → **Aguardando revisão** → **Resolvido**, e **Aguardando informação**, **Devolvido**,
-  **Reaberto**, **Duplicado**, **Inválido**. Na linha: **Não atribuído**, "há N dias", o motivo da prioridade ("Crítico: bloqueia a
+  **Reaberto**, **Duplicado**, **Inválido**. Na linha: ícone de calendário com "há N dias", ícone de pessoa com o responsável ou **Sem responsável**, a pílula da severidade, **N problemas nesta folha** (UX-64), o motivo da prioridade ("Crítico: bloqueia a
   publicação · autoria conflitante", "aguardando revisão há N dias", "avisado por visitante do site", "projeto no site com este
   problema"), **resolução rápida**, **pelo sistema**. UMA ação: **Analisar** / **Continuar** / **Revisar** / **Ver**, e **⋯** (**Pegar para mim**,
   **Copiar link**, **Só este projeto**). O motivo é a frase da Home ("Prioridade alta porque impede a publicação e aguarda há N dias")
@@ -251,12 +250,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Mais ⋯**: **Contadores por fundo** ("A proporção é sobre as folhas já avaliadas…"; colunas **Abertos**, **Críticos**, **Folhas
   avaliadas**, **Avaliadas com problema**), **Modelos de decisão**, **Mensagens repetidas…**, **Limpeza geral…**. Lote: **Atribuir a**
   (**Ninguém (tirar)**) + **Atribuir**, **Selecionar os N desta página**.
-- Coluna da direita: **Seu progresso na resolução** (o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
+- Coluna da direita (começa no topo, ao lado do título): **Seu progresso na resolução** (selo hexagonal, **Ver metas**; o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
   **Mostrar de novo**, a mesma preferência da Home), **Meta da semana** (da equipe, "N de M pontos validados", a mesma da Home),
-  **Conquistas** (as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
+  **Conquistas recentes** (**Ver todas**; selos coloridos; as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
   **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (semana)** só com
   `jogo.ranking_equipe` ligado e sempre com "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém.",
-  **Atividade recente**. Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
+  **Atividade recente** (ícones: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
   pessoas, pelo sistema, novos).
 - Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, "ranking" ligado por padrão.
 

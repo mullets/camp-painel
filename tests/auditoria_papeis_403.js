@@ -14,7 +14,7 @@ const ESPERA=Number(process.env.ESPERA||1800);
 const SO_ADMIN=[['[onclick^="abrirNovoProjeto("]','"Novo projeto"'],['[onclick^="abrirCadastroArquiteto("]','"Cadastrar arquiteto"'],
   ['#proj-bulk [onclick^="acaoLoteProjetos"]','"Publicar/Voltar para rascunho" dos projetos selecionados'],['#proj-bulk [onclick^="autorizarEmLote"]','"Autorizar" dos projetos selecionados'],
   ['[onclick*="\'editar_projeto\'"]','"Preencher" (editar o projeto)'],['.ini-rodape[data-ini-rota="estacoes"]','"Ver estações e site"']];
-const SO_OPERADOR=[['#drawer [data-err-res]','os botões de resolver o problema'],['#drawer [data-sol-etapa]','as etapas clicáveis do pedido'],['#drawer [onclick^="salvarSolicitacao"]','"Salvar" do pedido']];
+const SO_OPERADOR=[['#drawer [data-cp-fase]','os botões de resolver o problema'],['#drawer [data-sol-etapa]','as etapas clicáveis do pedido'],['#drawer [onclick^="salvarSolicitacao"]','"Salvar" do pedido']];
 const PROIBIDOS={operador:SO_ADMIN,leitura:[...SO_ADMIN,...SO_OPERADOR]};
 const problems=[]; const okl=[];
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
