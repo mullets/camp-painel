@@ -58,6 +58,7 @@ MODOS_RAPIDOS |= {"amigo_duplicado"}   # CAMP-AMIGO-DUP 21/11/2026: e-mail repet
 MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doação paga com a doação de origem; Conferir Amigos das doações pagas (site falso; contrato 1.30, migração 240; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
+MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking desligado; migração 242; linha própria)
 
 MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking desligado (linha própria)
 
@@ -12229,6 +12230,192 @@ def filho(modo):
         ver("Problemas: menu = aba Abertos = 'sem filtro' (todos sem o que você escondeu)", (P.get("pedem_acao") or {}).get("problemas") == 2 and n.get("pedem_acao") == 2
             and (n.get("sem_filtro") or {}).get("pedem_acao") == 2, str({"menu": (P.get("pedem_acao") or {}).get("problemas"), "aba": n.get("pedem_acao"), "sem_filtro": n.get("sem_filtro")}))
         for l in res: print(l)
+    elif modo == "central_problemas":
+        # CAMP-PROB-UX (22/11/2026, documento do Rafael "Central de Problemas"): fases com campos obrigatórios, reabrir com justificativa,
+        # filtros combinados (Críticos + Sem responsável), contadores sem contar duas vezes, atribuição em lote (tudo ou nada, com a regra da
+        # Home: tarefa_responsavel), juntar duplicado preservando o histórico, pontos SÓ de resolução validada pelo sistema único da Home
+        # (recontados do estado: reabriu, some), ranking desligado por padrão, revisão por outra pessoa (desligada por padrão) e os problemas
+        # automáticos de antes continuando na lista e fechando sozinhos (pelo sistema).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Aflalo & Gasperini')")
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F098','Outro fundo')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Pauliceia',1970)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F098-P0001','F098',1,'Casa X',1980)")
+        for n_ in range(1, 6):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao) VALUES (?,?,?,?,?,'importado','conferida')",
+                      (f"F099-P0001-1970-S01-D0000{n_}", "F099-P0001", "S01", n_, f"f{n_}"))
+        F = lambda n_: f"F099-P0001-1970-S01-D0000{n_}"
+        def novo(g, cat, cod, desc, origem="operador", chave=None):
+            return c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,chave) VALUES (?,?,?,?,?,?)", (g, cat, origem, cod, desc, chave)).lastrowid
+        e_aut = novo("bloqueia", "autoria_divergente", F(1), "Aflalo & Gasperini ou Pilon & Gasperini?")
+        e_met = novo("corrigir", "metadado", F(2), "Documento sem data identificada")
+        e_av = novo("aviso", "orientacao", F(3), "Folha de lado")
+        e_crit2 = novo("bloqueia", "codigo", "F099-P0001", "Folhas sem numeração sequencial")
+        e_dup = novo("corrigir", "metadado", F(2), "Documento sem data (relatado de novo)")
+        e_x = novo("corrigir", "outro", "F098-P0001", "Outro fundo")
+        # automático de antes: a folha "retirada" pelo CAMP Vision que já entrou no painel (fecha sozinho) e uma retirada que continua aberta
+        e_auto_ok = novo("corrigir", "outro", F(4), "retirada pelo CAMP Vision", "campvision", f"campvision:retirado:{F(4)}")
+        e_auto_ab = novo("corrigir", "outro", "F099-P0001-1970-S01-D00099", "retirada pelo CAMP Vision", "campvision", "campvision:retirado:F099-P0001-1970-S01-D00099")
+        c.commit()
+        auth.criar_usuario("Ana", "ana@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Bia", "bia@camp.arq.br", "senha-operador-456", "operador", forcar_troca=False)
+        auth.criar_usuario("Leo", "leo@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        auth.criar_usuario("Ivo", "ivo@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        UID = {r[0]: r[1] for r in c.execute("SELECT email, id FROM usuario")}
+        def cli(email, senha):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": email, "senha": senha}); return x
+        ana, bia, leo, ivo = cli("ana@camp.arq.br", "senha-operador-123"), cli("bia@camp.arq.br", "senha-operador-456"), cli("leo@camp.arq.br", "senha-leitor-1234"), cli("ivo@camp.arq.br", "senha-admin-12345")
+        fase = lambda cl, i, **k: cl.post(f"/api/problemas/{i}/fase", json=k)
+        # 1) automáticos de antes: listados e fechados sozinhos, com "pelo sistema"
+        L = ana.get("/api/problemas?aba=todos&por_pagina=100").json()
+        ids = {x["id"] for x in L.get("itens", [])}
+        ver("lista: os problemas automáticos abertos de antes continuam na lista", e_auto_ab in ids and e_aut in ids, str(sorted(ids)))
+        r_ = c.execute("SELECT situacao, fechado_por FROM erro WHERE id=?", (e_auto_ok,)).fetchone()
+        ver("o automático que se resolveu fecha sozinho, gravado como resolvido pelo sistema", tuple(r_) == ("corrigido", "painel (automático)"), str(tuple(r_)))
+        C = ana.get("/api/problemas?aba=concluidos").json()
+        x_ = next((x for x in C.get("itens", []) if x["id"] == e_auto_ok), {})
+        ver("Concluídos mostra o automático com fase Resolvido e 'pelo sistema'", x_.get("fase") == "resolvido" and x_.get("resolvido_pelo_sistema") is True, str({k: x_.get(k) for k in ("fase", "resolvido_pelo_sistema")}))
+        R0 = ana.get("/api/problemas/resumo").json()
+        ver("cartão 'Resolvidos' conta o automático uma vez e diz quantos foram pelo sistema", R0["cartoes"]["resolvidos"]["mes"] == 1 and R0["cartoes"]["resolvidos_sistema_mes"] == 1, str(R0["cartoes"]))
+        ver("abas: Prioridades (sem avisos) + avisos = Todos; o número de Prioridades é o do menu", R0["abas"]["prioridades"] + R0["cartoes"]["avisos"] == R0["abas"]["todos"] == R0["cartoes"]["em_aberto"]
+            and ana.get("/api/pendencias").json().get("pedem_acao", {}).get("problemas") == R0["abas"]["prioridades"], str(R0["abas"]))
+        # 2) filtros combinados
+        ivo.post("/api/problemas/atribuir", json={"ids": [e_crit2], "usuario_id": UID["bia@camp.arq.br"]})
+        Lc = ana.get("/api/problemas?aba=todos&chip=critico,sem_responsavel&por_pagina=100").json()
+        ok_ = all(x["gravidade"] == "bloqueia" and not x.get("responsavel") for x in Lc["itens"])
+        ver("Críticos + Sem responsável: todos os resultados satisfazem os dois (e o crítico atribuído fica de fora)", ok_ and [x["id"] for x in Lc["itens"]] == [e_aut] and Lc["total"] == 1,
+            str([(x["id"], x["gravidade"], x.get("responsavel")) for x in Lc["itens"]]))
+        Rc = ana.get("/api/problemas/resumo?aba=todos&chip=critico").json()
+        ver("contagem do filtro rápido = o que fica se ele entrar junto dos ativos (Críticos + Sem responsável = 1)", Rc["chips"]["sem_responsavel"] == 1 and Rc["chips"]["critico"] == 2, str(Rc["chips"]))
+        Lq = ana.get("/api/problemas?aba=todos&q=gasperini").json()
+        ver("busca por arquiteto (nome do fundo) e por número", e_aut in [x["id"] for x in Lq["itens"]] and Lq["total"] == 6
+            and [x["id"] for x in ana.get(f"/api/problemas?aba=todos&q=%23{e_met}").json()["itens"]] == [e_met], str(Lq["total"]))
+        P1 = ana.get("/api/problemas?aba=prioridades").json()["itens"]
+        ver("Prioridades: a nota da Home (0–100) com o porquê; o que bloqueia primeiro", P1[0]["gravidade"] == "bloqueia" and P1[0]["prioridade"]["razao"].startswith("Prioridade") and "impede a publicação" in P1[0]["prioridade"]["razao"]
+            and 0 <= P1[0]["prioridade"]["nota"] <= 100 and P1[0]["prioridade"]["nota"] >= P1[-1]["prioridade"]["nota"], P1[0]["prioridade"]["razao"])
+        # 3) transições e campos obrigatórios
+        r1 = fase(ana, e_met, fase="resolvido")
+        r2 = fase(ana, e_met, fase="resolvido", conclusao="Data lida no carimbo")
+        ver("resolver sem conclusão ou sem evidência/justificativa é recusado (400) e nada muda", r1.status_code == 400 and r2.status_code == 400
+            and c.execute("SELECT situacao FROM erro WHERE id=?", (e_met,)).fetchone()[0] == "aberto", f"{r1.status_code} {r2.status_code} {r2.text[:90]}")
+        r3 = fase(ana, e_aut, fase="resolvido", conclusao="É Aflalo & Gasperini", justificativa="acho que é")
+        ver("autoria: justificativa não basta, pede fonte (nunca inventada)", r3.status_code == 400 and "fonte" in r3.text, r3.text[:120])
+        r4 = fase(ana, e_met, fase="resolvido", conclusao="Data lida no carimbo: 1971", justificativa="conferido no carimbo da prancha")
+        e_ = c.execute("SELECT situacao, fase, fechado_por, resolvido_em, resolucao FROM erro WHERE id=?", (e_met,)).fetchone()
+        ver("resolver com conclusão + justificativa: Resolvido, com quem e quando (situação antiga 'corrigido')", r4.status_code == 200 and e_["situacao"] == "corrigido" and e_["fase"] == "resolvido"
+            and e_["fechado_por"] == "ana@camp.arq.br" and e_["resolvido_em"] and e_["resolucao"].startswith("Data lida"), str(dict(e_)) + r4.text[:80])
+        r5 = fase(ana, e_met, fase="em_analise")
+        ver("transição que não existe (Resolvido → Em análise) é recusada (409)", r5.status_code == 409, r5.text[:90])
+        ana.post(f"/api/problemas/{e_aut}/evidencias", json={"valor": "Carimbo da prancha 3: AFLALO & GASPERINI", "hipotese": "Aflalo & Gasperini"})
+        ana.post(f"/api/problemas/{e_aut}/evidencias", json={"valor": "https://exemplo.org/revista-1972", "hipotese": "Pilon & Gasperini"})
+        D = ana.get(f"/api/problemas/{e_aut}").json()
+        ver("autoria: hipóteses e fontes lado a lado (agrupadas pela hipótese indicada)", sorted(h["hipotese"] for h in D.get("hipoteses", [])) == ["Aflalo & Gasperini", "Pilon & Gasperini"]
+            and {v["tipo"] for v in D["evidencias"]} == {"texto", "link"}, str(D.get("hipoteses"))[:200])
+        ver("pede o motivo para suspender (aguardando informação)", fase(ana, e_aut, fase="aguardando_informacao").status_code == 400
+            and fase(ana, e_aut, fase="aguardando_informacao", motivo="esperando a família confirmar").status_code == 200, "")
+        D2 = ana.get(f"/api/problemas/{e_aut}").json()
+        ver("Aguardando informação: situação antiga 'em_correcao' (continua aberto para o menu e a publicação)", D2["fase"] == "aguardando_informacao" and D2["situacao"] == "em_correcao"
+            and D2["motivo_pendencia"] == "esperando a família confirmar", str({k: D2[k] for k in ("fase", "situacao")}))
+        # 4) reabrir com justificativa; pontos só de resolução validada e estornados
+        pts = lambda cl: ((cl.get("/api/problemas/progresso").json().get("jogo") or {}).get("eu") or {}).get("xp", -1)   # o sistema único de pontos da Home
+        p_ana = pts(ana)
+        ver("resolução validada dá os pontos da Home (problema corrigido com a frase: 20)", p_ana == 20, str(p_ana))
+        r6 = fase(ana, e_met, fase="reaberto")
+        r7 = fase(ana, e_met, fase="reaberto", justificativa="a data estava errada, era 1972")
+        e_ = c.execute("SELECT situacao, fase, resolvido_em, fechado_por FROM erro WHERE id=?", (e_met,)).fetchone()
+        ver("reabrir sem justificativa é recusado; com justificativa volta a 'aberto' (fase Reaberto)", r6.status_code == 400 and r7.status_code == 200 and tuple(e_) == ("aberto", "reaberto", None, None), str(tuple(e_)))
+        ver("reabrir tira os pontos daquela resolução (a conta da Home é refeita do estado)", pts(ana) == 0, str(pts(ana)))
+        H = [h["tipo"] for h in ana.get(f"/api/problemas/{e_met}").json()["historico"]]
+        ver("histórico rastreável: resolver e reabrir ficam registrados", H.count("fase") >= 2, str(H))
+        fase(ana, e_met, fase="resolvido", conclusao="Data corrigida: 1972", justificativa="conferido de novo")
+        fase(ana, e_met, fase="resolvido", conclusao="de novo", justificativa="x" * 6)
+        ver("resolver de novo conta uma vez só (sem contar duas vezes)", pts(ana) == 20, str(pts(ana)))
+        R1 = ana.get("/api/problemas/resumo").json()
+        ver("contadores sem duplicação: resolver, reabrir e resolver de novo conta 1 resolvido", R1["cartoes"]["resolvidos"]["hoje"] == R0["cartoes"]["resolvidos"]["hoje"] + 1, str(R1["cartoes"]["resolvidos"]))
+        # UM sistema de pontos (o da Home): a rota antiga com a frase também vale; o sistema e "não era problema" não contam; reabrir tira
+        from app.home_trabalho import eventos_validados as _ev
+        ana.patch(f"/api/erros/{e_x}", json={"situacao": "corrigido", "resolucao": "fechado pela rota antiga"})
+        ana.post("/api/erros/lote", json={"ids": [e_dup], "situacao": "corrigido", "resolucao": "em massa"})
+        refs = {x["ref"] for x in _ev(c)}
+        ver("um só sistema de pontos: rota antiga com a frase conta; o fechado sozinho pelo sistema não", pts(ana) == 60 and f"erro:{e_auto_ok}" not in refs, f"{pts(ana)} {sorted(refs)}")
+        ana.patch(f"/api/erros/{e_dup}", json={"situacao": "aberto"})
+        ana.patch(f"/api/erros/{e_x}", json={"situacao": "aberto"})
+        ver("reabrir pela rota antiga também tira os pontos", pts(ana) == 20, str(pts(ana)))
+        ver("rota antiga deixa a fase coerente (deduzida da situação)", ana.get(f"/api/problemas/{e_x}").json()["fase"] == "novo", "")
+        # 5) atribuir em lote: tudo ou nada
+        dono = lambda i: (c.execute("SELECT usuario_id FROM tarefa_responsavel WHERE tarefa_id=?", (f"erro:{i}",)).fetchone() or [None])[0]
+        rb = ivo.post("/api/problemas/atribuir", json={"ids": [e_av, e_met], "usuario_id": UID["bia@camp.arq.br"]})
+        ver("atribuir em lote com um fechado: 409 e nenhum muda", rb.status_code == 409 and dono(e_av) is None, rb.text[:90])
+        rb2 = ivo.post("/api/problemas/atribuir", json={"ids": [e_av, e_dup], "usuario_id": UID["bia@camp.arq.br"]})
+        ver("atribuir em lote (admin): todos recebem na tarefa_responsavel da Home e cada um registra no histórico", rb2.status_code == 200 and rb2.json()["atualizados"] == 2
+            and dono(e_av) == dono(e_dup) == UID["bia@camp.arq.br"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='tarefa' AND tipo='tarefa_atribuida' AND codigo IN (?,?)", (f"erro:{e_av}", f"erro:{e_dup}")).fetchone()[0] == 2, rb2.text[:90])
+        ver("a regra da Home: operador não atribui a outra pessoa (403) nem pega o que está com outra (409, nada muda)", ana.post("/api/problemas/atribuir", json={"ids": [e_x], "usuario_id": UID["bia@camp.arq.br"]}).status_code == 403
+            and ana.post("/api/problemas/atribuir", json={"ids": [e_x, e_av], "usuario_id": UID["ana@camp.arq.br"]}).status_code == 409 and dono(e_x) is None, "")
+        ver("atribuir: leitura não pode (403); pessoa só de leitura não recebe (400)", leo.post("/api/problemas/atribuir", json={"ids": [e_av]}).status_code == 403
+            and ivo.post("/api/problemas/atribuir", json={"ids": [e_av], "usuario_id": UID["leo@camp.arq.br"]}).status_code == 400, "")
+        ver("Precisa de você e Problemas veem o mesmo responsável", ana.get(f"/api/problemas/{e_av}").json().get("responsavel_nome") == "Bia", "")
+        ver("Minha fila da Bia mostra só o que é dela", sorted(x["id"] for x in bia.get("/api/problemas?aba=minha_fila").json()["itens"]) == sorted([e_av, e_dup, e_crit2]), "")
+        # 6) duplicado: junta preservando o histórico
+        ana.post(f"/api/problemas/{e_dup}/evidencias", json={"valor": "Ficha do arquivo físico, caixa 12"})
+        rd = fase(ana, e_dup, fase="duplicado", referencia=e_met)
+        Dm = ana.get(f"/api/problemas/{e_met}").json()
+        dd = c.execute("SELECT situacao, fase, duplicado_de FROM erro WHERE id=?", (e_dup,)).fetchone()
+        ver("duplicado: o repetido vira Duplicado com a referência (situação antiga 'ignorado')", rd.status_code == 200 and tuple(dd) == ("ignorado", "duplicado", e_met), str(tuple(dd)) + rd.text[:80])
+        ver("duplicado: as evidências vão para o que fica (marcando de onde vieram) e o histórico dos dois aparece", any(v.get("origem_erro_id") == e_dup for v in Dm["evidencias"])
+            and any(h.get("do_duplicado") == e_dup for h in Dm["historico"]) and any(h["tipo"] == "recebeu_duplicado" for h in Dm["historico"]) and [d["id"] for d in Dm["duplicados"]] == [e_dup], "")
+        ver("duplicado de si mesmo é recusado", fase(ana, e_av, fase="duplicado", referencia=e_av).status_code == 400, "")
+        # 7) revisão por outra pessoa (desligada por padrão) e ranking (desligado por padrão)
+        ver("padrões: revisão por outra pessoa e ranking desligados", ana.get("/api/problemas/resumo").json()["revisao_outra_pessoa"] is False
+            and "equipe" not in ana.get("/api/problemas/progresso").json()["jogo"], "")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='problemas.revisao_outra_pessoa'"); c.commit()
+        ver("revisão ligada: a rota antiga também não fecha o tipo sensível (409)", ana.patch(f"/api/erros/{e_aut}", json={"situacao": "corrigido", "resolucao": "pela rota antiga"}).status_code == 409, "")
+        fase(ana, e_aut, fase="em_analise")
+        rr1 = fase(ana, e_aut, fase="resolvido", conclusao="É Aflalo & Gasperini, pelo carimbo")
+        rr2 = fase(ana, e_aut, fase="aguardando_revisao", conclusao="É Aflalo & Gasperini, pelo carimbo")
+        rr3 = fase(ana, e_aut, fase="resolvido")
+        ver("revisão ligada: autoria não se resolve direto (409); quem enviou não aprova a própria (409)", rr1.status_code == 409 and rr2.status_code == 200 and rr3.status_code == 409, f"{rr1.status_code} {rr2.status_code} {rr3.status_code}")
+        ver("aguardando revisão: aparece em 'Aguardando minha revisão' só para a outra pessoa", [x["id"] for x in bia.get("/api/problemas?aba=todos&chip=minha_revisao").json()["itens"]] == [e_aut]
+            and ana.get("/api/problemas?aba=todos&chip=minha_revisao").json()["total"] == 0, "")
+        p_ana0, p_bia0 = pts(ana), pts(bia)
+        rr4 = fase(bia, e_aut, fase="resolvido")
+        e_ = c.execute("SELECT situacao, revisado_por, fechado_por FROM erro WHERE id=?", (e_aut,)).fetchone()
+        ver("outra pessoa aprova: Resolvido, revisado por ela; os pontos (crítico: 30) vão para quem resolveu", rr4.status_code == 200 and tuple(e_) == ("corrigido", "bia@camp.arq.br", "bia@camp.arq.br")
+            and pts(ana) - p_ana0 == 30 and pts(bia) - p_bia0 == 0, f"{tuple(e_)} ana+{pts(ana) - p_ana0} bia+{pts(bia) - p_bia0}")
+        ver("a revisão conta na conquista Revisor cuidadoso de quem revisou", next(q for q in bia.get("/api/problemas/progresso").json()["conquistas_qualidade"] if q["chave"] == "revisor")["feito"] == 1, "")
+        ver("autoria resolvida tira a marca da folha (como a rota antiga)", c.execute("SELECT autoria_divergente FROM item WHERE codigo=?", (F(1),)).fetchone()[0] in (0, None), "")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='jogo.ranking_equipe'"); c.commit()
+        Pr = bia.get("/api/problemas/progresso").json()
+        ver("ranking (o quadro da Home) só quando ligado, com o aviso de que não serve para avaliar ninguém", [r["nome"] for r in Pr["jogo"].get("equipe", [])][:1] == ["Ana"] and "avaliar" in Pr["aviso_ranking"], str(Pr["jogo"].get("equipe")))
+        Pa = bia.get("/api/problemas/progresso").json()
+        ver("conquistas por qualidade (cinco, uma coletiva), sem pontos", {q["chave"] for q in Pa["conquistas_qualidade"]} == {"primeira", "investigador", "colaborador", "revisor", "fundo"}
+            and next(q for q in Pa["conquistas_qualidade"] if q["chave"] == "fundo")["coletiva"] is True, "")
+        ana.put("/api/auth/eu/preferencias", json={"chave": "conquistas.ocultar", "valor": "1"})
+        Po = ana.get("/api/problemas/progresso").json()
+        ver("quem oculta as conquistas (preferência da Home) não vê as da Central", Po["jogo"].get("oculto") is True and Po["conquistas_qualidade"] == [], "")
+        # 8) exportar e permissões
+        csv_l = leo.get("/api/problemas/exportar.csv?aba=todos").text
+        novo("corrigir", "outro", "F099-P0001", "um visitante viu", "site")
+        c.execute("UPDATE erro SET relatado_por='visitante@exemplo.com' WHERE descricao='um visitante viu'"); c.commit()
+        csv_l = leo.get("/api/problemas/exportar.csv?aba=todos").text
+        csv_a = ana.get("/api/problemas/exportar.csv?aba=todos").text
+        ver("CSV exporta tudo do filtro; quem só lê não recebe o e-mail do visitante", "visitante@exemplo.com" not in csv_l and "visitante@exemplo.com" in csv_a and csv_a.count("\n") - 1 == ana.get("/api/problemas/resumo?aba=todos").json()["abas"]["todos"], "")
+        ver("leitura não muda fase (403)", fase(leo, e_av, fase="em_analise").status_code == 403, "")
+        G = ana.get("/api/problemas/graficos").json()
+        ver("gráficos de dados reais: por tipo soma os abertos; 4 semanas", sum(t["n"] for t in G["por_tipo"]) == ana.get("/api/problemas/resumo").json()["cartoes"]["em_aberto"] and len(G["semanas"]) == 4, "")
+        PF = ana.get("/api/problemas/por-fundo").json()
+        f99 = next((x for x in PF if x["fundo"] == "F099"), {})
+        ver("contador por fundo: proporção sobre as folhas avaliadas", f99.get("folhas_avaliadas") == 5 and f99.get("proporcao") == round(f99.get("avaliadas_com_problema", 0) / 5, 4), str(f99))
+        for l in res: print(l)
     elif modo == "material_novo_filas":
         # Redesenho Material novo (documento do Rafael §5, §7, §12): /api/filas ganha campos OPCIONAIS para a linha — a autoria SÓ a registrada
         # no projeto (nunca o fundo como autor), a miniatura SÓ de folha real do próprio lote (com imagem; nunca retida; sem folha = capa do
@@ -20620,6 +20807,7 @@ else:
         c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,arquivo_jpg,tainacan_item_id,origem) VALUES (?,?,?,?,?,?,'importado')",
                   (f"F099-P0001-1960-S01-D0000{n}", "F099-P0001", "S01", n, jpg, 9000 + n))
     c.execute("INSERT INTO wp_item (id,colecao_id,documento_url) VALUES (9001,8013,'https://camp.arq.br/u/a-scaled.jpg')")   # só o item 1 tem URL real no espelho
+    c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao) VALUES ('corrigir','metadado','operador','F099-P0001','problema antigo','em_correcao')")   # CAMP-PROB-UX
     c.commit(); c.close()
     rc, out = rodar("antigo", db)
     ok(rc == 0, "migra sem erro" + ("" if rc == 0 else f" -> {out[-200:]}"))
@@ -20635,6 +20823,18 @@ else:
         ok(jpg["4"] == "/mnt/qnap/acervos/a.jpg" and jpg["5"] == "https://camp.arq.br/u/b.jpg", "migração 028: caminho local e URL existentes NÃO são tocados")
         ok("ordem_manual" in [r[1] for r in c.execute("PRAGMA table_info(item)")] and c.execute("SELECT COUNT(*) FROM item WHERE ordem_manual IS NOT NULL").fetchone()[0] == 0,
            "migração 218: item.ordem_manual criada e as folhas antigas sem ordem escolhida (seguem o código)")
+        cols_e = [r[1] for r in c.execute("PRAGMA table_info(erro)")]
+        ok({"fase", "duplicado_de", "enviado_revisao_por", "revisado_por", "motivo_pendencia"} <= set(cols_e) and "responsavel" not in cols_e
+           and all(c.execute("SELECT count(*) FROM sqlite_master WHERE name=?", (t,)).fetchone()[0] for t in ("erro_evidencia", "erro_modelo", "erro_visao", "erro_rascunho", "tarefa_responsavel")),
+           "migração 242 (Central de Problemas): colunas e tabelas novas no banco antigo; o responsável é o da Home (tarefa_responsavel, migração 241)")
+        ok(c.execute("SELECT situacao, fase FROM erro WHERE descricao='problema antigo'").fetchone() == ("em_correcao", None)
+           and {r[0]: r[1] for r in c.execute("SELECT chave, valor FROM configuracao WHERE chave LIKE 'problemas.%'")} == {"problemas.revisao_outra_pessoa": "0", "problemas.tipos_revisao": "autoria_divergente,credito,projeto_errado"},
+           "migração 242: problema antigo intacto (fase deduzida da situação) e a revisão por outra pessoa desligada")
+        import importlib, sys as _s
+        _s.path.insert(0, str(RAIZ / "backend"))
+        from app.central_problemas import fase_efetiva as _fe
+        ok(_fe("em_correcao", None) == "em_analise" and _fe("aberto", None) == "novo" and _fe("ignorado", None, None, "Mensagem repetida: x") == "duplicado" and _fe("corrigido", "aguardando_revisao") == "resolvido",
+           "migração 242: a fase de problema antigo (ou mexido por rota antiga) sai da situação, sem contradizer")
 
 print("3) Guarda de rede das rotas sem login")
 rc, out = rodar("rede", f"{tmp}/rede.db")
@@ -22135,6 +22335,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-PROB-UX: Central de Problemas (fases, campos obrigatórios, filtros, atribuir, duplicado, pontos só validados, ranking desligado)")
+rc, out = rodar("central_problemas", f"{tmp}/central_problemas.db")
+if rc != 0: ok(False, f"teste central_problemas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Central de Problemas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Redesenho Material novo: campos opcionais de /api/filas (autoria registrada, miniatura real, ?leve=1)")
 rc, out = rodar("material_novo_filas", f"{tmp}/material_novo_filas.db")

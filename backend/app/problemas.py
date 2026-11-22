@@ -269,8 +269,9 @@ def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
                 fechados.append(e["id"])
             continue
         prefixo = "Resolvido na conferência: " if s.get("pela_conferencia") else "Resolvido sozinho: "
-        n = con.execute("UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id=? AND situacao IN ('aberto','em_correcao')",
-                        (prefixo + s["motivo"], e["id"])).rowcount
+        # CAMP-PROB-UX: fica gravado que quem resolveu foi o sistema (fechado_por), para a Central separar "pelo sistema" de "por pessoas"
+        n = con.execute("UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=?, fechado_por=? WHERE id=? AND situacao IN ('aberto','em_correcao')",
+                        (prefixo + s["motivo"], ator, e["id"])).rowcount
         if n:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'fechado_automatico',?,?)",
                         (str(e["id"]), ator, json.dumps({"codigo": e["codigo"], "motivo": s["motivo"]}, ensure_ascii=False)))
@@ -285,7 +286,7 @@ def reabrir_se_voltou(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
                             AND EXISTS (SELECT 1 FROM item i WHERE i.codigo=e.codigo)""", ("Resolvido sozinho: " + MOTIVO_FORA,)).fetchall()
     out = []
     for r in voltam:
-        n = con.execute("UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL WHERE id=? AND situacao='corrigido'", (r["id"],)).rowcount
+        n = con.execute("UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL, fechado_por=NULL WHERE id=? AND situacao='corrigido'", (r["id"],)).rowcount
         if n:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'reaberto_automatico',?,?)",
                         (str(r["id"]), ator, json.dumps({"codigo": r["codigo"], "motivo": "A folha entrou no painel: o problema volta a valer."}, ensure_ascii=False)))

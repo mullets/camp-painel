@@ -87,20 +87,24 @@ const print = async (pg, nome) => { nPrint++; await pg.screenshot({ path: path.j
   await print(op, 'deste_projeto');
   const bDesf = await op.$('#toast button, #toast [data-deste-desfazer]');
   if (bDesf) { await bDesf.click(); await confirmar(op) }
-  else { await op.evaluate(c => nav('erros/' + c), P); await op.click('#err-abas [data-err-sit="ignorado"]'); await op.click(`#err-body [data-deste-desfazer="${D(7)}"]`); await confirmar(op) }
+  else { await op.evaluate(c => nav('erros/' + c), P); await op.click('#err-abas [data-err-sit="concluidos"]'); await op.waitForTimeout(1200); await op.click(`#err-body [data-err-folha="${D(7)}"] .cp-cta`); await op.click(`#d-body [data-deste-desfazer="${D(7)}"]`); await confirmar(op) }
   chk(await espera(() => um('SELECT status_site FROM item WHERE codigo=?', D(7)) === 'bloqueado'), '"Desfazer": a D00007 volta a ficar bloqueada como de outra obra');
   chk(um("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao='aberto' AND gravidade='bloqueia'", D(7)) >= 1, 'o problema que impede publicar reabre');
   // decide de novo, agora pela tela Problemas (o outro caminho que a operadora usa)
+  // CAMP-PROB-UX: na Central de Problemas a decisão fica no painel da linha (a lista é compacta)
   await op.evaluate(c => nav('erros/' + c), P);
-  const temErr = await op.waitForSelector(`#err-body [data-fp-box="${D(7)}"] [data-deste-projeto], #err-body [data-deste-projeto="${D(7)}"]`, { timeout: 10000 }).then(() => true, () => false);
+  await op.waitForSelector(`#err-body [data-err-folha="${D(7)}"] .cp-cta`, { timeout: 10000 }).then(() => op.click(`#err-body [data-err-folha="${D(7)}"] .cp-cta`)).catch(() => {});
+  const temErr = await op.waitForSelector(`#d-body [data-fp-box="${D(7)}"] [data-deste-projeto], #d-body [data-deste-projeto="${D(7)}"]`, { timeout: 10000 }).then(() => true, () => false);
   chk(temErr, 'tela Problemas: a D00007 de novo com "É deste projeto"');
-  if (temErr) { await op.click(`#err-body [data-fp-box="${D(7)}"] [data-deste-projeto], #err-body [data-deste-projeto="${D(7)}"]`); await confirmar(op) }
+  if (temErr) { await op.click(`#d-body [data-fp-box="${D(7)}"] [data-deste-projeto], #d-body [data-deste-projeto="${D(7)}"]`); await confirmar(op) }
   chk(await espera(() => um('SELECT status_site FROM item WHERE codigo=?', D(7)) === 'nao_publicado'), 'refeito: a D00007 é deste projeto outra vez');
   chk(await espera(() => um("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao')", D(7)) === 0), 'refeito: nenhum problema da D00007 continua aberto (o "outra pasta" do erros.json também fecha)',
       JSON.stringify(sql("SELECT categoria, gravidade, descricao FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao')", D(7))));
   // D00008: é mesmo de outra obra
-  await op.waitForSelector(`#err-body [data-fp-outro="${D(8)}"]`, { timeout: 10000 }).catch(() => {});
-  await op.click(`#err-body [data-fp-outro="${D(8)}"]`).catch(() => {}); await confirmar(op);
+  await op.evaluate(() => { closeDrawer(true); carregarErros(); });
+  await op.waitForSelector(`#err-body [data-err-folha="${D(8)}"] .cp-cta`, { timeout: 10000 }).then(() => op.click(`#err-body [data-err-folha="${D(8)}"] .cp-cta`)).catch(() => {});
+  await op.waitForSelector(`#d-body [data-fp-outro="${D(8)}"]`, { timeout: 10000 }).catch(() => {});
+  await op.click(`#d-body [data-fp-outro="${D(8)}"]`).catch(() => {}); await confirmar(op);
   chk(await espera(() => um("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao')", D(8)) === 0), '"É de outro projeto…": a D00008 fica fora e os problemas dela fecham');
   chk(!um('SELECT COUNT(*) FROM item WHERE codigo=?', D(8)), 'a D00008 não entra no projeto');
   await print(op, 'problemas_depois');

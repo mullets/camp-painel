@@ -165,3 +165,9 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Prioridade da fila = nota 0–100 explicável (pesos do §8: gravidade 40, tempo 20 com teto de 14 dias, bloqueio 20, prazo/risco 20); fórmula em `COMO_FUNCIONA.md` D.2.1.3.
 - Gamificação só com eventos validados e recontados do estado atual (desfez, o ponto some); meta coletiva; conquistas não competitivas e ocultáveis; **ranking individual desligado por padrão** (`jogo.ranking_equipe`); nada de cobrança por sequência.
 
+## 20. Central de Problemas (CAMP-PROB-UX, 22/11/2026, documento do Rafael)
+- O topo (usuário, situação, temperatura), a faixa do sistema e o menu não mudam. O título continua **Problemas** (nome do menu).
+- A coluna `erro.situacao` continua a regra de todo o resto; a `fase` (Novo → … → Resolvido) só detalha o trabalho e cai sempre numa situação antiga (`central_problemas.FASE_SITUACAO`). Fase NULL ou mexida por rota antiga = deduzida da situação.
+- Resolver exige conclusão + evidência ou justificativa; **autoria e crédito exigem fonte** (o painel nunca sugere autoria nem fonte).
+- **Revisão por outra pessoa** (`problemas.revisao_outra_pessoa`) nasce **desligada**.
+- Reusa a Home (§15): responsável em `tarefa_responsavel` (`erro:<id>`, mesmas regras de "Pegar para mim"/admin "Atribuir a…"), a nota de prioridade de `home_trabalho.prioridade` e UM sistema de pontos (`home_trabalho.eventos_validados`, recontado do estado; meta `meta.semana`; ranking `jogo.ranking_equipe` desligado). Detalhe: `COMO_FUNCIONA.md` D.2.4 e D.4.3b.

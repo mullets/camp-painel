@@ -8,7 +8,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8972', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
@@ -42,13 +42,14 @@ con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relat
     chk(aba > 0 && menu === aba, `Material novo: menu (${menu}) = aba "Precisam de você" (${aba})`);
     chk(/Precisam de você/.test(await page.getAttribute('#nav button[data-v="filas"]', 'title') || ''), 'o menu Material novo diz o que conta (dica)');
     await page.goto(BASE + '/#erros');
-    await page.waitForSelector('#err-abas [data-err-sit="pedem_acao"] b', { timeout: 15000 }); await page.waitForTimeout(800);
-    const abertos = +(await page.textContent('#err-abas [data-err-sit="pedem_acao"] b')).replace(/\D/g, '');
-    chk(await badge('n-err') === abertos, `Problemas: menu (${await badge('n-err')}) = aba Abertos (${abertos})`);
-    chk(/Abertos/.test(await page.getAttribute('#nav button[data-v="erros"]', 'title') || ''), 'o menu Problemas diz o que conta (dica)');
-    const resumo = await page.textContent('#err-diagnostico');
-    chk(new RegExp(`^\\s*${abertos} pedem ação: é o número do menu Problemas`).test(resumo.replace(/^[\s\S]*?(\d+ pedem ação)/, '$1')) && /Contando os \d+ avisos, são \d+ abertos no total/.test(resumo),
-        'o resumo diz qual número é o do menu e qual conta os avisos: ' + resumo.replace(/\s+/g, ' ').slice(0, 160));
+    // CAMP-PROB-UX: a aba "Abertos" virou "Prioridades"; o cartão "Em aberto" diz quantos pedem ação (o número do menu) e quantos são avisos
+    await page.waitForSelector('#err-abas [data-err-sit="prioridades"] b', { timeout: 15000 }); await page.waitForTimeout(800);
+    const abertos = +(await page.textContent('#err-abas [data-err-sit="prioridades"] b')).replace(/\D/g, '');
+    chk(await badge('n-err') === abertos, `Problemas: menu (${await badge('n-err')}) = aba Prioridades (${abertos})`);
+    chk(/Prioridades/.test(await page.getAttribute('#nav button[data-v="erros"]', 'title') || ''), 'o menu Problemas diz o que conta (dica)');
+    const resumo = await page.textContent('[data-cp-cartao="em_aberto"]');
+    chk(new RegExp(`${abertos} pedem ação · \\d+ avisos?`).test(resumo.replace(/\s+/g, ' ')),
+        'o cartão "Em aberto" diz qual número é o do menu (pedem ação) e quantos são avisos: ' + resumo.replace(/\s+/g, ' ').slice(0, 160));
   } catch (e) { chk(false, 'exceção: ' + e.message); }
   chk(!erros.length, 'nenhum erro no console' + (erros.length ? ': ' + erros.slice(0, 3).join(' | ') : ''));
   await browser.close();

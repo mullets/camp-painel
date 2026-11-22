@@ -2121,6 +2121,238 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .fc-op:hover{border-color:var(--blue)}.fc-op small{color:var(--ink3);font-size:var(--fs-sm2)}.fc-op[aria-pressed="true"]{border:2px solid var(--blue);background:var(--blue-soft)}
 .fc-intro{margin:0 0 12px;padding:10px 12px;border-radius:var(--r-md);background:var(--green-soft);color:var(--ink)}.fc-campo{display:flex;gap:8px;align-items:center;margin:0 0 12px}.fc-campo input{font:inherit;padding:8px 10px;max-width:260px}.fc-todas{margin:0 0 12px}.fc-todas summary{cursor:pointer;color:var(--blue)}
 .fc-bts{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.fc-fim{text-align:center;padding:18px 0}.fc-medalha{font-size:2.6rem;margin:0;color:var(--amber)}
+
+/* CAMP-PROB-UX (22/11/2026): Central de Problemas. O topo, a faixa do sistema e o menu não mudam. Visual do mockup do Rafael, com os tokens do painel. */
+.cp-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--gap-card);align-items:start}
+.cp-principal{min-width:0;display:flex;flex-direction:column;gap:16px;container-type:inline-size}
+.cp-hdr{margin-bottom:0;flex-wrap:nowrap;align-items:flex-start}
+.cp-hdr .act{flex:0 0 auto}
+.cp-hdr h1{white-space:nowrap}
+.cp-lateral{display:flex;flex-direction:column;gap:14px;min-width:0}
+.cp-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;vertical-align:-3px}
+.cp-cartoes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@container (max-width:600px){.cp-cartoes{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
+.cp-cartao{display:grid;grid-template-columns:1fr auto;grid-template-areas:"n ic" "rot rot";align-items:center;align-content:start;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;cursor:pointer;color:var(--ink);font:inherit;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.cp-cartao:hover{border-color:var(--blue)}
+.cp-cartao:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.cp-c-n{grid-area:n;font-size:var(--fs-metric);line-height:1.1;font-variant-numeric:tabular-nums}
+.cp-c-ic{grid-area:ic;width:26px;height:26px}
+.cp-c-rot{grid-area:rot;font-size:var(--fs-md);color:var(--ink2);margin-top:2px}
+.cp-cartao small{display:none}
+.cp-c-aberto{background:var(--red-soft);border-color:transparent}
+.cp-c-aberto .cp-c-n,.cp-c-aberto .cp-c-ic,.cp-c-crit .cp-c-n,.cp-c-crit .cp-c-ic{color:var(--red)}
+.cp-c-anal .cp-c-ic,.cp-c-rev .cp-c-ic{color:var(--blue)}
+.cp-c-res .cp-c-ic{color:var(--green)}
+.cp-lista-painel{border-radius:var(--r-md);padding:4px 0 0}
+.cp-abas-linha{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px}
+.cp-abas-linha .cp-ordem select{width:auto}
+.cp-abas{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:4px;display:inline-flex;gap:2px;flex-wrap:wrap;margin:0}
+.cp-aba{border:0;background:transparent;color:var(--ink);padding:7px 14px;border-radius:var(--r);font-size:var(--fs-md)}
+.cp-aba b{font-weight:500}
+.cp-abas .cp-aba{box-shadow:none;border-bottom:0}
+.cp-abas .cp-aba[aria-pressed="true"]{background:var(--blue);color:var(--on-blue,#fff);box-shadow:none}
+.cp-abas .cp-aba[aria-pressed="true"] b,.cp-abas .cp-aba b{color:inherit;background:transparent;border:0}
+.cp-ordem{display:flex;align-items:center;gap:6px;font-size:var(--fs-md);color:var(--ink2)}
+.cp-filtros{flex-wrap:wrap;gap:8px;border-top:1px solid var(--line)}
+.cp-filtros #err-q{flex:1 1 260px;min-width:0}
+.cp-filtros-mais{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:var(--surface2)}
+.cp-filtros-mais[hidden]{display:none}
+.cp-filtros-mais label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-2xs);color:var(--ink2)}
+.cp-filtros-mais select,.cp-filtros-mais input{min-width:0;width:100%}
+.cp-gaveta-topo,.cp-gaveta-fim{display:none}
+.cp-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 0}
+.cp-chip{font-size:var(--fs-2xs);padding:3px 10px}
+.cp-chip{border-radius:var(--r-pill)}
+.cp-chip[aria-pressed="true"]{background:var(--sel);color:var(--sel-ink);border-color:var(--blue)}
+.cp-ativos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 14px 0}
+.cp-ativo{display:inline-flex;align-items:center;gap:4px;background:var(--blue-soft);color:var(--blue);border-radius:var(--r-pill);padding:2px 4px 2px 10px;font-size:var(--fs-2xs)}
+.cp-ativo-x{all:unset;cursor:pointer;width:18px;height:18px;display:inline-grid;place-items:center;border-radius:50%}
+.cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
+.cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
+.cp-lista{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
+.cp-linha:hover{border-color:var(--blue)}
+.cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
+.cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.cp-linha.sev-critico{border-left-color:var(--red);background:var(--red-soft)}
+.cp-linha.sev-medio{border-left-color:var(--amber)}
+.cp-linha.sev-baixo{border-left-color:var(--blue)}
+.cp-sev-ic{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;font-weight:800;font-size:var(--fs-lg)}
+.sev-critico .cp-sev-ic{background:var(--surface);color:var(--red);box-shadow:0 0 0 2px var(--red-soft)}
+.sev-medio .cp-sev-ic{background:var(--amber-soft);color:var(--amber)}
+.sev-baixo .cp-sev-ic{background:var(--blue-soft);color:var(--blue);font-family:Georgia,serif}
+.cp-corpo{min-width:0;display:flex;flex-direction:column;gap:3px}
+.cp-tit b{font-size:var(--fs-body)}
+.cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
+.cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-ctx .lnk{color:var(--ink2)}
+.cp-desc{overflow-wrap:anywhere}
+.cp-sep{color:var(--ink3);margin:0 2px}
+.cp-meta{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2)}
+.cp-chip-cod,.cp-chip-tipo{border:1px solid var(--line2);border-radius:var(--r-pill);padding:1px 10px;background:var(--surface);font-size:var(--fs-2xs);color:var(--ink);text-decoration:none}
+a.cp-chip-cod:hover{border-color:var(--blue)}
+.cp-razao{font-size:var(--fs-2xs);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0;min-width:90px}
+.cp-meta{flex-wrap:nowrap}
+.cp-meta>*:not(.cp-razao){flex:0 0 auto;white-space:nowrap}
+@container (max-width:560px){.cp-meta{flex-wrap:wrap}}
+.cp-quando{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-2xs);color:var(--ink2);min-width:0}
+.cp-quando>span{display:flex;gap:6px;align-items:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-quando .cp-ic{width:15px;height:15px;color:var(--ink3)}
+.cp-sem{color:var(--ink3)}
+.cp-sev-tag{justify-self:center;border-radius:var(--r-pill);padding:4px 14px;font-size:var(--fs-md);font-weight:600;white-space:nowrap}
+.sev-critico .cp-sev-tag{background:var(--surface);color:var(--red);box-shadow:0 0 0 1px var(--red-soft)}
+.sev-medio .cp-sev-tag{background:var(--amber-soft);color:var(--amber)}
+.sev-baixo .cp-sev-tag{background:var(--blue-soft);color:var(--blue)}
+.cp-rapida{color:var(--green)}
+.cp-mesma-folha{color:var(--amber);font-weight:600}
+.cp-acoes{display:flex;align-items:center;gap:8px}
+.cp-acoes .cp-cta{min-width:84px}
+.cp-acoes .cp-cta:not(.pri){border-color:var(--blue);color:var(--blue)}
+.cp-acoes .mais-menu summary{padding:4px 10px}
+.cp-esq{cursor:default}
+.cp-esq-l{height:12px;border-radius:var(--r-sm);background:var(--surface2);margin:4px 0;width:70%}
+.cp-esq-l.curto{width:40%}
+.cp-pag{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:6px 14px 14px}
+.cp-pag .pg-info{font-size:var(--fs-md);color:var(--ink2)}
+.cp-pag .pg-nav{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cp-pg{min-width:32px;justify-content:center}
+.cp-pag [aria-current="page"]{background:var(--blue);color:var(--on-blue,#fff);border-color:var(--blue)}
+.cp-reti{color:var(--ink3);padding:0 2px}
+.cp-por{font-size:var(--fs-2xs);color:var(--ink2);display:flex;gap:6px;align-items:center;margin-left:8px}
+.cp-bulk-resp{display:flex;gap:6px;align-items:center;font-size:var(--fs-2xs)}
+.cp-graficos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gap-card)}
+.cp-graf{border-radius:var(--r-md)}
+.cp-graf .pb{min-height:170px}
+.cp-sel-falso{border:1px solid var(--line2);border-radius:var(--r);padding:3px 10px}
+.cp-donut-box{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.cp-donut{width:160px;height:160px;flex:0 0 160px}
+.cp-donut-fundo{stroke:var(--surface2)}
+.cp-donut-n{font-size:7.5px;font-weight:700;text-anchor:middle;fill:var(--ink)}
+.cp-donut-l{font-size:3.6px;text-anchor:middle;fill:var(--ink2)}
+.cp-legenda{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:var(--fs-md);min-width:0;flex:1 1 170px}
+.cp-legenda li{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.cp-legenda .lnk{color:var(--ink);text-decoration:none;text-align:left}
+.cp-pt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.cp-cor-0{stroke:#e5675d;background:#e5675d}.cp-cor-1{stroke:#f08a80;background:#f08a80}.cp-cor-2{stroke:#f2c94c;background:#f2c94c}.cp-cor-3{stroke:#a9b4c2;background:#a9b4c2}
+.cp-cor-4{stroke:#8ec9ea;background:#8ec9ea}.cp-cor-5{stroke:#7b9be0;background:#7b9be0}.cp-cor-6{stroke:#2e9e6b;background:#2e9e6b}.cp-cor-7{stroke:#8a63d2;background:#8a63d2}
+.cp-barras{width:100%;height:auto;display:block}
+.cp-b-pess{fill:#5fb760}
+.cp-b-grade{stroke:var(--line);stroke-width:.6}
+.cp-b-n{font-size:9px;font-weight:700;text-anchor:middle;fill:var(--ink)}
+.cp-b-l{font-size:8.5px;text-anchor:middle;fill:var(--ink2)}
+.cp-b-y{text-anchor:end}
+.cp-b-leg{font-size:var(--fs-2xs);color:var(--ink3);margin:6px 0 0}
+.cp-lat{padding:14px 16px;display:flex;flex-direction:column;gap:10px;border-radius:var(--r-md)}
+.cp-lat p{margin:0}
+.cp-lat-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cp-lat-h h2{font-size:var(--fs-lg);margin:0;display:flex;align-items:center;gap:6px}
+.cp-lat-sub{font-weight:400;color:var(--ink2)}
+.cp-ic-t{width:20px;height:20px}
+.cp-lk{display:inline-flex;gap:4px;align-items:center;color:var(--blue);font-size:var(--fs-md);text-decoration:none;white-space:nowrap}
+.cp-lk .cp-ic{width:15px;height:15px}
+.cp-prog,.cp-meta-s{display:flex;gap:14px;align-items:center}
+.cp-hex{width:58px;height:62px;flex:0 0 58px}
+.cp-hex-f{fill:var(--green)}
+.cp-hex-i{fill:var(--green-soft)}
+.cp-hex-e{fill:var(--green)}
+.cp-alvo{width:40px;height:40px;color:var(--green);stroke-width:2.2}
+.cp-prog-c{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.cp-prog-l{display:flex;justify-content:space-between;gap:8px;align-items:flex-end}
+.cp-prog-l>span{display:flex;flex-direction:column}
+.cp-prog-l small{color:var(--ink2);font-size:var(--fs-md)}
+.cp-nivel{font-size:var(--fs-lg)}
+.cp-pts{text-align:right}
+.cp-pts b{font-size:var(--fs-lg)}
+.cp-meta-s .cp-prog-l>span{display:block}
+.cp-meta-n{white-space:nowrap;font-size:var(--fs-md);color:var(--ink2)}
+.cp-meta-n b{color:var(--green)}
+.cp-barra{width:100%;height:10px;accent-color:var(--green)}
+.cp-ocultar{align-self:flex-start}
+.cp-conq,.cp-ativ,.cp-rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.cp-conq li,.cp-ativ li{display:flex;gap:12px;align-items:center}
+.cp-conq li>span,.cp-ativ li>span:last-child{display:flex;flex-direction:column;min-width:0}
+.cp-conq small,.cp-ativ small{color:var(--ink2);font-size:var(--fs-2xs)}
+.cp-conq li:not(.ok){opacity:.7}
+.cp-badge{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)}
+.cp-badge .cp-ic{width:20px;height:20px;stroke-width:2.2}
+.cp-badge-0{background:var(--amber-soft);color:var(--amber)}
+.cp-badge-1{background:#ece4fb;color:#7b55c9}
+.cp-badge-2{background:var(--blue-soft);color:var(--blue)}
+.cp-badge.off{filter:grayscale(1)}
+.cp-rank li{display:flex;gap:10px;align-items:center}
+.cp-rank li>span:nth-child(2){flex:1}
+.cp-rank-n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font-size:var(--fs-2xs);font-weight:700}
+.cp-aviso-rank{border-left:3px solid var(--amber);padding-left:8px}
+.cp-ativ-ic{width:30px;height:30px;flex:0 0 30px;border-radius:50%;display:grid;place-items:center;background:var(--surface2);color:var(--ink2)}
+.cp-ativ-ic.g{background:var(--green);color:var(--surface)}
+.cp-ativ-ic.b{background:var(--blue);color:var(--surface)}
+.cp-ativ-ic.a{background:var(--amber-soft);color:var(--amber)}
+.cp-ativ .lnk{text-align:left;color:var(--ink);text-decoration:none}
+.cp-sec{padding:12px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.cp-sec h3{margin:0;font-size:var(--fs-base)}
+.cp-sec h4{margin:4px 0 0;font-size:var(--fs-md)}
+.cp-sec p{margin:0}
+.cp-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cp-razao-grande{font-weight:600}
+.cp-desc-full{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink2)}
+.cp-fig{margin:0;display:flex;flex-direction:column;gap:6px}
+.cp-fig img{max-width:100%;max-height:320px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2)}
+.cp-hip-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.cp-hip-col{border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.cp-evs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.cp-ev{overflow-wrap:anywhere}
+.cp-ev small{display:block}
+.cp-pend{border-left:3px solid var(--amber);padding-left:8px}
+.cp-req{color:var(--ink2)}
+.cp-resposta textarea{width:100%}
+.cp-modelos{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.cp-modelos label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-2xs);color:var(--ink2)}
+.cp-ev-add{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.cp-ev-add .field{flex:1 1 200px;margin:0}
+.cp-prim,.cp-sec-acoes{flex-wrap:wrap}
+.cp-dup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cp-dup input{width:90px}
+.cp-hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:var(--fs-md)}
+.cp-hist li{display:flex;flex-direction:column;gap:1px;overflow-wrap:anywhere}
+.cp-modelo{border:1px solid var(--line);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.cp-modelo.off{opacity:.6}
+.cp-fundos td,.cp-fundos th{white-space:nowrap}
+@container (max-width:720px){
+  .cp-linha{grid-template-columns:18px 40px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo acoes" "sel ic quando sev"}
+  .cp-linha .cp-sel{grid-area:sel}.cp-linha .cp-sev-ic{grid-area:ic}.cp-linha .cp-corpo{grid-area:corpo}.cp-linha .cp-acoes{grid-area:acoes}
+  .cp-linha .cp-quando{grid-area:quando;flex-direction:row;gap:14px}.cp-linha .cp-sev-tag{grid-area:sev;justify-self:end}
+}
+@container (max-width:560px){
+  .cp-linha{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"sel corpo" "ic corpo" "quando quando" "sev acoes";padding:12px 10px 12px 8px}
+  .cp-linha .cp-sev-ic{width:22px;height:22px;font-size:var(--fs-md)}
+  .cp-linha .cp-quando{flex-wrap:wrap}
+  .cp-linha .cp-sev-tag{justify-self:start}
+  .cp-linha .cp-acoes{justify-content:flex-end}
+  .cp-ctx{white-space:normal}
+  .cp-graficos{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}}
+.with-drawer .cp-layout{grid-template-columns:minmax(0,1fr)}
+.with-drawer .cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+@media (max-width:720px){
+  .cp-hdr{flex-wrap:wrap}
+  .cp-hdr h1{white-space:normal}
+  .cp-cartoes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cp-c-res{grid-column:1/-1}
+  .cp-lateral{grid-template-columns:minmax(0,1fr)}
+  .cp-abas-linha{padding:10px}
+  .cp-abas{display:flex;width:100%}
+  .cp-aba{flex:1 1 auto;padding:6px 8px}
+  .cp-ordem{width:100%}
+  .cp-ordem select{flex:1}
+  .cp-lista{padding:10px}
+  .cp-filtros-mais:not([hidden]){position:fixed;inset:0;z-index:62;overflow:auto;grid-template-columns:minmax(0,1fr);align-content:start;background:var(--surface);padding:16px;border:0}
+  .cp-gaveta-topo{display:flex;justify-content:space-between;align-items:center}
+  .cp-gaveta-fim{display:block;position:sticky;bottom:0;background:var(--surface);padding:8px 0}
+  .cp-gaveta-fim .btn{width:100%}
+  .cp-pag{justify-content:center}
+  .cp-bulk-resp{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
@@ -2246,24 +2478,44 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
     <div class="panel sol-metricas" id="sol-metricas" hidden></div>
       </section>
 
-  <!-- ERROS -->
+  <!-- ERROS: Central de Problemas (CAMP-PROB-UX, 22/11/2026). O topo, a faixa do sistema e o menu não mudam. -->
   <section class="content" id="v-erros">
-    <div class="hdr" data-erros-hdr><div><h1>Problemas</h1><p class="sub">O que está errado no material, agrupado por projeto. Cada problema diz o que aconteceu, o que fazer e tem o botão que resolve. Autoria não confirmada não bloqueia: a folha sobe ao site com esse aviso.</p></div><div class="act"><button class="btn" type="button" id="err-limpeza" hidden>Limpeza geral…</button><button class="btn pri" onclick="relatarProblema()">Relatar problema</button></div></div>
-    <div class="abas-sit" id="err-abas" role="group" aria-label="Filtrar por situação"></div>
-    <div class="panel" id="err-diagnostico" role="region" aria-label="Resumo de problemas do acervo" aria-live="polite" hidden></div>
-    <div class="panel" id="err-dup-proj" role="region" aria-label="Possíveis projetos duplicados" hidden></div>
-    <div class="panel"><div class="filterbar err-filtros"><input type="search" id="err-q" placeholder="Buscar código, nome do projeto ou texto… (tecla F)" aria-label="Buscar problemas" autocomplete="off">
-      <select id="err-grav" aria-label="Gravidade"><option value="">Toda gravidade</option><option value="bloqueia">Bloqueia</option><option value="corrigir">Corrigir</option><option value="aviso">Aviso</option></select>
-      <select id="err-cat" aria-label="Tipo de problema"><option value="">Todo tipo</option><option value="projeto_errado">Folha de outro projeto</option><option value="duplicata">Duplicata</option><option value="orientacao">Orientação / rotação</option><option value="espelhado">Digitalizado pelo verso</option><option value="autoria_divergente">Autoria divergente</option><option value="codigo">Código errado</option><option value="metadado">Metadado errado</option><option value="credito">Crédito errado</option><option value="arquivo_corrompido">Arquivo corrompido</option><option value="outro">Outro</option></select>
-      <select id="err-orig" aria-label="Origem"><option value="">Toda origem</option><option value="campvision">CAMP Vision (automático)</option><option value="revisao">Revisão</option><option value="operador">Painel (equipe)</option><option value="site">Visitante do site</option></select>
-      <span class="err-proj-filtro" id="err-proj-filtro" hidden></span><button type="button" class="btn sm lnk" id="err-limpar" hidden>Limpar filtros</button><span class="cnt" id="err-cnt"></span></div>
-      <div class="err-filtro-ativo" id="err-filtro-ativo" role="status" hidden></div>
-      <div class="tw"><table class="err-tab" data-sem-ordenar>
-      <thead><tr><th class="err-sel-col"><input type="checkbox" id="err-sel-todos" title="Selecionar todos os abertos da lista" aria-label="Selecionar todos os abertos da lista"></th><th>Gravidade</th><th>Onde</th><th>O que aconteceu e o que fazer</th><th>Origem</th><th>Situação</th></tr></thead>
-      <tbody id="err-body"></tbody>
-    </table></div><div class="pg-ctl" id="err-mais" hidden></div>
-      <details class="err-ignorados" id="err-ignorados" hidden><summary>Ignorados <b id="err-ign-n"></b></summary><div id="err-ign-corpo"></div></details>
-      <div class="bulkbar bulk-rodape" id="err-bulk" role="region" aria-label="Problemas selecionados"><span class="count" id="err-bulk-n">0 selecionados</span><span class="err-bulk-mais" id="err-bulk-mais"></span><input id="err-bulk-res" maxlength="300" placeholder="O que foi feito (ou por que não era problema)" aria-label="O que foi feito"><button class="btn sm pri" data-err-lote="corrigido">Marcar como corrigido</button><button class="btn sm" data-err-lote="ignorado">Não era problema</button><button class="btn sm" data-err-lote="em_correcao">Estou corrigindo</button><span class="spacer"></span><button class="btn sm lnk" data-err-lote="limpar">Limpar seleção</button><small class="erro-txt" id="err-bulk-err" role="alert"></small></div>
+    <div class="cp-layout">
+      <div class="cp-principal">
+        <div class="hdr cp-hdr" data-erros-hdr><div><h1>Problemas</h1><p class="sub" id="cp-sub">Identifique, analise e resolva pendências de catalogação.</p></div><div class="act"><details class="mais-menu cp-mais"><summary class="btn" aria-haspopup="menu">Mais ⋯</summary><div class="mais-lista" role="menu"><button type="button" role="menuitem" data-cp-por-fundo>Contadores por fundo</button><button type="button" role="menuitem" data-cp-modelos>Modelos de decisão</button><button type="button" role="menuitem" data-err-repetidos hidden>Mensagens repetidas…</button><button type="button" role="menuitem" id="err-limpeza" hidden>Limpeza geral…</button></div></details><button class="btn pri" data-pode="problema.resolver" onclick="relatarProblema()">Relatar problema</button></div></div>
+        <div class="cp-cartoes" id="cp-cartoes" role="group" aria-label="Resumo dos problemas"></div>
+        
+        <div class="panel cp-lista-painel">
+          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div>
+          <div class="filterbar cp-filtros"><input type="search" id="err-q" placeholder="Buscar título, nº, arquiteto, obra, fundo ou palavra… (tecla /)" aria-label="Buscar problemas" autocomplete="off">
+            <button type="button" class="btn sm" id="cp-filtros-btn" aria-expanded="false" aria-controls="cp-filtros-mais">Filtros</button>
+            <select id="cp-visoes" aria-label="Visões salvas" hidden></select><span class="cnt" id="err-cnt"></span></div>
+          <div class="cp-filtros-mais" id="cp-filtros-mais" role="region" aria-label="Filtros" hidden>
+            <div class="cp-gaveta-topo"><b>Filtros</b><button type="button" class="btn sm" data-cp-filtros-fechar>Fechar</button></div>
+            <label>Fase<select id="cp-fase"><option value="">Toda fase</option><option value="novo">Novo</option><option value="triagem">Em triagem</option><option value="em_analise">Em análise</option><option value="aguardando_informacao">Aguardando informação</option><option value="aguardando_revisao">Aguardando revisão</option><option value="devolvido">Devolvido</option><option value="reaberto">Reaberto</option><option value="resolvido">Resolvido</option><option value="duplicado">Duplicado</option><option value="invalido">Inválido</option></select></label>
+            <label>Severidade<select id="err-grav"><option value="">Toda severidade</option><option value="bloqueia">Crítico (bloqueia)</option><option value="corrigir">Médio (corrigir)</option><option value="aviso">Baixo (aviso)</option></select></label>
+            <label>Tipo<select id="err-cat"><option value="">Todo tipo</option><option value="autoria_divergente">Autoria</option><option value="projeto_errado">Folha de outro projeto</option><option value="duplicata">Duplicata</option><option value="orientacao">Orientação</option><option value="espelhado">Digitalizado pelo verso</option><option value="codigo">Código</option><option value="metadado">Metadados</option><option value="credito">Crédito</option><option value="arquivo_corrompido">Arquivo danificado</option><option value="outro">Outro</option></select></label>
+            <label>Origem<select id="err-orig"><option value="">Toda origem</option><option value="campvision">CAMP Vision (automático)</option><option value="revisao">Revisão</option><option value="operador">Painel (equipe)</option><option value="site">Visitante do site</option></select></label>
+            <label>Responsável<select id="cp-resp"><option value="">Qualquer</option><option value="eu">Eu</option><option value="ninguem">Não atribuído</option></select></label>
+            <label>Fundo<select id="cp-fundo"><option value="">Todo fundo</option></select></label>
+            <label>Aberto desde<input type="date" id="cp-de"></label><label>até<input type="date" id="cp-ate"></label>
+            <label>Idade<select id="cp-idade"><option value="">Qualquer idade</option><option value="0-7">Até 7 dias</option><option value="8-30">8 a 30 dias</option><option value="31-90">31 a 90 dias</option><option value="90+">Mais de 90 dias</option></select></label>
+            <div class="cp-gaveta-fim"><button type="button" class="btn pri" data-cp-filtros-fechar>Ver resultados</button></div>
+          </div>
+          <div class="cp-chips" id="cp-chips" role="group" aria-label="Filtros rápidos"></div>
+          <div class="err-filtro-ativo cp-ativos" id="err-filtro-ativo" role="status" hidden></div>
+          <div class="cp-lista" id="err-body" role="list" aria-label="Problemas" aria-busy="false"></div>
+          <div class="pg-ctl cp-pag" id="err-mais" hidden></div>
+          <div class="bulkbar bulk-rodape" id="err-bulk" role="region" aria-label="Problemas selecionados"><span class="count" id="err-bulk-n">0 selecionados</span><span class="err-bulk-mais" id="err-bulk-mais"></span><label class="cp-bulk-resp">Atribuir a <select id="cp-bulk-resp" aria-label="Atribuir os selecionados a"><option value="">Ninguém (tirar)</option></select></label><button class="btn sm" data-cp-atribuir>Atribuir</button><input id="err-bulk-res" maxlength="300" placeholder="O que foi feito (ou por que não era problema)" aria-label="O que foi feito"><button class="btn sm" data-err-lote="corrigido">Marcar como corrigido</button><button class="btn sm" data-err-lote="ignorado">Não era problema</button><button class="btn sm" data-err-lote="em_correcao">Estou corrigindo</button><span class="spacer"></span><button class="btn sm lnk" data-err-lote="limpar">Limpar seleção</button><small class="erro-txt" id="err-bulk-err" role="alert"></small></div>
+        </div>
+        <div class="cp-graficos">
+          <div class="panel cp-graf" id="cp-graf-tipo" role="region" aria-label="Problemas por tipo"></div>
+          <div class="panel cp-graf" id="cp-graf-sem" role="region" aria-label="Evolução de resolução"></div>
+        </div>
+        <details class="err-ignorados panel" id="err-ignorados" hidden><summary>Ignorados <b id="err-ign-n"></b></summary><div id="err-ign-corpo"></div></details>
+        <div class="panel" id="err-dup-proj" role="region" aria-label="Possíveis projetos duplicados" hidden></div>
+      </div>
+      <aside class="cp-lateral" id="cp-lateral" aria-label="Progresso e atividade"></aside>
     </div>
   </section>
 
@@ -2897,7 +3149,7 @@ function pode(acao){if(acao==='qnap.varrer')return !!EU&&(['admin','master'].inc
 function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
 function route_to(route){route=route||'painel';{const ant={emkt:'emails/aceite',emailsite:'emails/modelos'}[route.split('/')[0]];if(ant){route=ant;try{history.replaceState({...(history.state||{}),campRoute:route},'','#'+route)}catch(_){}}}   /* CAMP-EMAIL (20/11): e-mails num lugar só; #emkt e #emailsite antigos abrem a aba */
   setTimeout(()=>{window.PJ_ROTA=route;vigiarMarca()},0);   /* exaustão CAMP-105: nova visita ao projeto (vindo de outra tela) reabre a gaveta do que trava; redesenhar na mesma visita não */
-  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){filaChegou(a1);carregarFilas()}if(v==='projetos'){projChegou(a1);carregarProjetosAPI({});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='amigos')carregarAmigos();if(v==='emails')emTelaAba(a1);if(v==='ingressos')carregarIngressos();if(v==='cobrancas')carregarCobrancas();if(v==='doacoes')carregarDoacoes();if(v==='erros'){ERR_F.projeto=/^F\d{3}(-P\d{4})?$/.test(a1)?a1:'';carregarErros()}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
+  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){filaChegou(a1);carregarFilas()}if(v==='projetos'){projChegou(a1);carregarProjetosAPI({});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='amigos')carregarAmigos();if(v==='emails')emTelaAba(a1);if(v==='ingressos')carregarIngressos();if(v==='cobrancas')carregarCobrancas();if(v==='doacoes')carregarDoacoes();if(v==='erros'){cpRota(a1)}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 let POP_VOLTANDO=false;window.addEventListener('popstate',e=>{if(POP_VOLTANDO){POP_VOLTANDO=false;return}if(temAlteracoes()){POP_VOLTANDO=true;history.go(1);confirmarDescarte().then(ok=>{if(ok){ALTERACOES_PENDENTES.clear();atualizarDirtyUI();history.back()}});return}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
 navEl.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
@@ -3636,7 +3888,7 @@ const AJUDA_PAGINAS={
  estante:{v:1,serve:'Usar o celular na estante: ler a etiqueta e abrir na hora a folha, o projeto, o fundo ou a caixa. Na caixa, conferir se está tudo lá dentro.',passos:['Toque em "Ler com a câmera" e aponte para o código de barras da etiqueta (o celular pede licença para usar a câmera na primeira vez). Sem câmera, digite o código que está embaixo das barras e toque em Abrir.','Folha, pasta de projeto e fundo abrem a página deles. A etiqueta de uma caixa (ou gaveta, tubo, mapoteca) abre a conferência dessa caixa.','Na conferência aparece a lista do que deveria estar ali. Leia cada folha (ou a etiqueta da pasta, que conta todas as folhas dela que são desta caixa).','Em amarelo, o que ainda falta ler. Em vermelho, o que foi lido mas está cadastrado em outro lugar: use "Mover para cá" se ele deve ficar nesta caixa.','No fim, toque em "Registrar conferência". Fica no histórico, com quantas foram conferidas, quantas faltaram e quantas eram de outro lugar.'],cores:[['verde','conferida'],['amarelo','falta ler (ou faltou)'],['vermelho','é de outro lugar']],cuidados:'Ler não muda nada no cadastro. Só "Mover para cá" muda o lugar de uma folha.',quem:'Todos leem · operador e admin movem e registram a conferência.'},
  localizacao:{v:2,serve:'Saber onde cada folha original está guardada: em que caixa, gaveta, tubo, mapoteca ou estante. É o que permite achar o papel quando alguém pede.',passos:['Cadastre o recipiente em "Nova localização": o tipo (caixa, gaveta, tubo…), o identificador escrito nele (o painel já sugere o próximo livre, ex.: CX-002) e, se for de um fundo só, o fundo.','Clique na linha para abrir o recipiente.','Em "Alocar folhas aqui", procure o projeto pelo código ou pelo nome e marque as folhas (todas vêm marcadas). Quem tem uma lista pode colar os códigos, um por linha; o leitor de código de barras também funciona.','Clique "Alocar". O resultado aparece ali mesmo, com o botão "Imprimir etiqueta da caixa"; cole a etiqueta no recipiente.','Em qualquer folha, "Onde está" passa a mostrar esse lugar. No alto da página, "Por fundo" mostra quantas folhas de cada fundo ainda estão sem lugar.'],cores:[],cuidados:'O identificador precisa ser o mesmo que está escrito fisicamente no recipiente. Se mudar uma folha de lugar, aloque de novo no lugar novo (a anterior é substituída).',quem:'Operador e admin.'},
  etiquetas:{v:2,serve:'Imprimir etiquetas com código de barras para pastas, folhas, caixas, tubos e para o fundo. O código da etiqueta leva direto ao registro no painel.',passos:['Escolha o tipo de etiqueta nas abas: pasta de projeto, folha, caixa ou gaveta, lombada de tubo, ou fundo.','Passo 1, "O que etiquetar": escolha o fundo e o projeto (ou a folha, ou a caixa). Se você veio do botão "Etiquetas" de um projeto, eles já vêm escolhidos. Para várias de uma vez, marque "Todas as folhas deste projeto" ou "Todas as pastas do fundo".','Confira a frase em letra grande acima da prévia ("Etiqueta de: F023-P0011 · Residência Riviera · … · volume 1 de 1"), o código e o nome.','Passo 2, "Como imprimir": o formato (100 × 50 mm é o padrão CAMP), o papel (impressora de etiquetas ou folha A4) e as cópias.','Clique "Imprimir". Na janela da impressora, escolha a impressora de etiquetas e tamanho real (100%); se sair cortada, desmarque "ajustar à página".'],cores:[],cuidados:'Confira o código na prévia antes de imprimir: etiqueta errada colada na pasta errada é difícil de achar depois. Ano, cliente e endereço vêm do cadastro do projeto e não se mudam aqui: use "Corrigir no projeto". Se o projeto não tiver ano, aparece 0000.',quem:'Todos.'},
- erros:{v:3,serve:'Lista do que está errado no material, agrupada por projeto: folha de outro projeto, carimbo de outro arquiteto, folha repetida, imagem virada ou escaneada pelo verso, folha que o CAMP Vision tirou do lote. Uns são achados pelo CAMP Vision, outros por você ou por visitantes do site.',passos:['Fique na aba "Abertos". Cada projeto aparece com o nome e quantos problemas tem; use "Só este projeto" ou os filtros (gravidade, tipo, origem) para focar.','Cada problema diz o que aconteceu e o que fazer, com o botão que resolve: devolver à revisão, mover para o projeto certo, marcar duplicata, abrir a folha para girar.','Muitos iguais (ex.: folhas retiradas que estavam certas)? Marque as caixas e feche todos de uma vez, com uma frase do que foi feito.','O que se resolveu sozinho (a folha foi devolvida, movida, marcada como duplicata ou entrou no lote de novo) fecha sozinho, com registro. O que talvez já esteja resolvido aparece no topo, separado: confira e feche.','Ao voltar de um projeto ou de uma folha, a lista volta no mesmo lugar.'],cores:[['bloqueia','o projeto não pode ir ao site até resolver; se já estiver no site, o painel pergunta se deve tirar'],['corrigir','precisa arrumar, mas não impede publicar'],['aviso','só para registro']],cuidados:'"Não era problema" é para quando não era problema de verdade. Escreva o porquê.',quem:'Operador relata e resolve · mover folha e devolver folha retirada são de admin · leitura só vê.'},
+ erros:{v:4,serve:'Central de Problemas: o que está errado no material (autoria, folha de outro projeto, duplicata, folha virada, dado faltando), com quem está cuidando, em que fase está e o próximo passo. Uns são achados pelo CAMP Vision, outros pela equipe ou por visitantes do site.',passos:['Os cartões do topo abrem a lista já filtrada. "Prioridades" é o número do menu (o que bloqueia ou pede correção), na ordem da prioridade, com o motivo escrito em cada linha.','Use "Minha fila" para o que está com você, os filtros rápidos (Críticos, Sem responsável, Aguardando minha revisão…) e os filtros combináveis. O endereço guarda tudo: copie o link para mandar a alguém.','Clique na linha (ou em Analisar): o painel ao lado mostra o problema, a imagem, as evidências e o que precisa ser decidido. A lista continua onde estava.','Para resolver: escreva a conclusão e anexe uma evidência (ou justifique). Autoria e crédito pedem fonte. O rascunho é salvo sozinho.','O que se resolveu sozinho fecha com registro ("pelo sistema"); o que talvez já esteja resolvido aparece no filtro rápido "Podem já estar resolvidos".'],cores:[['bloqueia','Crítico: o projeto não pode ir ao site até resolver'],['corrigir','Médio: precisa arrumar, mas não impede publicar'],['aviso','Baixo: só para registro']],cuidados:'Status é a fase do trabalho; severidade é o impacto. "Não é problema" e "Reabrir" pedem justificativa. Pontos e conquistas são reconhecimento, nunca avaliação de ninguém.',quem:'Operador e admin atribuem, analisam, resolvem, revisam e reabrem · mover folha, devolver folha retirada e registrar autoria são de admin · leitura só vê.'},
  solicitacoes:{v:2,serve:'Controlar os pedidos de imagens em alta resolução (TIFF ou JPG grande) feitos por pesquisadores, editoras, famílias e exposições. Registra quem pediu, para quê, o que foi entregue e com que crédito.',passos:['Os pedidos do formulário do site entram sozinhos. Os que chegam por e-mail ou pessoalmente você registra em "Registrar pedido": escolha o código e o formato de cada material.','Abra o pedido clicando na linha. A coluna "Recebido" fica amarela depois de 7 dias sem entrega.','Responda à pessoa ("Responder por e-mail" traz um texto pronto) e clique na etapa da trilha conforme andar: aguarda resposta → orçamento → crédito → preparação → entregue.','Em "Condições de uso / crédito exigido", escreva o crédito que a pessoa precisa usar (ex.: "Acervo Sami Bussab / CAMP").','Ao clicar em "entregue", o painel pergunta o que foi entregue (arquivos e tamanho) e guarda no histórico. O pedido sai da aba "Abertas".'],cores:[],cuidados:'Confira os direitos do fundo antes de prometer entrega. Uso comercial pode exigir orçamento.',quem:'Operador e admin.'},
  uso:{v:2,serve:'Ver quem baixou material do site, quando, qual material e para qual uso declarou. Os dados vêm do formulário que a pessoa preenche antes de baixar.',passos:['A aba "Pedidos de download" lista cada download, do mais recente para o mais antigo.','"Pessoas" junta por pessoa; "Materiais" junta por material (os mais procurados).','Use a busca e os filtros (uso, fundo e datas) para achar algo específico. A frase no topo também é clicável: "downloads nos últimos 30 dias", "pessoas" e o material mais baixado.','"Atualizar agora" busca no site os pedidos novos. "Puxar tudo" relê todo o histórico (demora).','"Exportar CSV" baixa a lista do jeito que está filtrada, para relatório.'],cores:[],cuidados:'Aqui há dados pessoais (nome, e-mail, instituição). Não compartilhe a planilha fora da CAMP. Apagar dados é definitivo: use só quando a própria pessoa pedir (LGPD), e prefira "Anonimizar".',quem:'Só admin.'},
  estacoes:{v:3,serve:'Ver se as máquinas da digitalização, o QNAP, o CAMP Vision e o site estão funcionando, e se o painel e o site estão em dia.',passos:['"Como está agora", no topo: cada coisa numa frase, na ordem de importância. Primeiro o QNAP e o CAMP Vision (se pararem, para tudo), depois as estações, o site e o backup.','QNAP: se está conectado e quanto espaço livre resta. Abaixo de 15% livre, avise o Rafael.','CAMP Vision: se está ligado, o que está lendo e quantas pastas esperam leitura.','Estações (Foto, Contex, Universal): ligada, desligada (normal fora do horário de trabalho) ou desligada no horário de trabalho (vermelho).','Em tudo o que estiver vermelho, abra "O que fazer" e siga os passos. Se continuar, use "Copiar diagnóstico" e mande para o Rafael.','"Catálogo local × site": a última conferência com o site e quantas diferenças existem. "Sincronizar agora" força uma conferência.'],cores:[['verde','ok'],['amarelo','atenção (lento, quase cheio, programa fechado)'],['vermelho','parado'],['cinza','desligado ou não configurado']],cuidados:'Esta página só mostra e testa; ela não liga máquinas. Horário de trabalho: segunda a sexta, das 8h às 19h. Se algo estiver vermelho nesse horário, avise o Rafael com o diagnóstico.',quem:'Operador vê só a aba "Agora" (o que está funcionando e o que fazer). As abas "Alertas" e "Logs", os IPs, as pastas e o backup manual são de admin e master.'},
@@ -8446,7 +8698,7 @@ function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{cons
   pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true);pr('n-ins',A.inscricoes);
   /* UX-70: o menu diz o que o número conta, e é o mesmo número da tela que ele abre */
   const dica=(v,t)=>{const b=document.querySelector(`#nav button[data-v="${v}"]`);if(b)b.title=t};
-  if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Abertos” de Problemas.')}
+  if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Prioridades” de Problemas.')}
   if(p.lotes_precisam_de_voce!=null)dica('filas','Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro. É o número da aba “Precisam de você” de Material novo.')}
 async function atualizarPendencias(){try{const p=await API('/api/pendencias');window.PEND_ULT=p;window.PEND_ERRO=false;atualizarContadoresMenu(p)}catch(_){window.PEND_ERRO=true}if(typeof desenharCardsFila==='function'&&rotaAtual().startsWith('filas'))desenharCardsFila()}   /* redesenho Material novo: o cartão "projetos no site" usa a mesma contagem (contagens.py) */
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
@@ -9735,36 +9987,9 @@ const GRAV_TAG={bloqueia:'r',corrigir:'a',aviso:''};
 // cartão 13: de onde veio o problema. 'campvision' é registrado sozinho na importação do lote; 'site' = um visitante avisou
 const ORIGEM_ERRO={campvision:['automático','b','Registrado sozinho ao importar o lote do CAMP Vision'],site:['site','','Um visitante do site avisou'],operador:['painel','','Relatado por alguém da equipe no painel'],revisao:['revisão','','Achado na revisão das folhas']};
 function origemErroHTML(e){const o=ORIGEM_ERRO[e.origem]||[rotulo(e.origem),'',''];return `<span class="tag ${o[1]}" title="${escHtml(o[2])}">${escHtml(o[0])}</span>${e.relatado_por?`<br><small class="help">${escHtml(e.relatado_por)}</small>`:''}`}
-/* UX-06 ("abas e lista zeradas com 574 abertos"): o filtro e a aba guardados para o F5 valem por 12 h. Antes ficavam para sempre: dias depois
-   a tela abria com um filtro esquecido (Tipo, Gravidade…), as abas contavam só o filtro ("Todos 0") e ninguém via por quê. */
-const ERR_MEM_VALIDO=(()=>{const t=+LISTA_MEM.get('erros.filtros_em',0);return t>0&&Date.now()-t<12*3600e3})();
-let errFiltro=ERR_MEM_VALIDO?LISTA_MEM.get('erros.aba','pedem_acao'):'pedem_acao';if(errFiltro==='abertos')errFiltro='pedem_acao';   /* UX-19: "Abertos" = o que bloqueia ou pede correção; os avisos têm aba própria */
-/* Problemas (19/10, "a pasta de problemas tá confusa"): agrupados por projeto (com o nome), filtros por gravidade/tipo/origem e busca no servidor,
-   o que aconteceu + o que fazer + o botão que resolve (ações que já existem no painel), resolver vários de uma vez e voltar para a lista no mesmo lugar.
-   O que se resolveu sozinho com certeza o servidor fecha (com registro); o "talvez" aparece num grupo separado no topo. */
-let ERR_F=Object.assign({q:'',gravidade:'',categoria:'',origem:''},ERR_MEM_VALIDO?LISTA_MEM.get('erros.filtros',{}):{},{projeto:''});
-{const ok_={gravidade:['bloqueia','corrigir','aviso'],categoria:['autoria_divergente','projeto_errado','duplicata','orientacao','espelhado','codigo','metadado','credito','arquivo_corrompido','outro'],origem:['campvision','revisao','operador','site']};
-  for(const k of Object.keys(ok_))if(ERR_F[k]&&!ok_[k].includes(ERR_F[k]))ERR_F[k]='';if(typeof ERR_F.q!=='string')ERR_F.q=''}   /* UX-06: valor guardado que não existe mais no filtro não vira filtro invisível */
-let ERR_LISTA=[],ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_GR_LIMITE=25,ERR_SEQ=0;
-const ERR_GR_FECHADOS=new Set(LISTA_MEM.get('erros.grupos_fechados',[]));
-const ERR_ABERTO=e=>['aberto','em_correcao'].includes(e.situacao);
-function errParams(){const p=new URLSearchParams();['q','gravidade','categoria','origem','projeto'].forEach(k=>{if(ERR_F[k])p.set(k,ERR_F[k])});return p}
-function errTemFiltro(){return ['q','gravidade','categoria','origem','projeto'].some(k=>ERR_F[k])}
-/* UX-06: os filtros ativos, em palavras ("Tipo: Duplicata · Busca: riviera"), para o aviso acima da lista e para o estado vazio */
-function errFiltrosTexto(){const op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
-  return [ERR_F.projeto?'Projeto: '+ERR_F.projeto:'',ERR_F.gravidade?'Gravidade: '+op('err-grav',ERR_F.gravidade):'',ERR_F.categoria?'Tipo: '+op('err-cat',ERR_F.categoria):'',ERR_F.origem?'Origem: '+op('err-orig',ERR_F.origem):'',ERR_F.q?`Busca: "${ERR_F.q}"`:''].filter(Boolean)}
-let ERR_SEM_FILTRO=null,ERR_N=null,ERR_SEL_ULT=null;
 /* UX-20: "selecionar todos deste tipo/projeto" a partir do último problema escolhido */
 const errTipoChave=e=>rotuloErro(e)+'|'+e.gravidade,errProjChave=e=>e.projeto_codigo||e.fundo_codigo||e.codigo;
 function errMesmos(qual,x){const f=qual==='tipo'?errTipoChave:errProjChave,k=f(x);return ERR_LISTA.filter(e=>ERR_ABERTO(e)&&f(e)===k)}
-function errSincronizarFiltros(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};v('err-q',ERR_F.q);v('err-grav',ERR_F.gravidade);v('err-cat',ERR_F.categoria);v('err-orig',ERR_F.origem);
-  const pf=document.getElementById('err-proj-filtro');if(pf){pf.hidden=!ERR_F.projeto;pf.innerHTML=ERR_F.projeto?`Só <span class="code">${escHtml(ERR_F.projeto)}</span> <button type="button" class="btn sm lnk" data-err-tirar-proj>ver todos os projetos</button>`:''}
-  const l=document.getElementById('err-limpar');if(l)l.hidden=!errTemFiltro();
-  const fa=document.getElementById('err-filtro-ativo');if(fa){const L=errFiltrosTexto();fa.hidden=!L.length;fa.innerHTML=L.length?`<span><b>Filtro ativo:</b> ${escHtml(L.join(' · '))}</span>${ERR_SEM_FILTRO?`<small class="help">sem filtro: ${escHtml(qtd(ERR_SEM_FILTRO.abertos,'aberto','abertos'))}</small>`:''}<button type="button" class="btn sm" data-err-limpar-tudo>Limpar</button>`:''}}
-function errSair(){ERR_VOLTAR={pos:mainEl.scrollTop,ate:Date.now()+30*60000}}   /* ao voltar (Voltar do navegador ou menu), a lista abre no mesmo lugar */
-function errOnde(e){if(e.alvo==='folha'){const curto=String(e.folha||'').slice(11)||e.folha;return `<span class="code" title="${escHtml(e.folha)}">${escHtml(curto)}</span>${e.folha_existe===false&&e.tipo==='comum'?`<br><small class="help">${e.folha_atual?`agora é <span class="code">${escHtml(e.folha_atual.slice(11))}</span>`:'não existe mais'}</small>`:e.tipo==='retirada'?'<br><small class="help">fora do painel</small>':''}`}
-  return e.alvo==='projeto'?'<small class="help">o projeto todo</small>':e.alvo==='fundo'?'<small class="help">o fundo todo</small>':`<span class="code">${escHtml(e.codigo)}</span>`}
-function errGrupoChave(e){return e.resolvido_sozinho&&ERR_ABERTO(e)?'~talvez':(e.projeto_codigo||e.fundo_codigo||e.codigo)}
 const ERR_SO_ADMIN={devolver:1,mover:1,autoria:1};
 function errAcaoBotao(e,pri){if(!ERR_ABERTO(e)||!e.acao||!pode('problema.resolver'))return '';const adm=EU&&['admin','master'].includes(EU.papel);
   if(ERR_SO_ADMIN[e.acao]&&!adm)return `<button class="btn sm err-acao" type="button" disabled title="Só um admin faz isso: peça a um admin">${escHtml(e.acao_rotulo)}</button> <small class="help">peça a um admin</small>`;
@@ -9779,45 +10004,6 @@ function errFpHTML(e,mini){if(!e.folha||!ehDeOutroProjeto(e)&&e.tipo!=='retirada
   /* CAMP-097 (exaustão): retirada por outro motivo (capa, decisão…): a decisão é de admin ("Devolver à revisão"), mas a imagem tem de dar para ver antes */
   if(ab&&e.tipo==='retirada'&&!e.folha_existe)return `<div class="fp-box linha" data-fp-box="${escHtml(e.folha)}"><a class="lnk" href="/api/itens/${encodeURIComponent(e.folha)}/previa" target="_blank" rel="noopener" data-fp-folha="${escHtml(e.folha)}" title="Abrir a imagem grande em outra aba">Ver a folha</a></div>`;
   return !ab&&/^É deste projeto:/.test(e.resolucao||'')&&EU&&EU.papel!=='leitura'?`<div class="act"><button class="btn sm" type="button" data-deste-desfazer="${escHtml(e.folha)}">Desfazer "É deste projeto"</button></div>`:''}
-function errLinhaHTML(e,k,oculto){const ab=ERR_ABERTO(e),res=pode('problema.resolver');
-  return `<tr data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}" data-err-grupo="${escHtml(k)}"${oculto?' hidden':''}><td class="err-sel-col">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.codigo)}">`:''}</td>
-    <td><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span></td><td>${errOnde(e)}</td>
-    <td><p class="err-oque"><b>${escHtml(rotuloErro(e))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}${errFpHTML(e,true)}</td>
-    <td>${origemErroHTML(e)}</td><td>${errSituacaoHTML(e)}</td></tr>`}
-/* UX-64 (b): a mesma folha aparecia 2–3 vezes ("bloqueia", "corrigir — fora do painel", "autoria divergente"). Na lista, UMA linha por folha
-   com os motivos juntos; cada motivo mantém a própria caixa de seleção, o "O que fazer" e o botão que resolve (e abre o próprio problema). */
-const ERR_ORD_GRAV={bloqueia:0,corrigir:1,aviso:2};
-function errPorFolha(L){const m=new Map();L.forEach(e=>{const f=e.alvo==='folha'&&e.folha?'f:'+e.folha:'i:'+e.id;if(!m.has(f))m.set(f,[]);m.get(f).push(e)});return [...m.values()]}
-function errLinhaFolhaHTML(L,k,oculto){if(L.length<2)return errLinhaHTML(L[0],k,oculto);const res=pode('problema.resolver');
-  const S=[...L].sort((a,b)=>(ERR_ORD_GRAV[a.gravidade]??3)-(ERR_ORD_GRAV[b.gravidade]??3)),e0=S[0],origens=[...new Map(S.map(e=>[e.origem,e])).values()];
-  const motivo=e=>{const ab=ERR_ABERTO(e);return `<div class="err-motivo" data-abrir="erro:${escHtml(e.id)}" data-err-motivo="${escHtml(e.id)}">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(rotuloErro(e))} de ${escHtml(e.codigo)}">`:''}<div>
-    <p class="err-oque"><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span> <b>${escHtml(rotuloErro(e))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}${errFpHTML(e,true)}</div></div>`};
-  return `<tr data-abrir="erro:${escHtml(e0.id)}" data-err-linha="${escHtml(e0.id)}" data-err-grupo="${escHtml(k)}" data-err-folha="${escHtml(e0.folha)}"${oculto?' hidden':''}><td class="err-sel-col"></td>
-    <td><span class="tag ${GRAV_TAG[e0.gravidade]}">${escHtml(e0.gravidade)}</span></td><td>${errOnde(e0)}<br><small class="help">${escHtml(qtd(L.length,'motivo','motivos'))}</small></td>
-    <td>${S.map(motivo).join('')}</td><td>${origens.map(origemErroHTML).join('<br>')}</td><td>${errSituacaoHTML(e0)}</td></tr>`}
-function errGrupoHTML(k,L){const talvez=k==='~talvez',e0=L[0],fechado=!talvez&&ERR_GR_FECHADOS.has(k),res=pode('problema.resolver'),abertos=L.filter(ERR_ABERTO);
-  const nome=talvez?'<b>Podem já estar resolvidos</b> <span class="err-gr-resumo">a folha sumiu, mudou de código ou já foi girada: confira e feche</span>':e0.projeto_codigo?`<b>${escHtml(tituloExibicao(e0.projeto_titulo||'')||'Projeto sem nome')}</b> <span class="code">${escHtml(e0.projeto_codigo)}</span>`:e0.fundo_codigo?`<b>${escHtml(e0.fundo_titulo||'Fundo')}</b> <span class="code">${escHtml(e0.fundo_codigo)}</span>`:`<span class="code">${escHtml(k)}</span>`;
-  const n=t=>L.filter(t).length,partes=[qtd(L.length,'problema','problemas')];
-  if(n(e=>e.gravidade==='bloqueia'))partes.push(`${n(e=>e.gravidade==='bloqueia')} bloqueia${n(e=>e.gravidade==='bloqueia')>1?'m':''} a publicação`);
-  if(n(e=>e.tipo==='retirada'))partes.push(qtd(n(e=>e.tipo==='retirada'),'folha retirada pelo CAMP Vision','folhas retiradas pelo CAMP Vision'));
-  if(n(e=>e.tipo==='recusada'))partes.push(qtd(n(e=>e.tipo==='recusada'),'folha recusada na importação','folhas recusadas na importação'));
-  const link=!talvez&&e0.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e0.projeto_codigo)}" data-err-sair data-no-nav>Abrir o projeto ›</a>${ERR_F.projeto?'':` <button type="button" class="btn sm lnk" data-err-so-proj="${escHtml(e0.projeto_codigo)}">Só este projeto</button>`}`:!talvez&&e0.fundo_codigo&&!e0.projeto_codigo?`<a class="lnk" href="#fundo/${escHtml(e0.fundo_codigo)}" data-err-sair data-no-nav>Abrir o fundo ›</a>`:'';
-  return `<tr class="err-gr${talvez?' talvez':''}" data-err-gr="${escHtml(k)}"><td class="err-sel-col">${res&&abertos.length?`<input type="checkbox" data-err-sel-grupo="${escHtml(k)}" aria-label="Selecionar os abertos deste grupo"${abertos.every(e=>ERR_SEL.has(e.id))?' checked':''}>`:''}</td><td colspan="5"><div class="err-gr-tit"><button type="button" class="err-gr-tog" data-err-tog="${escHtml(k)}" aria-expanded="${!fechado}" title="${fechado?'Mostrar':'Esconder'} os problemas deste grupo">${fechado?'▸':'▾'}</button>${nome}<span class="err-gr-resumo">${partes.join(' · ')}</span>${link}</div></td></tr>`+errPorFolha(L).map(F=>errLinhaFolhaHTML(F,k,fechado)).join('')}
-function errRender(){const tb=document.getElementById('err-body');if(!tb)return;const gr=new Map();
-  ERR_LISTA.forEach(e=>{const k=errGrupoChave(e);if(!gr.has(k))gr.set(k,[]);gr.get(k).push(e)});
-  const chaves=[...gr.keys()].sort((a,b)=>(b==='~talvez')-(a==='~talvez')),vis=chaves.slice(0,ERR_GR_LIMITE),nProj=chaves.filter(k=>k!=='~talvez').length;
-  tb.innerHTML=ERR_LISTA.length?vis.map(k=>errGrupoHTML(k,gr.get(k))).join(''):`<tr><td colspan="6" class="empty">${errTemFiltro()?vazioHTML('Nenhum problema com estes filtros.',`Filtro ativo: ${errFiltrosTexto().join(' · ')}.${ERR_SEM_FILTRO&&ERR_SEM_FILTRO.abertos?` Sem filtro há ${qtd(ERR_SEM_FILTRO.abertos,'problema aberto','problemas abertos')}.`:''} Limpe o filtro para ver a lista inteira.`,'<button class="btn sm pri" data-err-limpar-tudo>Limpar</button>'):errFiltro==='pedem_acao'&&ERR_N&&ERR_N.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(ERR_N.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-err-sit="avisos">Ver os avisos</button>'):vazioHTML('Nenhum problema nesta situação.',errFiltro==='pedem_acao'?'Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui, no projeto dele.':'Veja as outras abas. Achou algo errado numa folha? Relate aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':'')}</td></tr>`;
-  const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=ERR_LISTA.length?`${qtd(ERR_LISTA.length,'problema','problemas')} · ${qtd(nProj,'grupo','grupos')}`:'';
-  const m=document.getElementById('err-mais');if(m){m.hidden=chaves.length<=ERR_GR_LIMITE;m.innerHTML=m.hidden?'':`<span class="pg-info">Mostrando ${fmtN(vis.length)} de ${fmtN(chaves.length)} grupos</span><span class="pg-nav"><button class="btn sm" data-err-mais-grupos>Mostrar mais ${fmtN(Math.min(25,chaves.length-vis.length))}</button></span>`}
-  errAtualizarSelecao()}
-function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).map(e=>e.id));[...ERR_SEL].forEach(i=>{if(!ids.has(i))ERR_SEL.delete(i)});
-  const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);
-  {const bm=document.getElementById('err-bulk-mais'),x=n&&ERR_SEL.has(ERR_SEL_ULT)?ERR_LISTA.find(e=>e.id===ERR_SEL_ULT):null;if(bm){const t=x?errMesmos('tipo',x):[],pj=x?errMesmos('projeto',x):[];
-    bm.innerHTML=x?`${t.length>1&&!t.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="tipo" title="${escHtml(rotuloErro(x)+' · '+x.gravidade)}">Todos deste tipo (${fmtN(t.length)})</button>`:''}${pj.length>1&&!pj.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="projeto" title="${escHtml(errProjChave(x))}">Todos deste projeto (${fmtN(pj.length)})</button>`:''}`:''}}const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
-  const t=document.getElementById('err-sel-todos');if(t){t.disabled=!ids.size||!pode('problema.resolver');t.checked=ids.size>0&&n===ids.size;t.indeterminate=n>0&&n<ids.size}
-  document.querySelectorAll('#err-body [data-err-sel-grupo]').forEach(g=>{const L=ERR_LISTA.filter(e=>ERR_ABERTO(e)&&errGrupoChave(e)===g.dataset.errSelGrupo),k=L.filter(e=>ERR_SEL.has(e.id)).length;g.checked=k>0&&k===L.length;g.indeterminate=k>0&&k<L.length})}
-function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['pedem_acao','Abertos'],['avisos','Avisos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];   /* UX-19: avisos em aba própria */
-  ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?(errTemFiltro()?` title="${escHtml('Conta só o filtro ativo: '+errFiltrosTexto().join(' · '))}"`:k==='pedem_acao'?' title="Bloqueiam a publicação ou pedem correção"':k==='avisos'?' title="Só avisos: não impedem publicar nem pedem ação agora"':''):' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
 /* 21/10 ("publicar sem travar", 4.7): fecha de uma vez os avisos automáticos (CAMP Vision, revisão); os relatados por pessoas ficam.
    Primeiro mostra quantos e de que tipo (nada muda); só depois de confirmar grava. Só o admin master vê o botão. */
 const ROT_CAT_ERRO={projeto_errado:'folha de outro projeto',duplicata:'duplicata',orientacao:'rotação',espelhado:'pelo verso',autoria_divergente:'autoria',codigo:'código',metadado:'dado da folha',credito:'crédito',arquivo_corrompido:'arquivo corrompido',outro:'outros'};
@@ -9842,7 +10028,7 @@ async function errVerRepetidos(){let s;try{s=await API('/api/erros/mesclar-repet
    lista: J desce, K sobe, Enter abre o item escolhido, I ignora o item escolhido (esconder por 7 dias, com Desfazer). Sem item
    escolhido com J/K, o I continua abrindo Arquitetos; conferindo uma folha (outra tela) R/K/Enter seguem sendo da revisão. */
 let KB_ATUAL=null;
-function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body tr[data-err-linha]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
+function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body [data-err-linha]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
 function kbMarcar(el){document.querySelectorAll('.kb-atual').forEach(x=>{if(x!==el)x.classList.remove('kb-atual')});KB_ATUAL=el;if(!el)return;el.classList.add('kb-atual');if(!el.hasAttribute('tabindex'))el.tabIndex=-1;el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'})}
 async function kbIgnorar(v,el){if(v==='painel'){const b=el.querySelector('[data-ini-adiar]');if(b)b.click();else toast('Este item não tem "Ignorar"');return}
   const id=+el.dataset.errLinha,e=ERR_LISTA.find(x=>x.id===id);if(!e)return;if(!ERR_ABERTO(e)){toast('Este problema já está fechado');return}
@@ -9868,37 +10054,6 @@ document.addEventListener('click',async e=>{const m=e.target.closest('[data-err-
   try{if(m){await API(`/api/hoje/tarefas/${encodeURIComponent(m.dataset.errIgnMostrar)}/agora-nao`,{method:'DELETE'});toast('Voltou para a lista')}
     else{await API('/api/erros/'+ra.dataset.errResReabrir,{method:'PATCH',body:JSON.stringify({situacao:'aberto'})});toast('Problema reaberto')}
     carregarErros();carregarPainel()}catch(err){(m||ra).disabled=false;toast(err.message)}});
-async function errCarregarDiagnostico(){
-  const el=document.getElementById('err-diagnostico');
-  if(!el)return;
-  if(!EU||!['admin','master'].includes(EU.papel)){el.hidden=true;return}
-  try{
-    const d=await API('/api/erros/diagnostico');
-    if(!d||!Number.isFinite(d.abertos)){el.hidden=true;return}
-    const principais=(d.projetos_com_mais_alertas||[]).slice(0,4),N_=ERR_N&&(ERR_N.sem_filtro||ERR_N),pa=N_&&Number.isFinite(N_.pedem_acao)?N_.pedem_acao:null;   /* UX-70: "577 no menu" × "2.112 abertos": diz qual é qual */
-    el.innerHTML=`<div class="ph"><h2>Entenda os problemas do acervo</h2></div>
-      <div class="pb">
-        <p class="help">${pa!=null?`${fmtN(pa)} pedem ação: é o número do menu Problemas e da aba Abertos. `:''}${d.avisos?`Contando os ${fmtN(d.avisos)} avisos, são ${fmtN(d.abertos)} abertos no total`:`${fmtN(d.abertos)} abertos no total`}; ${qtd(d.bloqueantes,'marcado','marcados')} como bloqueio.${d.avisos?` Dos avisos, ${fmtN(d.avisos_menores_exiftool)} são avisos menores do exiftool.`:''}</p>
-        <div class="act">
-          <button type="button" class="btn sm" data-err-diag-grav="bloqueia">Ver bloqueios (${fmtN(d.bloqueantes)})</button>
-          <button type="button" class="btn sm" data-err-diag-grav="aviso">Ver avisos (${fmtN(d.avisos)})</button>
-        </div>
-        ${principais.length?`<p class="help">Projetos com mais ocorrências: ${principais.map(x=>`<button type="button" class="btn sm" data-err-diag-proj="${escHtml(x.projeto)}">${escHtml(x.projeto)} · ${fmtN(x.quantidade)}</button>`).join(' ')}</p>`:''}
-        ${(d.repeticoes_exatas||[]).length?`<p class="help">Há mensagens repetidas registradas. Nada é apagado: veja os casos e mescle (fica o mais antigo aberto). <button type="button" class="btn sm" data-err-repetidos>Ver</button></p>`:''}
-      </div>`;
-    el.hidden=false;
-  }catch(_){el.hidden=true}
-}
-document.addEventListener('click',e=>{
-  const grav=e.target.closest('[data-err-diag-grav]'),pj=e.target.closest('[data-err-diag-proj]');
-  if(!grav&&!pj)return;
-  errFiltro=grav&&grav.dataset.errDiagGrav==='aviso'?'avisos':'pedem_acao';LISTA_MEM.set('erros.aba',errFiltro);   /* UX-19 */
-  Object.assign(ERR_F,{q:'',categoria:'',origem:''});   /* UX-06: "Ver avisos" com um Tipo guardado de antes dava "Todos 0" */
-  if(grav){ERR_F.gravidade=grav.dataset.errDiagGrav;ERR_F.projeto=''}
-  if(pj){ERR_F.projeto=pj.dataset.errDiagProj;ERR_F.gravidade=''}
-  errMudouFiltro();
-});
-
 /* UX-29: relatório "Possíveis projetos duplicados" (todos os fundos), recolhido; "Não é duplicata" silencia o par (par_nao_duplicado) */
 async function carregarDupProjetos(){const el=document.getElementById('err-dup-proj');if(!el||el.dataset.carregando)return;el.dataset.carregando='1';
   try{const r=await API('/api/duplicados/projetos?limite=50');if(r.calculando)setTimeout(()=>{if(/^#erros/.test(location.hash))carregarDupProjetos()},20000);const aberto=!!el.querySelector('details[open]'),op=EU&&EU.papel!=='leitura';
@@ -9906,37 +10061,6 @@ async function carregarDupProjetos(){const el=document.getElementById('err-dup-p
     el.hidden=!r.total;el.innerHTML=r.total?`<details${aberto?' open':''}><summary class="ph"><h2>Possíveis projetos duplicados <span class="n" id="err-dup-n">${escHtml(r.total)}</span></h2></summary><div class="pb"><p class="help">Projetos do mesmo fundo com nome parecido. Abra os dois e confira; se são o mesmo, use “Mesclar” no projeto. “Não é duplicata” tira o par desta lista de vez.</p>${r.pares.map(x=>`<div class="dup-par"><div class="dup-lados">${lado(x.a)}<span class="dup-x" aria-hidden="true">×</span>${lado(x.b)}</div><small class="help"><span class="tag ${x.nivel==='forte'?'r':'a'}">${x.nivel==='forte'?'muito parecido':'parecido'} · ${escHtml(Math.round(x.score*100))}%</span> ${escHtml((x.motivos||[]).join(' · '))}</small><div class="act"><button class="btn sm" data-np-abrir="${escHtml(x.a.codigo)}">Abrir ${escHtml(x.a.codigo)}</button><button class="btn sm" data-np-abrir="${escHtml(x.b.codigo)}">Abrir ${escHtml(x.b.codigo)}</button>${op?`<button class="btn sm" data-dup-nao="${escHtml(x.a.codigo)}" data-dup-outro="${escHtml(x.b.codigo)}" data-dup-f="${escHtml(x.fundo)}">Não é duplicata</button>`:''}</div></div>`).join('')}${r.total>r.pares.length?`<p class="help">Mostrando ${escHtml(r.pares.length)} de ${escHtml(r.total)}: os mais parecidos primeiro.</p>`:''}</div></details>`:''}
   catch(_){el.hidden=true}finally{delete el.dataset.carregando}}
 function errDupContar(){const n=document.getElementById('err-dup-n'),el=document.getElementById('err-dup-proj');if(!n||!el)return;const v=Math.max(0,(+n.textContent||0)-1);n.textContent=v;if(!el.querySelector('.dup-par'))el.hidden=true}
-async function carregarErros(f){if(!f&&/^#erros/.test(location.hash))carregarDupProjetos();   /* só com Problemas aberto: a conta dos duplicados é pesada (27/10) */
-{const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master')}if(f){errFiltro=f;LISTA_MEM.set('erros.aba',f);LISTA_MEM.set('erros.filtros_em',Date.now())}const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;
-  const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
-  sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
-  try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
-    ERR_LISTA=es;ERR_N=n;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();errCarregarIgnorados();await errCarregarDiagnostico();if(seq!==ERR_SEQ)return;   /* o resumo (acima da lista) muda de altura: volta a rolagem só depois dele */
-    if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
-  catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#err-body','Não consegui carregar os problemas: '+e.message,'carregarErros()')}errRenderAbas(null)}}
-function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});LISTA_MEM.set('erros.filtros_em',Date.now());ERR_GR_LIMITE=25;carregarErros()}
-document.addEventListener('input',e=>{if(e.target.id!=='err-q')return;clearTimeout(window._errQ);window._errQ=setTimeout(()=>{ERR_F.q=e.target.value.trim();errMudouFiltro()},300)});
-document.addEventListener('change',e=>{const m={'err-grav':'gravidade','err-cat':'categoria','err-orig':'origem'}[e.target.id];if(m){ERR_F[m]=e.target.value;
-    if(m==='gravidade'){if(ERR_F.gravidade==='aviso'&&errFiltro==='pedem_acao')errFiltro='avisos';else if(['bloqueia','corrigir'].includes(ERR_F.gravidade)&&errFiltro==='avisos')errFiltro='pedem_acao';LISTA_MEM.set('erros.aba',errFiltro)}   /* UX-19: gravidade "Aviso" mora na aba Avisos */
-    errMudouFiltro();return}
-  if(e.target.id==='err-sel-todos'){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>e.target.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=e.target.checked);errAtualizarSelecao();return}
-  const g=e.target.closest&&e.target.closest('[data-err-sel-grupo]');if(g){ERR_LISTA.filter(x=>ERR_ABERTO(x)&&errGrupoChave(x)===g.dataset.errSelGrupo).forEach(x=>g.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(g.dataset.errSelGrupo)}"] .err-sel`).forEach(c=>c.checked=g.checked);errAtualizarSelecao();return}
-  const s=e.target.closest&&e.target.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);if(s.checked)ERR_SEL_ULT=+s.value;errAtualizarSelecao()}});
-document.addEventListener('click',async e=>{const t=e.target;
-  if(t.closest('#err-limpar,[data-err-limpar-tudo]')){Object.assign(ERR_F,{q:'',gravidade:'',categoria:'',origem:''});['err-q','err-grav','err-cat','err-orig'].forEach(i=>{const el=document.getElementById(i);if(el)el.value=''});LISTA_MEM.set('erros.filtros',{});if(ERR_F.projeto){ERR_F.projeto='';ERR_SEM_FILTRO=null;nav('erros')}else errMudouFiltro();return}   /* UX-06: antes, com "Só este projeto", o Limpar não apagava o filtro guardado e ele voltava no F5 */
-  if(t.closest('[data-err-tirar-proj]')){nav('erros');return}
-  const so=t.closest('[data-err-so-proj]');if(so){nav('erros/'+so.dataset.errSoProj);return}
-  if(t.closest('[data-err-sair]')){errSair();return}
-  const tog=t.closest('[data-err-tog]');if(tog){const k=tog.dataset.errTog,fech=!ERR_GR_FECHADOS.has(k);fech?ERR_GR_FECHADOS.add(k):ERR_GR_FECHADOS.delete(k);LISTA_MEM.set('erros.grupos_fechados',[...ERR_GR_FECHADOS].slice(-200));
-    document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(k)}"]`).forEach(r=>r.hidden=fech);tog.textContent=fech?'▸':'▾';tog.setAttribute('aria-expanded',String(!fech));tog.title=(fech?'Mostrar':'Esconder')+' os problemas deste grupo';return}
-  if(t.closest('[data-err-mais-grupos]')){ERR_GR_LIMITE+=25;errRender();return}
-  const sm=t.closest('[data-err-sel-mesmo]');if(sm){const x=ERR_LISTA.find(e=>e.id===ERR_SEL_ULT);if(x){errMesmos(sm.dataset.errSelMesmo,x).forEach(e=>ERR_SEL.add(e.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=ERR_SEL.has(+c.value));errAtualizarSelecao()}return}
-  if(t.closest('[data-err-repetidos]')){errVerRepetidos();return}
-  const ac=t.closest('[data-err-acao]');if(ac){e.stopPropagation();const x=ERR_LISTA.find(y=>y.id===+ac.dataset.errId)||(window.ERR_ATUAL&&window.ERR_ATUAL.id===+ac.dataset.errId?window.ERR_ATUAL:null);if(x)errExecutar(ac.dataset.errAcao,x);return}
-  const ir=t.closest('[data-err-ir]');if(ir){abrirErro(+ir.dataset.errIr);return}
-  const lt=t.closest('[data-err-lote]');if(lt)errEmLote(lt.dataset.errLote,lt);
-  if(t.closest('[data-err-devolver]'))errDevolver(t.closest('[data-err-devolver]'));
-  if(t.closest('[data-err-retirada-certa]'))errFechar(+t.closest('[data-err-retirada-certa]').dataset.errRetiradaCerta,'corrigido','A retirada estava certa: a folha fica fora do painel e do site.')});
 async function errExecutar(acao,e){const proj=e.projeto_codigo,f=e.folha;
   if(acao==='devolver'){abrirErro(e.id,{devolver:true});return}
   if(acao==='duplicata'){await marcarDuplicata(f);closeDrawer(true);carregarErros();return}
@@ -9974,30 +10098,303 @@ async function errEmLote(acao,b){const er=document.getElementById('err-bulk-err'
     toast(`${qtd(r.atualizados,'problema','problemas')} ${r.atualizados===1?vb[0]:vb[1]}`,
       {acao:{rotulo:'Desfazer',fn:async()=>{try{if(r.desfazer)await errDesfazer(r.desfazer);else{for(const [sit,lista] of Object.entries(antes))await API('/api/erros/lote',{method:'POST',body:JSON.stringify({ids:lista,situacao:sit})});toast('Desfeito')}carregarErros();carregarPainel()}catch(err){toast(err.message)}}}});
     carregarErros();carregarPainel()}catch(err){if(er)er.textContent=err.message}finally{b.disabled=false}}
-async function abrirErro(id,o={}){let e;try{e=await API('/api/erros/'+id)}catch(err){toast(err.message);return}window.ERR_ATUAL=e;
-  const ab=ERR_ABERTO(e),res=pode('problema.resolver'),adm=EU&&['admin','master'].includes(EU.papel),acao=ab&&res?errAcaoBotao(e,true):'';
+/* ===== CAMP-PROB-UX (22/11/2026): Central de Problemas (documento de produto do Rafael, fases 1, 2 e 3 com cuidado) =====
+   Cartões que abrem a lista filtrada · abas Prioridades / Minha fila / Todos / Concluídos · filtros rápidos e combináveis, com chips e
+   "Limpar filtros" e "Salvar visão" · tudo no endereço (#erros/~aba=…&q=…&p=12: link permanente e volta no F5) · linha compacta com
+   severidade em texto + cor + ícone, contexto fundo › projeto › folha, fase, responsável, idade e UMA ação · painel lateral de resolução
+   (a lista fica onde estava) · fluxo de fases com campos obrigatórios · prioridade com o motivo em palavras · reconhecimento só de
+   resolução validada (sem ranking por padrão). Servidor: backend/app/central_problemas.py (/api/problemas). Dados de pessoas só em data-*. */
+const CP_ABAS=[['prioridades','Prioridades','Bloqueiam ou pedem correção, na ordem da prioridade (é o número do menu)'],['minha_fila','Minha fila','Atribuídos a você'],['todos','Todos','Todos os abertos, inclusive os avisos'],['concluidos','Concluídos','Resolvidos, duplicados e inválidos: o histórico']];
+const CP_CHIPS=[['critico','Críticos'],['sem_responsavel','Sem responsável'],['minha_revisao','Aguardando minha revisão'],['antigos','Mais antigos'],['rapidos','Resolvíveis agora'],['avisos','Avisos'],['talvez','Podem já estar resolvidos']];
+const CP_FASES={novo:'Novo',triagem:'Em triagem',em_analise:'Em análise',aguardando_informacao:'Aguardando informação',aguardando_revisao:'Aguardando revisão',devolvido:'Devolvido',reaberto:'Reaberto',resolvido:'Resolvido',duplicado:'Duplicado',invalido:'Inválido'};
+const CP_FASE_TAG={novo:'',triagem:'b',em_analise:'b',aguardando_informacao:'a',aguardando_revisao:'a',devolvido:'a',reaberto:'a',resolvido:'g',duplicado:'',invalido:''};
+const CP_TIPOS={autoria_divergente:'Autoria',projeto_errado:'Folha de outro projeto',duplicata:'Duplicata',orientacao:'Orientação',espelhado:'Digitalizado pelo verso',codigo:'Código',metadado:'Metadados',credito:'Crédito',arquivo_corrompido:'Arquivo danificado',outro:'Outro'};
+const CP_GRAV={bloqueia:'Crítico',corrigir:'Médio',aviso:'Baixo'};
+const CP_IDADES={'0-7':'até 7 dias','8-30':'8 a 30 dias','31-90':'31 a 90 dias','90+':'mais de 90 dias'};
+const CP_SEV_IC={critico:'!',medio:'▲',baixo:'i'};
+const CP_SEV_TAG={critico:'r',medio:'a',baixo:'b'};
+const CP_FILTROS=['q','fase','gravidade','categoria','origem','responsavel','fundo','projeto','de','ate','idade','chip'];
+const CP_PADRAO={aba:'prioridades',ordem:'prioridade',pagina:1,por:25};
+/* ícones (traço com currentColor: claro e escuro) */
+const CP_IC={alerta:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>',exclama:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/>',ampulheta:'<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',camadas:'<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',ok:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',pessoa:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',alvo:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',trofeu:'<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 21h6M10 17h4"/>',relogio:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',lapis:'<path d="M4 20h4L19 9l-4-4L4 16v4z"/>',mais:'<path d="M12 5v14M5 12h14"/>',seta:'<path d="M5 12h14M13 6l6 6-6 6"/>',estrela:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/>'};
+function cpIc(n,cls=''){return `<svg class="cp-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${CP_IC[n]||''}</svg>`}
+function cpVazio(){return Object.assign({},CP_PADRAO,Object.fromEntries(CP_FILTROS.map(k=>[k,''])))}
+let CP=cpVazio();
+var ERR_LISTA=[];let CP_POR_FOLHA={};let ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_SEQ=0,ERR_SEL_ULT=null,CP_RES=null,CP_TOTAL=0,CP_PAGINAS=1,CP_PESSOAS=null,CP_ABERTO=null,CP_PER='mes',CP_GRAF_EM=0,CP_VISOES=[];
+const ERR_ABERTO=e=>['aberto','em_correcao'].includes(e.situacao);
+function cpChips(){return new Set(String(CP.chip||'').split(',').filter(Boolean))}
+function cpTemFiltro(){return CP_FILTROS.some(k=>CP[k])}
+/* o endereço guarda aba, filtros, ordem, página e o problema aberto: link permanente, Voltar e F5 voltam ao mesmo lugar */
+function cpQS(o=CP,comAberto=true){const p=new URLSearchParams();['aba',...CP_FILTROS,'ordem','pagina','por'].forEach(k=>{const v=o[k];if(v!==''&&v!=null&&String(v)!==String(CP_PADRAO[k]??''))p.set(k,v)});if(comAberto&&CP_ABERTO)p.set('p',CP_ABERTO);return p.toString()}
+function cpLerQS(s){const p=new URLSearchParams(s||''),o=cpVazio();['aba',...CP_FILTROS,'ordem','pagina','por'].forEach(k=>{if(p.has(k))o[k]=p.get(k)});
+  o.pagina=Math.max(1,parseInt(o.pagina,10)||1);o.por=[25,50,100].includes(+o.por)?+o.por:25;if(!CP_ABAS.some(a=>a[0]===o.aba))o.aba='prioridades';if(!['prioridade','recentes','antigos','atualizados'].includes(o.ordem))o.ordem='prioridade';
+  return {f:o,p:parseInt(p.get('p'),10)||null}}
+function cpGravarURL(){if(rotaAtual().split('/')[0]!=='erros')return;const qs=cpQS(),r='erros'+(qs?'/~'+qs:'');LISTA_MEM.set('erros.central',cpQS(CP,false));LISTA_MEM.set('erros.filtros_em',Date.now());
+  if(rotaAtual()===r)return;try{history.replaceState({...(history.state||{}),camp:true,campRoute:r},'','#'+r)}catch(_){}}
+function cpRota(a1){a1=a1||'';let lido;
+  if(a1.startsWith('~'))lido=cpLerQS(a1.slice(1));
+  else if(/^F\d{3}(-P\d{4})?$/.test(a1)){lido=cpLerQS('');lido.f.projeto=a1;lido.f.aba='todos'}   /* "#erros/F026-P0001": só este projeto, todos os abertos */
+  else{const t=+LISTA_MEM.get('erros.filtros_em',0),mem=t>0&&Date.now()-t<12*3600e3?LISTA_MEM.get('erros.central',''):'';lido=cpLerQS(typeof mem==='string'?mem:'')}   /* UX-06: o que ficou guardado vale por 12 h */
+  CP=lido.f;if(!lido.p)CP_ABERTO=null;carregarErros().then(()=>{if(lido.p&&lido.p!==CP_ABERTO_MOSTRADO())abrirErro(lido.p)})}
+function CP_ABERTO_MOSTRADO(){return mainEl.classList.contains('with-drawer')&&window.ERR_ATUAL?window.ERR_ATUAL.id:null}
+function cpParams(extra={}){const p=new URLSearchParams();p.set('aba',CP.aba);CP_FILTROS.forEach(k=>{if(CP[k])p.set(k,CP[k])});Object.entries(extra).forEach(([k,v])=>p.set(k,v));return p}
+function cpDias(n){return n<1?'hoje':n===1?'há 1 dia':`há ${fmtN(n)} dias`}
+function cpPessoaNome(id){const p=(CP_PESSOAS||[]).find(x=>String(x.id)===String(id));return p?p.nome:'outra pessoa'}
+function cpAdmin(){return !!(EU&&['admin','master'].includes(EU.papel))}
+
+/* ---- cartões: números confiáveis, cada um abre a lista correspondente; nada de percentual sem base ---- */
+function cpCartoesHTML(r){const c=r&&r.cartoes;if(!c)return '';
+  /* mockup: número grande, rótulo embaixo e o ícone colorido à direita; cada cartão abre a lista filtrada */
+  const card=(k,rot,v,ic,cls,sub)=>`<button type="button" class="cp-cartao ${cls}" data-cp-cartao="${k}" title="${escHtml(sub||'')}" aria-label="${escHtml(rot+': '+fmtN(v)+(sub?'. '+sub:''))}. Abrir a lista"><b class="cp-c-n">${fmtN(v)}</b>${cpIc(ic,'cp-c-ic')}<span class="cp-c-rot">${escHtml(rot)}</span>${sub?`<small>${escHtml(sub)}</small>`:''}</button>`;
+  return card('em_aberto','Problemas em aberto',c.em_aberto,'alerta','cp-c-aberto',`${fmtN(c.pedem_acao)} pedem ação · ${fmtN(c.avisos)} ${c.avisos===1?'aviso':'avisos'}`)
+    +card('criticos','Críticos',c.criticos,'exclama','cp-c-crit','bloqueiam a publicação')
+    +card('em_analise','Em análise',c.em_analise,'ampulheta','cp-c-anal','triagem, análise, aguardando informação')
+    +card('aguardando_revisao','Aguardando conferência',c.aguardando_revisao,'camadas','cp-c-rev','aguardando revisão de outra pessoa')
+    +card('resolvidos',`Resolvidos (${{hoje:'hoje',semana:'7 dias',mes:'30 dias'}[CP_PER]})`,c.resolvidos[CP_PER],'ok','cp-c-res',CP_PER==='mes'&&c.resolvidos_sistema_mes?`${fmtN(c.resolvidos_sistema_mes)} pelo sistema (o painel conferiu)`:'')}
+function cpAbasHTML(r){const n=r&&r.abas;return CP_ABAS.map(([k,t,d])=>`<button class="btn sm cp-aba" data-err-sit="${k}" aria-pressed="${CP.aba===k}" title="${escHtml(d)}">${t}${n?` <b>(${fmtN(n[k]||0)})</b>`:''}</button>`).join('')}
+function cpChipsHTML(r){const n=(r&&r.chips)||{},on=cpChips();return CP_CHIPS.filter(([k])=>!(CP.aba==='concluidos'&&['minha_revisao','rapidos','talvez'].includes(k))&&!(CP.aba==='prioridades'&&k==='avisos')).map(([k,t])=>`<button type="button" class="btn sm cp-chip" data-cp-chip="${k}" aria-pressed="${on.has(k)}">${t}${n[k]!=null?` <b>${fmtN(n[k])}</b>`:''}</button>`).join('')}
+function cpAtivos(){const L=[],op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
+  if(CP.q)L.push(['q',`Busca: "${CP.q}"`]);if(CP.projeto)L.push(['projeto','Projeto: '+CP.projeto]);if(CP.fundo)L.push(['fundo','Fundo: '+op('cp-fundo',CP.fundo)]);
+  if(CP.fase)L.push(['fase','Fase: '+CP.fase.split(',').map(f=>CP_FASES[f]||f).join(' ou ')]);if(CP.gravidade)L.push(['gravidade','Severidade: '+(CP_GRAV[CP.gravidade]||CP.gravidade)]);
+  if(CP.categoria)L.push(['categoria','Tipo: '+(CP_TIPOS[CP.categoria]||CP.categoria)]);if(CP.origem)L.push(['origem','Origem: '+op('err-orig',CP.origem)]);
+  if(CP.responsavel)L.push(['responsavel','Responsável: '+(CP.responsavel==='eu'?'eu':CP.responsavel==='ninguem'?'não atribuído':cpPessoaNome(CP.responsavel))]);
+  if(CP.de||CP.ate)L.push(['periodo','Aberto '+[CP.de?'desde '+fmtData(CP.de):'',CP.ate?'até '+fmtData(CP.ate):''].filter(Boolean).join(' ')]);if(CP.idade)L.push(['idade','Idade: '+CP_IDADES[CP.idade]]);
+  cpChips().forEach(k=>{const c=CP_CHIPS.find(x=>x[0]===k);if(c)L.push(['chip:'+k,c[1]])});return L}
+function cpRenderAtivos(){const fa=document.getElementById('err-filtro-ativo');if(!fa)return;const L=cpAtivos();fa.hidden=!L.length;
+  fa.innerHTML=L.length?`${L.map(([k,t])=>`<span class="cp-ativo">${escHtml(t)}<button type="button" class="cp-ativo-x" data-cp-tirar="${escHtml(k)}" aria-label="${escHtml('Tirar o filtro '+t)}">×</button></span>`).join('')}<button type="button" class="btn sm lnk" data-err-limpar-tudo>Limpar filtros</button><span class="cp-visao-salvar"><button type="button" class="btn sm" data-cp-visao>Salvar visão</button></span>`:''}
+function cpSincronizarCampos(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};
+  v('err-q',CP.q);v('cp-fase',CP.fase.includes(',')?'':CP.fase);v('err-grav',CP.gravidade);v('err-cat',CP.categoria);v('err-orig',CP.origem);v('cp-resp',CP.responsavel);v('cp-fundo',CP.fundo);v('cp-de',CP.de);v('cp-ate',CP.ate);v('cp-idade',CP.idade);v('cp-ordem',CP.ordem);
+  const fb=document.getElementById('cp-filtros-btn');if(fb){const n=['fase','gravidade','categoria','origem','responsavel','fundo','de','ate','idade'].filter(k=>CP[k]).length;fb.textContent=n?`Filtros (${n})`:'Filtros'}}
+/* ---- linha compacta ---- */
+function cpOndeHTML(e){const p=[];if(e.fundo_codigo)p.push(`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair title="${escHtml(e.fundo_titulo||'')}">${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`);
+  if(e.projeto_codigo)p.push(`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo)}</a>`);
+  if(e.folha){const curto=String(e.folha).slice(11)||e.folha;p.push(e.folha_existe&&e.tipo==='comum'?`<a class="lnk" href="#item/${escHtml(e.folha)}" data-err-sair>folha ${escHtml(curto)}</a>`:`<span>folha ${escHtml(curto)}${e.tipo==='retirada'?' (fora do painel)':e.folha_existe===false?(e.folha_atual?' (agora é '+escHtml(e.folha_atual.slice(11))+')':' (não existe mais)'):''}</span>`)}
+  return p.join(' <span class="cp-sep" aria-hidden="true">›</span> ')||`<span class="code">${escHtml(e.codigo)}</span>`}
+function cpCodigoCurto(e){const c=String(e.projeto_codigo||e.fundo_codigo||e.codigo).replace('-',' · '),d=e.folha?(String(e.folha).match(/-(D\d+)$/)||[])[1]:'';return d?`${c} · ${d}${e.tipo==='retirada'?' (fora do painel)':''}`:c}   /* F026 · P0001 · D00012, como no mockup */
+function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.severidade||'medio',pr=e.prioridade||{};
+  const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?'<span class="cp-resp cp-sem">Sem responsável</span>':'<span class="cp-resp cp-sem">—</span>');
+  const ctxTit=e.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo)}</a>`:e.fundo_codigo?`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair>${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`:'';
+  const cod=e.folha&&e.folha_existe&&e.tipo==='comum'?`<a class="cp-chip-cod code" href="#item/${escHtml(e.folha)}" data-err-sair title="Abrir a folha ${escHtml(e.folha)}">${escHtml(cpCodigoCurto(e))}</a>`:`<span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span>`;
+  const pri=ab&&!e.responsavel_id||e.fase==='aguardando_revisao';   /* o botão cheio (azul) é para o que ninguém pegou ou espera revisão; o resto, contorno */
+  return `<div class="cp-linha sev-${sev}${CP_ABERTO===e.id?' sel':''}" role="listitem" data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}"${e.folha?` data-err-folha="${escHtml(e.folha)}"`:''}>
+    <span class="cp-sel">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.id)}">`:''}</span>
+    <span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
+    <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(e.titulo)}</b> <small class="cp-id">nº ${escHtml(e.id)}</small></div>
+      <div class="cp-ctx">${ctxTit}${ctxTit?' · ':''}<span class="cp-desc">${escHtml(e.descricao)}</span></div>
+      ${e.resolvido_sozinho&&ab?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}
+      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml(pr.razao+' (nota '+pr.nota+' de 100)')}">${escHtml(pr.razao)}</span>`:''}</div></div>
+    <div class="cp-quando"><span>${cpIc('cal')}${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span><span>${cpIc('pessoa')}${resp}</span></div>
+    <span class="cp-sev-tag">${escHtml(e.severidade_rotulo)}</span>
+    <div class="cp-acoes"><button type="button" class="btn sm ${pri?'pri ':''}cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
+      <details class="mais-menu cp-linha-mais"><summary class="btn sm" aria-haspopup="menu" aria-label="Mais ações do problema ${escHtml(e.id)}">⋯</summary><div class="mais-lista" role="menu">${res&&ab&&!e.responsavel_id?`<button type="button" role="menuitem" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}<button type="button" role="menuitem" data-cp-link="${escHtml(e.id)}">Copiar link</button>${e.projeto_codigo?`<button type="button" role="menuitem" data-cp-proj="${escHtml(e.projeto_codigo)}">Só este projeto</button>`:''}</div></details></div></div>`}
+function cpEsqueleto(n=5){return Array.from({length:n},()=>'<div class="cp-linha cp-esq" aria-hidden="true"><span></span><span class="cp-sev-ic"></span><div class="cp-corpo"><div class="cp-esq-l"></div><div class="cp-esq-l curto"></div></div></div>').join('')}
+function cpPaginasHTML(){const n=CP_PAGINAS,a=CP.pagina;if(!CP_TOTAL)return '';const ini=(a-1)*CP.por+1,fim=Math.min(CP_TOTAL,a*CP.por);
+  const ps=new Set([1,2,3,4,5].filter(x=>x<=n));[a-1,a,a+1,n].forEach(x=>{if(x>=1&&x<=n)ps.add(x)});const L=[...ps].sort((x,y)=>x-y);let h='',ult=0;
+  L.forEach(x=>{if(x-ult>1)h+='<span class="cp-reti" aria-hidden="true">…</span>';h+=`<button type="button" class="btn sm cp-pg" data-cp-pag="${x}"${x===a?' aria-current="page" aria-pressed="true"':''} aria-label="Página ${x}">${x}</button>`;ult=x});
+  return `<span class="pg-info">Mostrando ${fmtN(ini)}–${fmtN(fim)} de ${fmtN(CP_TOTAL)} problemas</span><span class="pg-nav"><button type="button" class="btn sm cp-pg" data-cp-pag="${a-1}"${a<=1?' disabled':''} aria-label="Página anterior">←</button>${h}<button type="button" class="btn sm cp-pg" data-cp-pag="${a+1}"${a>=n?' disabled':''} aria-label="Próxima página">→</button><label class="cp-por">Por página <select id="cp-por">${[25,50,100].map(x=>`<option${x===CP.por?' selected':''}>${x}</option>`).join('')}</select></label></span>`}
+function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
+  document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
+  cpRenderAtivos();cpSincronizarCampos();
+  CP_POR_FOLHA={};ERR_LISTA.forEach(e=>{if(e.folha&&e.aberto)CP_POR_FOLHA[e.folha]=(CP_POR_FOLHA[e.folha]||0)+1});   /* UX-64: a mesma folha com vários problemas fica marcada ("N problemas nesta folha") */
+  tb.innerHTML=ERR_LISTA.length?ERR_LISTA.map(cpLinhaHTML).join(''):(cpTemFiltro()?vazioHTML('Nenhum problema encontrado.','Limpe os filtros ou tente outra busca.','<button class="btn sm pri" data-err-limpar-tudo>Limpar filtros</button>')
+    :CP.aba==='minha_fila'?vazioHTML('Nada na sua fila.','Quando alguém atribuir um problema a você (ou você assumir um), ele aparece aqui.','<button class="btn sm" data-err-sit="prioridades">Ver as prioridades</button>')
+    :CP.aba==='prioridades'&&CP_RES&&CP_RES.cartoes&&CP_RES.cartoes.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(CP_RES.cartoes.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-cp-ver-avisos>Ver os avisos</button>')
+    :vazioHTML('Nenhum problema nesta lista.','Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':''));
+  tb.setAttribute('aria-busy','false');tb.dataset.render=(+tb.dataset.render||0)+1;   /* contador de desenhos (os testes esperam por ele) */
+  const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=CP_TOTAL?qtd(CP_TOTAL,'problema','problemas'):'';
+  const m=document.getElementById('err-mais');if(m){m.hidden=!CP_TOTAL;m.innerHTML=cpPaginasHTML()}
+  const sub=document.getElementById('cp-sub');if(sub&&CP_RES&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${fmtN(c.em_aberto)} ${c.em_aberto===1?'item que precisa':'itens que precisam'} de análise, conferência ou decisão.`}
+  errAtualizarSelecao()}
+function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).map(e=>e.id));[...ERR_SEL].forEach(i=>{if(!ids.has(i))ERR_SEL.delete(i)});
+  const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);
+  const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
+  /* UX-20: a partir do último escolhido, "Todos deste tipo" / "Todos deste projeto" (na página); e a página inteira */
+  const bm=document.getElementById('err-bulk-mais'),x=n&&ERR_SEL.has(ERR_SEL_ULT)?ERR_LISTA.find(e=>e.id===ERR_SEL_ULT):null,tp=x?errMesmos('tipo',x):[],pj=x?errMesmos('projeto',x):[];
+  if(bm)bm.innerHTML=(tp.length>1&&!tp.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="tipo" title="${escHtml(rotuloErro(x)+' · '+x.gravidade)}">Todos deste tipo (${fmtN(tp.length)})</button>`:'')
+    +(pj.length>1&&!pj.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="projeto" title="${escHtml(errProjChave(x))}">Todos deste projeto (${fmtN(pj.length)})</button>`:'')
+    +(n&&n<ids.size?`<button type="button" class="btn sm" data-cp-sel-pagina>Selecionar os ${fmtN(ids.size)} desta página</button>`:'')}
+async function cpCarregarPessoas(){if(CP_PESSOAS)return CP_PESSOAS;try{CP_PESSOAS=EU&&EU.papel!=='leitura'?await API('/api/painel/pessoas'):[]}catch(_){CP_PESSOAS=[]}   /* a mesma lista da Home (id e nome) */
+  const opts=CP_PESSOAS.map(p=>`<option value="${escHtml(p.id)}">${escHtml(p.nome)}</option>`).join('');
+  const r=document.getElementById('cp-resp');if(r&&r.options.length<=3)r.insertAdjacentHTML('beforeend',opts);
+  const b=document.getElementById('cp-bulk-resp');if(b&&b.options.length<=1){b.insertAdjacentHTML('beforeend',cpAdmin()?opts:(EU?`<option value="${escHtml(EU.id)}">Eu</option>`:''));}   /* regra da Home: operador pega para si; admin atribui a qualquer pessoa */
+  const f=document.getElementById('cp-fundo');if(f&&f.options.length<=1&&typeof FUNDOS!=='undefined')f.insertAdjacentHTML('beforeend',FUNDOS.filter(x=>x[0]!=='F000').map(x=>`<option value="${escHtml(x[0])}">${escHtml(x[0]+' · '+(x[2]||''))}</option>`).join(''));
+  cpSincronizarCampos();return CP_PESSOAS}
+async function carregarErros(aba){
+  if(typeof aba==='string'&&aba){const m={pedem_acao:['prioridades'],abertos:['prioridades'],avisos:['todos','avisos'],em_correcao:['todos'],corrigido:['concluidos'],ignorado:['concluidos']}[aba];
+    if(m){CP.aba=m[0];CP.chip=m[1]||''}else if(CP_ABAS.some(a=>a[0]===aba))CP.aba=aba;CP.pagina=1;if(CP.aba==='concluidos'&&CP.ordem==='prioridade')CP.ordem='recentes'}
+  const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;const naTela=rotaAtual().split('/')[0]==='erros',noLugar=sec.classList.contains('on');
+  {const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master');const rp=document.querySelector('#v-erros [data-err-repetidos]');if(rp)rp.hidden=!(EU&&['admin','master'].includes(EU.papel))}
+  if(naTela&&/^#erros/.test(location.hash))carregarDupProjetos();
+  const volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;
+  sec.querySelector('.aviso-exemplo')?.remove();const seq=++ERR_SEQ;tb.setAttribute('aria-busy','true');if(!tb.querySelector('[data-err-linha]'))tb.innerHTML=cpEsqueleto();
+  cpCarregarPessoas();cpSincronizarCampos();
+  try{const [L,R]=await Promise.all([API('/api/problemas?'+cpParams({ordem:CP.ordem,pagina:CP.pagina,por_pagina:CP.por})),API('/api/problemas/resumo?'+cpParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
+    if(L.pagina>L.paginas&&CP.pagina>1){CP.pagina=L.paginas;return carregarErros()}
+    ERR_LISTA=L.itens;CP_TOTAL=L.total;CP_PAGINAS=L.paginas;CP_RES=R;cpRender();if(naTela)cpGravarURL();atualizarPendencias();errCarregarIgnorados();
+    if(naTela){cpCarregarLateral();cpCarregarGraficos();cpCarregarVisoes()}
+    if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
+  catch(e){if(e.status!==401&&e.status!==428){tb.setAttribute('aria-busy','false');tb.innerHTML=e.status===403?estadoHTML('sem-permissao',{titulo:'Você não pode ver os problemas.',texto:'O seu papel neste painel não abre esta lista.',quem:'um administrador (o Rafael)'}):estadoErroHTML({titulo:'Não consegui carregar os problemas.',texto:e.message,retry:'carregarErros()'})}}}
+function errMudouFiltro(){CP.pagina=1;ERR_SEL.clear();carregarErros()}
+function errSair(){ERR_VOLTAR={pos:mainEl.scrollTop,ate:Date.now()+30*60000}}   /* ao voltar (Voltar do navegador ou menu), a lista abre no mesmo lugar */
+/* ---- gráficos: só dados reais (abertos por tipo; 4 semanas de resolução) ---- */
+async function cpCarregarGraficos(){if(Date.now()-CP_GRAF_EM<30000)return;CP_GRAF_EM=Date.now();const a=document.getElementById('cp-graf-tipo'),b=document.getElementById('cp-graf-sem');if(!a||!b)return;
+  let g;try{g=await API('/api/problemas/graficos')}catch(e){a.innerHTML=b.innerHTML=estadoErroHTML({titulo:'Não consegui carregar o gráfico.',texto:e.message});return}
+  const tot=g.total_abertos||0;let acc=0;
+  const fatias=g.por_tipo.map((t,i)=>{const pct=tot?t.n/tot*100:0,f={...t,pct,ini:acc,cor:i%8};acc+=pct;return f});
+  a.innerHTML=`<div class="ph"><h2>Problemas por tipo</h2><small class="help">abertos agora</small></div><div class="pb cp-donut-box">${tot?`<svg class="cp-donut" viewBox="0 0 42 42" role="img" aria-label="${escHtml(fatias.map(f=>`${f.rotulo}: ${f.n}`).join('; '))}"><circle class="cp-donut-fundo" cx="21" cy="21" r="15.915" fill="none" stroke-width="7"></circle>${fatias.map(f=>`<circle class="cp-cor-${f.cor}" cx="21" cy="21" r="15.915" fill="none" stroke-width="7" stroke-dasharray="${f.pct.toFixed(3)} ${(100-f.pct).toFixed(3)}" stroke-dashoffset="${(25-f.ini).toFixed(3)}"></circle>`).join('')}<text x="21" y="21.5" class="cp-donut-n">${escHtml(fmtN(tot))}</text><text x="21" y="26.5" class="cp-donut-l">total</text></svg>
+    <ul class="cp-legenda">${fatias.map(f=>`<li><button type="button" class="lnk" data-cp-tipo="${escHtml(f.categoria)}" title="${escHtml(fmtN(f.n))} abertos"><span class="cp-pt cp-cor-${f.cor}" aria-hidden="true"></span>${escHtml(f.rotulo)}</button><b>${Math.round(f.pct)}%</b></li>`).join('')}</ul>`:vazioHTML('Nenhum problema aberto.','Quando houver, a divisão por tipo aparece aqui.')}</div>`;
+  const S=g.semanas||[],mx=Math.max(1,...S.map(s=>s.resolvidos)),H=110,W=78,X0=26,esc=Math.ceil(mx/4)||1,top=esc*4;
+  const dm=d=>{const x=new Date(d+'T12:00:00');return x.getDate()+' '+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()]};
+  b.innerHTML=`<div class="ph"><h2>Evolução de resolução</h2><small class="help cp-sel-falso">Últimas 4 semanas</small></div><div class="pb">${S.some(s=>s.resolvidos)?`<svg class="cp-barras" viewBox="0 0 ${X0+S.length*W} ${H+34}" role="img" aria-label="${escHtml(S.map(s=>`Semana de ${dm(s.inicio)}: ${s.resolvidos} resolvidos (${s.pelo_sistema} pelo sistema), ${s.novos} novos`).join('; '))}">${[0,1,2,3,4].map(k=>`<text class="cp-b-l cp-b-y" x="${X0-6}" y="${(10+H-k*H/4+3).toFixed(1)}">${k*esc}</text><line class="cp-b-grade" x1="${X0}" x2="${X0+S.length*W}" y1="${(10+H-k*H/4).toFixed(1)}" y2="${(10+H-k*H/4).toFixed(1)}"></line>`).join('')}${S.map((s,i)=>{const x=X0+i*W+12,h=s.resolvidos/top*H,fimS=new Date(s.fim+'T12:00:00');fimS.setDate(fimS.getDate()-1);return `<rect class="cp-b-pess" x="${x}" y="${(10+H-h).toFixed(1)}" width="${W-24}" height="${h.toFixed(1)}" rx="2"></rect><text class="cp-b-n" x="${x+(W-24)/2}" y="${(10+H-h-4).toFixed(1)}">${s.resolvidos}</text><text class="cp-b-l" x="${x+(W-24)/2}" y="${H+28}">${escHtml(dm(s.inicio)+' – '+dm(fimS.toISOString().slice(0,10)))}</text>`}).join('')}</svg>
+    <p class="cp-b-leg">Resolvidos por semana (${fmtN(S.reduce((t,s)=>t+s.pelo_sistema,0))} pelo sistema, quando o painel conferiu sozinho). Novos no período: ${fmtN(S.reduce((t,s)=>t+s.novos,0))}.</p>`:vazioHTML('Nada resolvido nas últimas 4 semanas.','As barras aparecem quando houver resoluções.')}</div>`}
+/* ---- coluna da direita: progresso (só resolução validada), meta coletiva, conquistas, ranking (só se ligado), atividade recente ---- */
+const CP_HEX='<svg class="cp-hex" viewBox="0 0 60 64" aria-hidden="true"><path class="cp-hex-f" d="M30 3 55 17v30L30 61 5 47V17z"/><path class="cp-hex-i" d="M30 11 48 21v22L30 53 12 43V21z"/><path class="cp-hex-e" d="m30 20 3.4 7 7.6 1.1-5.5 5.3 1.3 7.6L30 37.4 23.2 41l1.3-7.6L19 28.1l7.6-1.1z"/></svg>';
+function cpSemanaTxt(desde){const d=new Date(String(desde||'').replace(' ','T')+'Z');if(isNaN(d))return '';d.setHours(d.getHours()-3);const f=new Date(d);f.setDate(f.getDate()+6);const m=x=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][x.getMonth()];return `${d.getDate()}${m(d)!==m(f)?' '+m(d):''} – ${f.getDate()} ${m(f)}`}
+const CP_ATIV_IC={ok:['ok','g'],lapis:['lapis','b'],pessoa:['pessoa','b'],mais:['mais','a'],relogio:['relogio','']};
+async function cpCarregarLateral(){const el=document.getElementById('cp-lateral');if(!el)return;let d;try{d=await API('/api/problemas/progresso')}catch(e){el.innerHTML=`<div class="panel">${estadoErroHTML({titulo:'Não consegui carregar o progresso.',texto:e.message})}</div>`;return}
+  /* UM sistema de pontos: o da Home (recontado do estado: desfez, o ponto some). Aqui só se mostra; as conquistas de qualidade da Central não dão pontos. */
+  const j=d.jogo||{},eu=j.eu,sem=j.semana||{},adm=EU&&['admin','master'].includes(EU.papel);
+  const lk=(href,t)=>`<a class="cp-lk" href="${href}">${escHtml(t)} ${cpIc('seta')}</a>`;
+  const prog=!j.ligado?'':j.oculto?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Seu progresso na resolução</h2></div><p class="help">Você ocultou o seu progresso e as suas conquistas (vale também na Home).</p><button type="button" class="btn sm" data-cp-ocultar="0">Mostrar de novo</button></div>`
+    :eu?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Seu progresso na resolução</h2>${lk('#painel','Ver metas')}</div><div class="cp-prog">${CP_HEX}<div class="cp-prog-c"><div class="cp-prog-l"><span><b class="cp-nivel">Nível ${escHtml(eu.nivel)}</b><small>${escHtml(eu.nome)}</small></span><span class="cp-pts"><b>${fmtN(eu.xp)} pts</b><small>${eu.ate?`para o nível ${eu.nivel+1}`:'nível máximo'}</small></span></div>${eu.ate?`<progress class="cp-barra" max="${eu.ate-eu.de}" value="${Math.max(0,eu.xp-eu.de)}" aria-label="Até o nível ${eu.nivel+1}: faltam ${fmtN(Math.max(0,eu.ate-eu.xp))} pontos"></progress>`:''}</div></div><button type="button" class="btn sm lnk cp-ocultar" data-cp-ocultar="1">Ocultar minhas conquistas</button></div>`:'';
+  const pct=sem.meta?Math.min(100,Math.round(100*(sem.feito||0)/sem.meta)):0;
+  const meta=j.ligado?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('alvo','cp-ic-t')} Meta da semana</h2><small class="help">${escHtml(cpSemanaTxt(sem.desde))}</small></div><div class="cp-meta-s">${cpIc('alvo','cp-alvo')}<div class="cp-prog-c"><div class="cp-prog-l"><span>Fazer <b>${fmtN(sem.meta||0)} pontos</b></span><span class="cp-meta-n"><b>${fmtN(sem.feito||0)}</b> / ${fmtN(sem.meta||0)} (${pct}%)</span></div><progress class="cp-barra" max="${sem.meta||1}" value="${Math.min(sem.feito||0,sem.meta||0)}" aria-label="Meta da semana"></progress><small class="help" title="A meta é da equipe e a mesma da Home: só ações validadas que continuam valendo">${fmtN((sem.por_tipo||{}).problema_resolvido||0)} problemas corrigidos · ${fmtN((sem.por_tipo||{}).problema_critico_resolvido||0)} que bloqueavam</small></div></div></div>`:'';
+  const cq=(d.conquistas_qualidade||[]),ganhas=cq.filter(c=>c.obtida),falta=cq.filter(c=>!c.obtida),home=(eu&&eu.conquistas||[]);
+  const badge=(i,ok)=>`<span class="cp-badge cp-badge-${i%3}${ok?'':' off'}" aria-hidden="true">${cpIc(['estrela','camadas','ok'][i%3])}</span>`;
+  const conq=j.ligado&&!j.oculto&&(cq.length||home.length)?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>Conquistas recentes</h2>${lk('#painel','Ver todas')}</div><ul class="cp-conq">${[...ganhas.map(c=>({t:c.titulo,s:c.coletiva?'marco coletivo':c.descricao,ok:1})),...home.slice(-2).map(c=>({t:c.rotulo,s:'da Home',ok:1})),...falta.map(c=>({t:c.titulo,s:`${fmtN(c.feito)} de ${fmtN(c.meta)} · ${c.descricao}`,ok:0}))].slice(0,4).map((c,i)=>`<li class="${c.ok?'ok':''}">${badge(i,c.ok)}<span><b>${escHtml(c.t)}</b><small>${escHtml(c.s)}</small></span></li>`).join('')}</ul></div>`:'';
+  const rank=Array.isArray(j.equipe)?`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('trofeu','cp-ic-t')} Ranking da equipe <span class="cp-lat-sub">(semana)</span></h2></div><p class="help cp-aviso-rank">${escHtml(d.aviso_ranking)}</p>${j.equipe.length?`<ol class="cp-rank">${j.equipe.slice(0,5).map((r,i)=>`<li><span class="cp-rank-n">${i+1}</span><span>${escHtml(r.nome)}</span><b>${fmtN(r.pontos)} pts</b></li>`).join('')}</ol>`:'<p class="help">Ninguém pontuou nesta semana.</p>'}</div>`:'';
+  const at=`<div class="panel cp-lat"><div class="cp-lat-h"><h2>${cpIc('relogio','cp-ic-t')} Atividade recente</h2></div>${(d.atividade||[]).length?`<ul class="cp-ativ">${d.atividade.slice(0,6).map(a=>{const ic=CP_ATIV_IC[a.icone]||CP_ATIV_IC.relogio;return `<li><span class="cp-ativ-ic ${ic[1]}" aria-hidden="true">${cpIc(ic[0])}</span><span>${a.erro_id?`<button type="button" class="lnk" data-cp-abrir="${escHtml(a.erro_id)}"><b>${escHtml(a.titulo||a.texto)}</b></button>`:`<b>${escHtml(a.titulo||a.texto)}</b>`}<small>${escHtml([a.ator,a.codigo,cpDiasHoras(a.quando)].filter(Boolean).join(' · '))}</small></span></li>`}).join('')}</ul>`:'<p class="help">Nada registrado ainda.</p>'}${adm?lk('#auditoria','Ver histórico de atividades'):''}</div>`;
+  el.innerHTML=prog+meta+conq+rank+at}
+function cpDiasHoras(ts){const t=Date.parse(String(ts||'').replace(' ','T')+'Z');if(isNaN(t))return '';const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<60?`há ${m} min`:m<1440?`há ${Math.round(m/60)} h`:`há ${qtd(Math.round(m/1440),'dia','dias')}`}
+async function cpCarregarVisoes(){const s=document.getElementById('cp-visoes');if(!s)return;try{CP_VISOES=await API('/api/problemas/visoes')}catch(_){CP_VISOES=[]}
+  s.hidden=!CP_VISOES.length;const atual=cpQS(CP,false);s.innerHTML=`<option value="">Visões salvas (${fmtN(CP_VISOES.length)})</option>`+CP_VISOES.map(v=>`<option value="${escHtml(v.id)}"${v.params===atual?' selected':''}>${escHtml(v.nome)}</option>`).join('')+(CP_VISOES.some(v=>v.params===atual)?'<option value="apagar">Apagar esta visão</option>':'')}
+/* ---- painel lateral de resolução ---- */
+const CP_EVT={criado:'registrou o problema',evidencia:'adicionou evidência',atribuido:'mudou o responsável',duplicado_juntado:'juntou como duplicado',recebeu_duplicado:'recebeu um duplicado',fechado_automatico:'fechou sozinho (o painel conferiu)',editado:'mudou a situação',ignorado:'fechou: não era problema',mesclado:'mesclou mensagem repetida',desfeito:'desfez uma ação',pontos_estornados:'os pontos da resolução foram estornados',reaberto_automatico:'reabriu sozinho',problema_seguiu_folha:'o problema seguiu a folha (código novo)'};
+function cpEventoTexto(h){const d=h.detalhe||{};let t=h.tipo==='fase'?'moveu para '+(CP_FASES[d.para]||d.para):(CP_EVT[h.tipo]||h.tipo);
+  if(h.tipo==='tarefa_atribuida')t='atribuiu a '+(d.para||'alguém');if(h.tipo==='tarefa_devolvida')t='devolveu (sem responsável)';
+  const extra=d.conclusao||d.motivo||d.justificativa||(h.tipo==='duplicado_juntado'&&d.fica?'fica o nº '+d.fica:'')||(h.tipo==='recebeu_duplicado'&&d.duplicado?'nº '+d.duplicado:'')||d.motivo;
+  return t+(extra?': '+extra:'')}
+function cpEvidenciaHTML(v){const val=v.tipo==='link'?`<a class="lnk" href="${escHtml(v.valor)}" target="_blank" rel="noopener">${escHtml(v.valor)}</a>`:v.tipo==='folha'?`<a class="lnk" href="#item/${escHtml(v.valor)}" data-err-sair>folha ${escHtml(v.valor)}</a>`:escHtml(v.valor);
+  return `<li class="cp-ev cp-ev-${escHtml(v.tipo)}"><span class="tag">${v.tipo==='justificativa'?'justificativa':v.tipo==='link'?'link':v.tipo==='folha'?'folha':'fonte'}</span> ${val}<small class="help">${escHtml(v.autor_nome||v.autor)} · ${escHtml(fmtDataHora(v.criado_em))}${v.origem_erro_id?` · veio do nº ${escHtml(v.origem_erro_id)}`:''}</small></li>`}
+function cpPainelHTML(e){const res=pode('problema.resolver'),adm=EU&&['admin','master'].includes(EU.papel),ab=e.aberto,eu=EU&&EU.email,pr=e.prioridade||{},sev=e.severidade||'medio';
+  const tr=new Set((e.transicoes||[]).map(t=>t.fase)),req=t=>((e.transicoes||[]).find(x=>x.fase===t)||{}).requisitos||[];
   const i=ERR_LISTA.findIndex(x=>x.id===e.id),ant=i>0?ERR_LISTA[i-1]:null,prox=i>=0&&i<ERR_LISTA.length-1?ERR_LISTA[i+1]:null;
-  const onde=e.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||'Projeto')} <span class="code">${escHtml(e.projeto_codigo)}</span></a>${e.folha?` › <span class="code">${escHtml(String(e.folha).slice(11))}</span>${e.folha_existe&&e.tipo==='comum'?` <a class="lnk" href="#item/${escHtml(e.folha)}" data-err-sair>abrir a folha</a>`:''}`:''}`:e.fundo_codigo?`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair>${escHtml(e.fundo_titulo||'Fundo')} <span class="code">${escHtml(e.fundo_codigo)}</span></a>`:`<span class="code">${escHtml(e.codigo)}</span>`;
-  const extra=ab&&res&&e.tipo==='retirada'?(adm&&e.lote_id?`<div class="err-dev"><input id="err-dev-mot" maxlength="300" placeholder="Por que a folha volta para a revisão?" aria-label="Por que a folha volta para a revisão"><button class="btn pri" type="button" data-err-devolver>Devolver à revisão</button></div>`:adm?'':'<p class="help">Só um admin devolve uma folha retirada à revisão: peça a um admin.</p>')+`<div class="act"><button class="btn" type="button" data-err-retirada-certa="${escHtml(e.id)}">A retirada está certa</button></div>`:'';
-  const so=e.resolvido_sozinho&&ab?`<div class="err-aviso-sozinho" role="status"><b>Pode já estar resolvido.</b> ${escHtml(e.resolvido_sozinho.motivo)}</div>`:'';
-  openDrawer(e.tipo==='retirada'?'Folha retirada pelo CAMP Vision':e.tipo==='recusada'?'Folha recusada na importação':rotuloErro(e),e.codigo,`${so}<div class="err-bloco"><p>${onde}</p></div>
-    <div class="err-bloco"><h3>O que aconteceu</h3><p>${escHtml(e.o_que||'')}</p><p class="help">${escHtml(e.descricao)}</p></div>
-    ${ab?`<div class="err-bloco"><h3>O que fazer</h3><p>${escHtml(e.fazer||'')}</p>${ehDeOutroProjeto(e)&&e.folha?errFpHTML(e,false):e.tipo==='retirada'?extra:acao?`<div class="act">${acao}</div>`:''}</div>`:errFpHTML(e,false)}
-    <dl class="kv"><dt>Gravidade</dt><dd><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span>${e.gravidade==='bloqueia'?` <small class="help">${String(e.codigo||'').length>10?'esta folha fica fora da publicação até resolver; o resto do projeto publica':(e.origem!=='campvision'||e.categoria==='arquivo_corrompido')?'o projeto não pode ser publicado até resolver':'aviso automático: não impede publicar'}</small>`:''}</dd><dt>Origem</dt><dd>${escHtml((ORIGEM_ERRO[e.origem]||[])[2]||rotulo(e.origem))}${e.relatado_por?' · '+escHtml(e.relatado_por):''}</dd><dt>Relatado em</dt><dd>${fmtDataHora(e.criado_em)}</dd><dt>Situação</dt><dd>${errSituacaoHTML(e)}</dd>${e.resolucao&&(!ab||!res)?`<dt>Resolução</dt><dd>${escHtml(e.resolucao)}</dd>`:''}</dl>
-    ${res?`<div class="cfg"><input type="hidden" id="ee-sit" value="${escHtml(e.situacao)}"><label class="field">${ab?'Já resolveu? Diga em uma frase o que foi feito (ou por que não era problema)':'Resolução'}<textarea id="ee-res" rows="2" placeholder="ex.: a folha foi movida para F026-P0001">${escHtml(e.resolucao||'')}</textarea><small class="erro-txt" id="ee-res-err"></small></label>
-      <div class="act">${ab?`<button class="btn${acao||extra?'':' pri'}" data-err-res="corrigido" data-err-id="${escHtml(e.id)}">Marcar como corrigido</button><button class="btn" data-err-res="ignorado" data-err-id="${escHtml(e.id)}">Não era problema</button>${e.situacao==='aberto'?`<button class="btn" data-err-res="em_correcao" data-err-id="${escHtml(e.id)}">Estou corrigindo</button>`:''}`:`<button class="btn" data-err-res="aberto" data-err-id="${escHtml(e.id)}">Reabrir</button>`}</div></div>`:''}
-    ${i>=0&&ERR_LISTA.length>1?`<div class="err-nav"><button class="btn sm" type="button"${ant?` data-err-ir="${escHtml(ant.id)}"`:' disabled'}>‹ Anterior</button><small class="help">${fmtN(i+1)} de ${fmtN(ERR_LISTA.length)}</small><button class="btn sm" type="button"${prox?` data-err-ir="${escHtml(prox.id)}"`:' disabled'}>Próximo ›</button></div>`:''}`);
-  const dop=document.getElementById('d-open');if(dop)dop.style.display='none';
+  const ident=`<section class="cp-sec cp-ident" aria-label="Identificação"><p class="cp-tags"><span class="tag ${CP_SEV_TAG[sev]}"><span aria-hidden="true">${CP_SEV_IC[sev]}</span> ${escHtml(e.severidade_rotulo)}</span><span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span><span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span><small class="cp-id">nº ${escHtml(e.id)}</small></p>${ab&&pr.razao?`<p class="cp-razao-grande">${escHtml(pr.razao)}</p>`:''}
+    <dl class="kv"><dt>Origem</dt><dd>${origemErroHTML(e)}</dd><dt>Aberto em</dt><dd>${escHtml(fmtDataHora(e.criado_em))} (${escHtml(cpDias(e.idade_dias))})</dd><dt>Responsável</dt><dd><span class="cp-resp${e.responsavel_id?'':' cp-sem'}"${e.responsavel_id?` data-cp-pessoa="${escHtml(e.responsavel_id)}"`:''}>${escHtml(e.responsavel_nome||'Não atribuído')}</span>${res&&ab?` ${!e.responsavel_id?`<button type="button" class="btn sm" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}${e.responsavel_id&&(e.responsavel_id===(EU&&EU.id)||cpAdmin())?`<button type="button" class="btn sm" data-cp-devolver="${escHtml(e.id)}">Devolver</button>`:''}${cpAdmin()?`<select class="cp-atrib" data-sem-alteracao data-cp-atrib="${escHtml(e.id)}" aria-label="Atribuir a"><option value="">Atribuir a…</option>${(CP_PESSOAS||[]).map(p=>`<option value="${escHtml(p.id)}">${escHtml(p.nome)}</option>`).join('')}</select>`:''}`:''}</dd>
+    ${e.enviado_revisao_por?`<dt>Enviado para revisão</dt><dd>${escHtml(e.enviado_revisao_nome||e.enviado_revisao_por)} · ${escHtml(fmtDataHora(e.enviado_revisao_em))}</dd>`:''}${e.revisado_por?`<dt>Revisado por</dt><dd>${escHtml(e.revisado_nome||e.revisado_por)} · ${escHtml(fmtDataHora(e.revisado_em))}</dd>`:''}${!ab?`<dt>Concluído</dt><dd>${escHtml(e.fechado_nome||'—')} · ${escHtml(fmtDataHora(e.resolvido_em))}</dd>`:''}</dl></section>`;
+  const ctx=`<section class="cp-sec" aria-label="Contexto"><h3>Contexto</h3><p class="cp-ctx">${cpOndeHTML(e)}</p>${e.lote_id?`<small class="help">Lote nº ${escHtml(e.lote_id)} do CAMP Vision</small>`:''}${e.projeto_codigo?`<div class="act"><a class="btn sm" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>Abrir o projeto</a></div>`:''}</section>`;
+  const ev=(e.evidencias||[]);
+  const hip=e.categoria==='autoria_divergente'?`<div class="cp-hip"><h4>Fontes e hipóteses</h4>${(e.hipoteses||[]).length?`<div class="cp-hip-grade">${e.hipoteses.map(h=>`<div class="cp-hip-col"><b>${escHtml(h.hipotese)}</b><ul class="cp-evs">${h.fontes.map(cpEvidenciaHTML).join('')}</ul></div>`).join('')}</div>`:'<p class="help">Nenhuma fonte registrada ainda. Registre de onde vem cada hipótese (carimbo, documento, publicação), indicando a qual hipótese ela se refere. O painel não sugere autoria nem fonte.</p>'}</div>`:'';
+  const fig=e.previa?`<figure class="cp-fig"><a href="${escHtml(e.previa)}" target="_blank" rel="noopener" data-cp-folha="${escHtml(e.folha)}"><img src="${escHtml(e.previa)}" alt="Prévia da folha ${escHtml(String(e.folha).slice(11))}" loading="lazy" onerror="this.closest('figure').hidden=true"></a>${visorBarraHTML({ctx:'cp',codigo:e.folha,abrir:e.previa})}</figure>`:'';
+  const qual=`<section class="cp-sec" aria-label="Qual é o problema?"><h3>Qual é o problema?</h3>${e.resolvido_sozinho&&ab?`<div class="err-aviso-sozinho" role="status"><b>Pode já estar resolvido.</b> ${escHtml(e.resolvido_sozinho.motivo)}</div>`:''}<p><b>${escHtml(e.o_que||'')}</b></p><p class="cp-desc-full">${escHtml(e.descricao)}</p>${fig}${hip}${ev.length&&e.categoria!=='autoria_divergente'?`<h4>Evidências</h4><ul class="cp-evs">${ev.map(cpEvidenciaHTML).join('')}</ul>`:''}${e.categoria==='autoria_divergente'&&ev.some(v=>v.tipo==='justificativa')?`<ul class="cp-evs">${ev.filter(v=>v.tipo==='justificativa').map(cpEvidenciaHTML).join('')}</ul>`:''}${(e.duplicados||[]).length?`<p class="help">Juntados a este: ${e.duplicados.map(d=>`<button type="button" class="lnk" data-err-ir="${escHtml(d.id)}">nº ${escHtml(d.id)}</button>`).join(', ')} (o histórico deles aparece abaixo).</p>`:''}</section>`;
+  const retirada=ab&&res&&e.tipo==='retirada'?(adm&&e.lote_id?`<div class="err-dev"><input id="err-dev-mot" maxlength="300" placeholder="Por que a folha volta para a revisão?" aria-label="Por que a folha volta para a revisão"><button class="btn" type="button" data-err-devolver>Devolver à revisão</button></div>`:adm?'':'<p class="help">Só um admin devolve uma folha retirada à revisão: peça a um admin.</p>')+`<div class="act"><button class="btn" type="button" data-err-retirada-certa="${escHtml(e.id)}">A retirada está certa</button></div>`:'';
+  const decidir=`<section class="cp-sec" aria-label="O que precisa ser decidido?"><h3>O que precisa ser decidido?</h3>${e.motivo_pendencia&&ab?`<p class="cp-pend"><b>${e.fase==='devolvido'?'Devolvido':e.fase==='aguardando_informacao'?'Aguardando':'Observação'}:</b> ${escHtml(e.motivo_pendencia)}</p>`:''}<p>${escHtml(ab?(e.fazer||''):(e.resolucao||'Sem conclusão registrada.'))}</p>${ab?(e.tipo==='retirada'?retirada:(errAcaoBotao(e,false)?`<div class="act">${errAcaoBotao(e,false)}</div>`:'')+(ehDeOutroProjeto(e)&&e.folha?errFpHTML(e,false):'')):errFpHTML(e,false)}
+    ${ab?`<p class="help cp-req">Para resolver: ${escHtml(req('resolvido').concat().join(' + ')||req('aguardando_revisao').join(' + ')||'—')}.${e.precisa_revisao?' Este tipo precisa da revisão de outra pessoa.':''}</p>`:''}</section>`;
+  let resp='';
+  if(res&&ab){const naRev=e.fase==='aguardando_revisao',souQuemEnviou=naRev&&e.enviado_revisao_por===eu,bloqRev=naRev&&e.precisa_revisao&&souQuemEnviou;
+    const prim=naRev?(bloqRev?'<p class="help">Você enviou esta resolução: a revisão tem de ser de outra pessoa.</p>':`<button type="button" class="btn pri" data-cp-fase="resolvido">Aprovar e resolver</button><button type="button" class="btn" data-cp-fase="devolvido">Devolver</button>`)
+      :(e.precisa_revisao?`<button type="button" class="btn pri" data-cp-fase="aguardando_revisao">Enviar para revisão</button>`:`<button type="button" class="btn pri" data-cp-fase="resolvido">Resolver</button>${tr.has('aguardando_revisao')?'<button type="button" class="btn" data-cp-fase="aguardando_revisao">Enviar para revisão</button>':''}`);
+    const sec=[tr.has('em_analise')?`<button type="button" class="btn sm" data-cp-fase="em_analise">${e.fase==='aguardando_informacao'?'Retomar a análise':'Começar análise'}</button>`:'',tr.has('triagem')?'<button type="button" class="btn sm" data-cp-fase="triagem">Em triagem</button>':'',tr.has('aguardando_informacao')?'<button type="button" class="btn sm" data-cp-fase="aguardando_informacao">Suspender: aguardando informação</button>':'',tr.has('invalido')?'<button type="button" class="btn sm" data-cp-fase="invalido">Não é problema</button>':''].join('');
+    resp=`<section class="cp-sec cp-resposta" aria-label="Resposta"><h3>Resposta</h3>
+      <div class="cp-modelos">${(e.modelos||[]).length?`<label>Modelo de decisão <select id="cp-modelo" data-sem-alteracao><option value="">Usar um modelo…</option>${e.modelos.map(m=>`<option value="${escHtml(m.id)}">${escHtml(m.titulo)}</option>`).join('')}</select></label>`:''}<button type="button" class="btn sm lnk" data-cp-salvar-modelo>Salvar o texto como modelo</button></div>
+      <label class="field" data-sem-alteracao>${naRev?'Conclusão enviada (pode ajustar)':'Conclusão / parecer'}<textarea id="cp-conclusao" rows="3" maxlength="2000" placeholder="O que foi decidido ou feito, com base em quê">${escHtml(e.rascunho?e.rascunho.texto:(naRev||e.fase==='devolvido'?e.resolucao||'':''))}</textarea><small class="help" id="cp-rasc-st" aria-live="polite">${e.rascunho?'Rascunho salvo em '+escHtml(fmtDataHora(e.rascunho.atualizado_em)):'O rascunho é salvo sozinho enquanto você escreve.'}</small></label>
+      <div class="cp-ev-add"><label class="field">${e.exige_fonte?'Fonte ou evidência (obrigatória para concluir)':'Evidência'}<input id="cp-ev" maxlength="2000" placeholder="Texto, link (https://…) ou código da folha (F026-P0001-…)"></label>${e.categoria==='autoria_divergente'?'<label class="field">Hipótese a que se refere<input id="cp-hip" maxlength="200" placeholder="ex.: Aflalo &amp; Gasperini"></label>':''}<button type="button" class="btn sm" data-cp-evidencia>Adicionar evidência</button></div>
+      <label class="field">Justificativa ou motivo<input id="cp-just" maxlength="1000" placeholder="Por que (quando não há evidência), o que falta (suspender) ou o que mudar (devolver)"></label>
+      <small class="erro-txt" id="cp-erro" role="alert"></small>
+      <div class="act cp-prim">${prim}</div><div class="act cp-sec-acoes">${sec}</div>
+      ${tr.has('duplicado')?`<div class="cp-dup"><label>Duplicado do nº <input id="cp-ref" type="number" min="1" inputmode="numeric" aria-label="Número do problema que fica"></label><button type="button" class="btn sm" data-cp-fase="duplicado">Juntar como duplicado</button><small class="help">As evidências e o histórico ficam preservados no que fica.</small></div>`:''}</section>`}
+  else if(res&&!ab&&(e.transicoes||[]).some(t=>t.fase==='reaberto'))resp=`<section class="cp-sec cp-resposta" aria-label="Reabrir"><label class="field">Justificativa para reabrir<input id="cp-just" maxlength="1000" placeholder="O que mostra que o problema continua"></label><small class="erro-txt" id="cp-erro" role="alert"></small><div class="act"><button type="button" class="btn" data-cp-fase="reaberto">Reabrir</button></div></section>`;
+  else if(!res)resp='<section class="cp-sec"><p class="help">Você pode ver os problemas; quem resolve, atribui, revisa e reabre é a equipe (operador ou admin).</p></section>';
+  const hist=`<section class="cp-sec" aria-label="Histórico"><h3>Histórico</h3>${(e.historico||[]).length?`<ol class="cp-hist">${e.historico.map(h=>`<li><small class="help">${escHtml(fmtDataHora(h.quando))}${h.do_duplicado?` · do nº ${escHtml(h.do_duplicado)}`:''}</small><span><b>${escHtml(h.ator_nome||h.ator||'—')}</b> ${escHtml(cpEventoTexto(h))}</span></li>`).join('')}</ol>`:'<p class="help">Sem registros.</p>'}</section>`;
+  const nav=i>=0&&ERR_LISTA.length>1?`<div class="err-nav"><button class="btn sm" type="button"${ant?` data-err-ir="${escHtml(ant.id)}"`:' disabled'}>‹ Anterior</button><small class="help">${fmtN(i+1)} de ${fmtN(ERR_LISTA.length)} nesta página</small><button class="btn sm" type="button"${prox?` data-err-ir="${escHtml(prox.id)}"`:' disabled'}>Próximo ›</button></div>`:'';
+  return ident+ctx+qual+decidir+resp+hist+nav}
+async function abrirErro(id,o={}){let e;try{e=await API('/api/problemas/'+id)}catch(err){toast(err.message);return}window.ERR_ATUAL=e;if(!CP_PESSOAS)await cpCarregarPessoas();
+  if(!openDrawer(e.titulo,e.codigo,cpPainelHTML(e)))return;mainEl.classList.add('drawer-largo');{const dop=document.getElementById('d-open');if(dop)dop.style.display='none'}
+  CP_ABERTO=e.id;document.querySelectorAll('#err-body .cp-linha').forEach(l=>l.classList.toggle('sel',+l.dataset.errLinha===e.id));cpGravarURL();
   if(o.devolver)setTimeout(()=>{const m=document.getElementById('err-dev-mot');if(m)m.focus()},60)}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-err-res]');if(!b)return;const v=b.dataset.errRes,r=document.getElementById('ee-res'),er=document.getElementById('ee-res-err');   // H16: verbo explícito; fechar pede a frase
-  if(['corrigido','ignorado'].includes(v)&&!r.value.trim()){er.textContent=v==='corrigido'?'Escreva em uma frase o que foi feito.':'Escreva por que não era problema.';r.focus();return}
-  document.getElementById('ee-sit').value=v;salvarErro(+b.dataset.errId)});
-async function salvarErro(id){const sit=document.getElementById('ee-sit').value;await salvarNoDrawer(async()=>{await API('/api/erros/'+id,{method:'PATCH',body:JSON.stringify({situacao:sit,resolucao:document.getElementById('ee-res').value||null})});toast({corrigido:'Problema marcado como corrigido',ignorado:'Problema fechado: não era problema',em_correcao:'Marcado: você está corrigindo',aberto:'Problema reaberto'}[sit]||'Problema atualizado');closeDrawer(true);carregarErros();carregarPainel()})}
-function exportarErros(){const L=ERR_LISTA,cab=['Projeto','Nome do projeto','Onde','Gravidade','Tipo','Detalhe','O que aconteceu','O que fazer','Origem','Relatado por','Situação','Relatado em','Resolução'];
-  const linhas=L.map(e=>[e.projeto_codigo||e.fundo_codigo||'',e.projeto_titulo||e.fundo_titulo||'',e.folha||e.codigo,e.gravidade,rotuloErro(e),e.descricao,e.o_que,ERR_ABERTO(e)?e.fazer:'',(ORIGEM_ERRO[e.origem]||[rotulo(e.origem)])[0],e.relatado_por||'',rotulo(e.situacao),e.criado_em,e.resolucao||'']);
-  const filtros=[errFiltro,...['q','gravidade','categoria','origem','projeto'].map(k=>ERR_F[k]).filter(Boolean)].join(' · ');
-  const csv='﻿'+[['Tela','Problemas'],['Exportado em',new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'medium'}).format(new Date())],['Filtro atual',filtros],[],cab,...linhas].map(r=>r.map(csvEscape).join(';')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-problemas-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(qtd(linhas.length,'linha exportada','linhas exportadas'))}
+/* fechar o painel (×, Esc, ou outro clique) tira o problema do endereço e volta o foco para a linha: a lista continua onde estava */
+new MutationObserver(()=>{if(CP_ABERTO&&!mainEl.classList.contains('with-drawer')){const id=CP_ABERTO;CP_ABERTO=null;cpRascunhoFlush();cpGravarURL();const l=document.querySelector(`#err-body [data-err-linha="${id}"]`);if(l){l.classList.remove('sel');l.tabIndex=-1;try{l.focus({preventScroll:true})}catch(_){}}}}).observe(mainEl,{attributes:true,attributeFilter:['class']});
+let CP_RASC_T=null,CP_RASC_PEND=null;
+function cpRascunhoAgendar(){const t=document.getElementById('cp-conclusao'),e=window.ERR_ATUAL;if(!t||!e)return;CP_RASC_PEND={id:e.id,texto:t.value};marcarAlteracoes('drawer');const st=document.getElementById('cp-rasc-st');if(st)st.textContent='Salvando o rascunho…';clearTimeout(CP_RASC_T);CP_RASC_T=setTimeout(cpRascunhoFlush,1000)}
+async function cpRascunhoFlush(){clearTimeout(CP_RASC_T);const p=CP_RASC_PEND;if(!p)return;CP_RASC_PEND=null;
+  try{const r=await API('/api/problemas/'+p.id+'/rascunho',{method:'PUT',body:JSON.stringify({texto:p.texto})});if(!CP_RASC_PEND)limparAlteracoes('drawer');const st=document.getElementById('cp-rasc-st');if(st&&window.ERR_ATUAL&&window.ERR_ATUAL.id===p.id)st.textContent=p.texto.trim()?'Rascunho salvo às '+String(r.salvo_em||'').slice(11,16)+' (UTC)':'Rascunho apagado.'}
+  catch(err){const st=document.getElementById('cp-rasc-st');if(st)st.textContent='Não consegui salvar o rascunho: '+err.message}}
+const CP_OK={resolvido:'Resolução validada',aguardando_revisao:'Problema enviado para revisão',devolvido:'Devolvido para quem resolveu',reaberto:'Problema reaberto',invalido:'Fechado: não é problema',duplicado:'Juntado como duplicado',em_analise:'Em análise',triagem:'Em triagem',aguardando_informacao:'Suspenso: aguardando informação'};
+async function cpMudarFase(fase,b){const e=window.ERR_ATUAL;if(!e)return;const er=document.getElementById('cp-erro');if(er)er.textContent='';const g=id=>(document.getElementById(id)||{}).value||'';
+  const corpo={fase,conclusao:g('cp-conclusao')||null,justificativa:g('cp-just')||null,motivo:g('cp-just')||null,referencia:+g('cp-ref')||null};
+  b.disabled=true;try{clearTimeout(CP_RASC_T);CP_RASC_PEND=null;await API('/api/problemas/'+e.id+'/fase',{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes('drawer');
+    const L0=ERR_LISTA,i=L0.findIndex(x=>x.id===e.id),prox=L0[i+1]||L0[i-1]||null,saiu=['resolvido','invalido','duplicado'].includes(fase)||(fase==='reaberto');
+    toast(CP_OK[fase]||'Problema atualizado');await carregarErros();
+    if(saiu&&fase!=='reaberto'&&prox&&ERR_LISTA.some(x=>x.id===prox.id))abrirErro(prox.id);else if(saiu&&fase!=='reaberto')closeDrawer(true);else abrirErro(e.id);atualizarPendencias();carregarPainel&&carregarPainel()}
+  catch(err){if(er)er.textContent=err.message;else toast(err.message)}finally{b.disabled=false}}
+async function cpAtribuir(ids,resp){resp=resp?+resp:null;try{const r=await API('/api/problemas/atribuir',{method:'POST',body:JSON.stringify({ids,usuario_id:resp})});toast(resp?`${qtd(r.atualizados,'problema atribuído','problemas atribuídos')} a ${cpPessoaNome(resp)}`:`Responsável tirado de ${qtd(r.atualizados,'problema','problemas')}`);return r}catch(err){toast(err.message);return null}}
+async function cpPorFundo(){let L;try{L=await API('/api/problemas/por-fundo')}catch(e){toast(e.message);return}
+  openDrawer('Contadores por fundo','Problemas abertos',L.length?`<p class="help">A proporção é sobre as folhas já avaliadas (conferidas ou corrigidas no painel), não sobre um total presumido do fundo.</p><div class="tw"><table class="cp-fundos"><thead><tr><th>Fundo</th><th class="num">Abertos</th><th class="num">Críticos</th><th class="num">Folhas avaliadas</th><th class="num">Avaliadas com problema</th></tr></thead><tbody>${L.map(x=>`<tr><td><button type="button" class="lnk" data-cp-fundo-ir="${escHtml(x.fundo)}"><span class="code">${escHtml(x.fundo)}</span> ${escHtml(x.titulo||'')}</button></td><td class="num">${fmtN(x.abertos)}</td><td class="num">${fmtN(x.criticos)}</td><td class="num">${fmtN(x.folhas_avaliadas)}</td><td class="num">${x.proporcao==null?'<small class="help">sem folha avaliada</small>':`${fmtN(x.avaliadas_com_problema)} (${(x.proporcao*100).toLocaleString('pt-BR',{maximumFractionDigits:1})}%)`}</td></tr>`).join('')}</tbody></table></div>`:vazioHTML('Nenhum problema aberto.','Nenhum fundo tem problema aberto agora.'))}
+async function cpModelos(){let L;try{L=await API('/api/problemas/modelos')}catch(e){toast(e.message);return}const res=pode('problema.resolver');
+  openDrawer('Modelos de decisão','Por tipo de problema',`<p class="help">Textos prontos para a conclusão, por tipo. Quem resolve escolhe um modelo e ajusta; editar aqui vale para a equipe toda.</p>${Object.keys(CP_TIPOS).map(c=>{const ms=L.filter(m=>m.categoria===c);return ms.length||res?`<h3>${escHtml(CP_TIPOS[c])}</h3>${ms.map(m=>`<div class="cp-modelo${m.ativo?'':' off'}" data-cp-modelo-id="${escHtml(m.id)}"><input class="cp-m-tit" value="${escHtml(m.titulo)}" aria-label="Título do modelo"${res?'':' disabled'}><textarea class="cp-m-txt" rows="2" aria-label="Texto do modelo"${res?'':' disabled'}>${escHtml(m.texto)}</textarea>${res?`<div class="act"><button type="button" class="btn sm" data-cp-m-salvar>Salvar</button><button type="button" class="btn sm" data-cp-m-ativo="${m.ativo?0:1}">${m.ativo?'Desativar':'Ativar'}</button></div>`:''}</div>`).join('')}`:''}).join('')}
+    ${res?`<h3>Novo modelo</h3><div class="cp-modelo"><select id="cp-m-cat" aria-label="Tipo">${Object.entries(CP_TIPOS).map(([k,t])=>`<option value="${k}">${escHtml(t)}</option>`).join('')}</select><input id="cp-m-ntit" placeholder="Título" aria-label="Título do novo modelo"><textarea id="cp-m-ntxt" rows="2" placeholder="Texto" aria-label="Texto do novo modelo"></textarea><div class="act"><button type="button" class="btn sm pri" data-cp-m-criar>Criar modelo</button></div></div>`:''}`)}
+/* ---- eventos da Central ---- */
+document.addEventListener('input',e=>{if(e.target.id==='err-q'){clearTimeout(window._errQ);window._errQ=setTimeout(()=>{CP.q=e.target.value.trim();errMudouFiltro()},300);return}
+  if(e.target.id==='cp-conclusao')cpRascunhoAgendar()});
+document.addEventListener('change',async e=>{const t=e.target;const m={'cp-fase':'fase','err-grav':'gravidade','err-cat':'categoria','err-orig':'origem','cp-resp':'responsavel','cp-fundo':'fundo','cp-de':'de','cp-ate':'ate','cp-idade':'idade'}[t.id];
+  if(m){CP[m]=t.value;if(m==='gravidade'&&t.value==='aviso'&&CP.aba==='prioridades')CP.aba='todos';   /* UX-19: aviso não está em Prioridades: vai para Todos (não para uma lista vazia) */
+    errMudouFiltro();return}
+  if(t.id==='cp-ordem'){CP.ordem=t.value;errMudouFiltro();return}
+  if(t.id==='cp-por'){CP.por=+t.value||25;errMudouFiltro();return}
+  if(t.id==='cp-visoes'){if(t.value==='apagar'){const v=CP_VISOES.find(x=>x.params===cpQS(CP,false));if(v){try{await API('/api/problemas/visoes/'+v.id,{method:'DELETE'});toast('Visão apagada')}catch(err){toast(err.message)}}cpCarregarVisoes();return}
+    const v=CP_VISOES.find(x=>String(x.id)===t.value);if(v){CP=cpLerQS(v.params).f;ERR_SEL.clear();carregarErros()}return}
+  if(t.id==='cp-modelo'){const md=(window.ERR_ATUAL&&window.ERR_ATUAL.modelos||[]).find(x=>String(x.id)===t.value),c=document.getElementById('cp-conclusao');if(md&&c){c.value=c.value.trim()?c.value.trim()+'\n'+md.texto:md.texto;cpRascunhoAgendar()}t.value='';return}
+  const at=t.closest&&t.closest('[data-cp-atrib]');if(at&&at.value){const r=await cpAtribuir([+at.dataset.cpAtrib],at.value);if(r){await carregarErros();abrirErro(+at.dataset.cpAtrib)}return}
+  const s=t.closest&&t.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);if(s.checked)ERR_SEL_ULT=+s.value;errAtualizarSelecao()}});
+document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)return;
+  const cc=t.closest('[data-cp-cartao]');if(cc){const k=cc.dataset.cpCartao,base=cpVazio();base.ordem=CP.ordem==='prioridade'||k!=='resolvidos'?CP.ordem:'recentes';
+    if(k==='em_aberto')Object.assign(base,{aba:'todos'});else if(k==='criticos')Object.assign(base,{aba:'todos',chip:'critico'});else if(k==='em_analise')Object.assign(base,{aba:'todos',fase:'triagem,em_analise,aguardando_informacao,devolvido'});
+    else if(k==='aguardando_revisao')Object.assign(base,{aba:'todos',fase:'aguardando_revisao'});else if(k==='resolvidos'){const d=new Date();d.setDate(d.getDate()-({hoje:0,semana:6,mes:29}[CP_PER]));Object.assign(base,{aba:'concluidos',fase:'resolvido',ordem:'recentes',de:d.toISOString().slice(0,10)})}
+    CP=base;ERR_SEL.clear();carregarErros();return}
+  const per=t.closest('[data-cp-per]');if(per){CP_PER=per.dataset.cpPer;document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);return}
+  const ch=t.closest('[data-cp-chip]');if(ch){const s=cpChips(),k=ch.dataset.cpChip;s.has(k)?s.delete(k):s.add(k);CP.chip=[...s].join(',');errMudouFiltro();return}
+  if(t.closest('[data-cp-ver-avisos]')){CP.aba='todos';CP.chip='avisos';errMudouFiltro();return}
+  const tir=t.closest('[data-cp-tirar]');if(tir){const k=tir.dataset.cpTirar;if(k.startsWith('chip:')){const s=cpChips();s.delete(k.slice(5));CP.chip=[...s].join(',')}else if(k==='periodo'){CP.de='';CP.ate=''}else CP[k]='';errMudouFiltro();return}
+  if(t.closest('#err-limpar,[data-err-limpar-tudo]')){CP_FILTROS.forEach(k=>CP[k]='');errMudouFiltro();return}
+  if(t.closest('#cp-filtros-btn')){const p=document.getElementById('cp-filtros-mais'),b=document.getElementById('cp-filtros-btn');p.hidden=!p.hidden;b.setAttribute('aria-expanded',String(!p.hidden));document.body.classList.toggle('cp-gaveta-on',!p.hidden&&MQ_CELULAR.matches);if(!p.hidden){const f=p.querySelector('select,input');if(f)f.focus()}return}
+  if(t.closest('[data-cp-filtros-fechar]')){const p=document.getElementById('cp-filtros-mais');p.hidden=true;document.body.classList.remove('cp-gaveta-on');const b=document.getElementById('cp-filtros-btn');b.setAttribute('aria-expanded','false');b.focus();return}
+  const pg=t.closest('[data-cp-pag]');if(pg){CP.pagina=Math.max(1,Math.min(CP_PAGINAS,+pg.dataset.cpPag));carregarErros().then(()=>{const l=document.getElementById('err-abas');if(l)l.scrollIntoView({block:'start'})});return}
+  const ab=t.closest('[data-cp-abrir]');if(ab){e.stopPropagation();abrirErro(+ab.dataset.cpAbrir);return}
+  const as=t.closest('[data-cp-assumir]');if(as&&EU){const id=+as.dataset.cpAssumir;if(await cpAtribuir([id],EU.id)){await carregarErros();if(CP_ABERTO===id||mainEl.classList.contains('with-drawer')&&window.ERR_ATUAL&&window.ERR_ATUAL.id===id)abrirErro(id)}return}
+  const lk=t.closest('[data-cp-link]');if(lk){const u=location.origin+location.pathname+'#erros/~p='+lk.dataset.cpLink;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copiado')).catch(()=>toast(u));lk.closest('details')?.removeAttribute('open');return}
+  const pj=t.closest('[data-cp-proj]');if(pj){CP.projeto=pj.dataset.cpProj;if(CP.aba==='prioridades')CP.aba='todos';errMudouFiltro();return}
+  const tp=t.closest('[data-cp-tipo]');if(tp){CP.categoria=tp.dataset.cpTipo;if(CP.aba==='concluidos')CP.aba='todos';errMudouFiltro();return}
+  const fi=t.closest('[data-cp-fundo-ir]');if(fi){closeDrawer(true);CP.fundo=fi.dataset.cpFundoIr;if(CP.aba==='prioridades')CP.aba='todos';errMudouFiltro();return}
+  if(t.closest('[data-cp-por-fundo]')){t.closest('details')?.removeAttribute('open');cpPorFundo();return}
+  if(t.closest('[data-cp-modelos]')){t.closest('details')?.removeAttribute('open');cpModelos();return}
+  const dv=t.closest('[data-cp-devolver]');if(dv){const id=+dv.dataset.cpDevolver;if(await cpAtribuir([id],null)){await carregarErros();abrirErro(id)}return}
+  const oc=t.closest('[data-cp-ocultar]');if(oc){try{await API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'conquistas.ocultar',valor:oc.dataset.cpOcultar==='1'?'1':'0'})});cpCarregarLateral()}catch(err){toast(err.message)}return}   /* a mesma preferência da Home */
+  if(t.closest('[data-cp-visao]')){const box=t.closest('.cp-visao-salvar');box.innerHTML='<input id="cp-visao-nome" maxlength="60" placeholder="Nome da visão" aria-label="Nome da visão"><button type="button" class="btn sm pri" data-cp-visao-ok>Salvar</button>';document.getElementById('cp-visao-nome').focus();return}
+  if(t.closest('[data-cp-visao-ok]')){const n=(document.getElementById('cp-visao-nome')||{}).value||'';try{await API('/api/problemas/visoes',{method:'POST',body:JSON.stringify({nome:n,params:cpQS(CP,false)})});toast('Visão salva: '+n);cpRenderAtivos();cpCarregarVisoes()}catch(err){toast(err.message)}return}
+  const smm=t.closest('[data-err-sel-mesmo]');if(smm){const x=ERR_LISTA.find(e=>e.id===ERR_SEL_ULT);if(x){errMesmos(smm.dataset.errSelMesmo,x).forEach(e=>ERR_SEL.add(e.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=ERR_SEL.has(+c.value));errAtualizarSelecao()}return}
+  if(t.closest('[data-cp-sel-pagina]')){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>ERR_SEL.add(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=true);errAtualizarSelecao();return}
+  if(t.closest('[data-cp-atribuir]')){const ids=[...ERR_SEL];if(!ids.length)return;const r=await cpAtribuir(ids,(document.getElementById('cp-bulk-resp')||{}).value||null);if(r){ERR_SEL.clear();carregarErros()}return}
+  const fz=t.closest('[data-cp-fase]');if(fz){cpMudarFase(fz.dataset.cpFase,fz);return}
+  if(t.closest('[data-cp-evidencia]')){const x=window.ERR_ATUAL,v=document.getElementById('cp-ev'),h=document.getElementById('cp-hip'),er=document.getElementById('cp-erro');if(!x||!v)return;if(er)er.textContent='';
+    try{await API('/api/problemas/'+x.id+'/evidencias',{method:'POST',body:JSON.stringify({valor:v.value,hipotese:h?h.value:null})});toast('Evidência registrada');cpRascunhoFlush();const c=(document.getElementById('cp-conclusao')||{}).value,j=(document.getElementById('cp-just')||{}).value;limparAlteracoes('drawer');await abrirErro(x.id);const c2=document.getElementById('cp-conclusao'),j2=document.getElementById('cp-just');if(c2&&c)c2.value=c;if(j2&&j)j2.value=j}catch(err){if(er)er.textContent=err.message}return}
+  if(t.closest('[data-cp-salvar-modelo]')){const x=window.ERR_ATUAL,c=(document.getElementById('cp-conclusao')||{}).value||'';if(!x)return;const tit=c.trim().split(/[.\n]/)[0].slice(0,60);
+    try{await API('/api/problemas/modelos',{method:'POST',body:JSON.stringify({categoria:x.categoria,titulo:tit,texto:c})});toast('Modelo salvo: '+tit)}catch(err){toast(err.message)}return}
+  const ms=t.closest('[data-cp-m-salvar],[data-cp-m-ativo]');if(ms){const box=ms.closest('[data-cp-modelo-id]'),id=box.dataset.cpModeloId,corpo=ms.dataset.cpMAtivo!=null?{ativo:ms.dataset.cpMAtivo==='1'}:{titulo:box.querySelector('.cp-m-tit').value,texto:box.querySelector('.cp-m-txt').value};
+    try{await API('/api/problemas/modelos/'+id,{method:'PATCH',body:JSON.stringify(corpo)});toast('Modelo atualizado');limparAlteracoes('drawer');cpModelos()}catch(err){toast(err.message)}return}
+  if(t.closest('[data-cp-m-criar]')){try{await API('/api/problemas/modelos',{method:'POST',body:JSON.stringify({categoria:document.getElementById('cp-m-cat').value,titulo:document.getElementById('cp-m-ntit').value,texto:document.getElementById('cp-m-ntxt').value})});toast('Modelo criado');limparAlteracoes('drawer');cpModelos()}catch(err){toast(err.message)}return}
+  if(t.closest('[data-err-tirar-proj]')){CP.projeto='';errMudouFiltro();return}
+  const so=t.closest('[data-err-so-proj]');if(so){CP.projeto=so.dataset.errSoProj;errMudouFiltro();return}
+  if(t.closest('[data-err-sair]')){errSair();return}
+  if(t.closest('[data-err-repetidos]')){t.closest('details')?.removeAttribute('open');errVerRepetidos();return}
+  const ac=t.closest('[data-err-acao]');if(ac){e.stopPropagation();const x=ERR_LISTA.find(y=>y.id===+ac.dataset.errId)||(window.ERR_ATUAL&&window.ERR_ATUAL.id===+ac.dataset.errId?window.ERR_ATUAL:null);if(x)errExecutar(ac.dataset.errAcao,x);return}
+  const ir=t.closest('[data-err-ir]');if(ir){abrirErro(+ir.dataset.errIr);return}
+  const lt=t.closest('[data-err-lote]');if(lt)errEmLote(lt.dataset.errLote,lt);
+  if(t.closest('[data-err-devolver]'))errDevolver(t.closest('[data-err-devolver]'));
+  if(t.closest('[data-err-retirada-certa]'))errFechar(+t.closest('[data-err-retirada-certa]').dataset.errRetiradaCerta,'corrigido','A retirada estava certa: a folha fica fora do painel e do site.')});
+/* "/" busca (fora de campo de texto); Esc fecha o painel (atalho fixo do painel); J/K/Enter/I seguem no atalho UX-32 */
+document.addEventListener('keydown',e=>{if(e.key!=='/'||e.metaKey||e.ctrlKey||e.altKey||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||'')||e.target.isContentEditable)return;if(rotaAtual().split('/')[0]!=='erros')return;
+  const q=document.getElementById('err-q');if(q){e.preventDefault();q.focus();q.select()}});
+function exportarErros(){const a=document.createElement('a');a.href='/api/problemas/exportar.csv?'+cpParams({ordem:CP.ordem});a.download='';document.body.appendChild(a);a.click();a.remove();toast(`Exportando ${qtd(CP_TOTAL,'linha','linhas')} (tudo do filtro, não só esta página)`)}
 async function criarErro(){const err=document.getElementById('ne-err');err.textContent='';try{const r=await API('/api/erros',{method:'POST',body:JSON.stringify({codigo:document.getElementById('ne-cod').value,gravidade:document.getElementById('ne-grav').value,categoria:document.getElementById('ne-cat').value,descricao:document.getElementById('ne-desc').value,origem:document.getElementById('ne-orig').value,relatado_por:document.getElementById('ne-orig').value==='site'?document.getElementById('ne-quem').value:null})});closeModal();toast('Problema registrado');
     if(r&&r.publicado_com_bloqueio){const adm=EU&&['admin','master'].includes(EU.papel);
       if(adm&&await confirmar({titulo:`${r.projeto} está publicado e agora tem um problema que bloqueia`,texto:'Despublicar tira a página e as folhas do ar até resolver (dá para publicar de novo depois). Manter publicado deixa um aviso vermelho na página do projeto até o problema ser resolvido.',botao:'Despublicar até resolver',cancelar:'Manter publicado',perigo:true})){
