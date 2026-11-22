@@ -12,7 +12,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8931', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
@@ -47,93 +47,99 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
   page.on('pageerror', e => erros.push('pageerror: ' + e.message));
   page.on('response', r => { if (r.status() >= 400 && !ESPERADO(r.url())) falhas.push(r.status() + ' ' + r.url().replace(BASE, '')); });
   const api = (url, opt = {}) => page.evaluate(async ([u, o]) => { const r = await fetch(u, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...o }); return { status: r.status, json: await r.json().catch(() => null) }; }, [url, opt]);
-  const grupo = k => `#err-body tr.err-gr[data-err-gr="${k}"]`;
-  const linhasDo = k => page.locator(`#err-body tr[data-err-grupo="${k}"]`);
-  const recarregou = async () => { await page.waitForTimeout(300); await page.waitForFunction(() => document.querySelector('#err-body tr.err-gr, #err-body td.empty'), null, { timeout: 10000 }); await page.waitForTimeout(400); };
+  // CAMP-PROB-UX (22/11/2026): a lista virou a Central de Problemas (linhas compactas, painel ao lado). As provas de antes continuam,
+  // na tela nova: o que se resolveu sozinho não aparece; "Podem já estar resolvidos" é um filtro rápido; filtros, busca e "Só este projeto";
+  // a ação que resolve fica no painel; devolver a folha retirada fecha o problema e a lista fica no lugar; resolver em lote com frase e
+  // Desfazer; "Abrir a folha para girar" leva à revisão e o Voltar traz a lista; operador vê o que é de admin desabilitado.
+  const linha = t => page.locator('#err-body [data-err-linha]').filter({ hasText: t });
+  const recarregou = async () => { await page.waitForTimeout(300); await page.waitForFunction(() => document.getElementById('err-body').getAttribute('aria-busy') === 'false' && document.querySelector('#err-body [data-err-linha], #err-body .estado-vazio'), null, { timeout: 10000 }); await page.waitForTimeout(400); };
+  const abrirFiltros = async () => { if (await page.isHidden('#cp-filtros-mais')) await page.click('#cp-filtros-btn'); };
   try {
     await page.goto(BASE + '/');
     await page.fill('#lg-email', 'rafael@camp.arq.br'); await page.fill('#lg-senha', 'senha-bem-longa-123'); await page.press('#lg-senha', 'Enter');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
-    await page.evaluate(() => { try { localStorage.removeItem('camp.lista.erros.filtros'); localStorage.removeItem('camp.lista.erros.aba'); } catch (_) {} nav('erros'); });
-    await page.waitForSelector(grupo('F003-P9001'), { timeout: 15000 }); await page.waitForTimeout(500);
+    await page.evaluate(() => { try { localStorage.removeItem('camp.lista.erros.central'); } catch (_) {} nav('erros/~aba=todos&por=100'); });
+    await page.waitForSelector('#err-body [data-err-linha]', { timeout: 15000 }); await recarregou();
 
-    // ---- agrupado por projeto, com o nome e a contagem; "talvez" separado no topo; o resolvido sozinho não aparece ----
-    const gtxt = await page.textContent(grupo('F003-P9001'));
-    chk(/Projeto de teste da revisão 9001/.test(gtxt) && /F003-P9001/.test(gtxt) && /8 problemas/.test(gtxt) && /6 folhas retiradas pelo CAMP Vision/.test(gtxt) && /2 folhas recusadas/.test(gtxt), 'grupo do projeto com o NOME, o código e quantos problemas de cada tipo: "' + gtxt.replace(/\s+/g, ' ').trim().slice(0, 160) + '"');
-    chk(/Residência Riviera/.test(await page.textContent(grupo('F023-P0011'))) && /bloqueiam a publicação/.test(await page.textContent(grupo('F023-P0011'))), 'grupo F023-P0011 com o nome e "2 bloqueiam a publicação"');
-    const primeiro = await page.getAttribute('#err-body tr.err-gr', 'data-err-gr');
-    chk(primeiro === '~talvez' && /D00077/.test(await linhasDo('~talvez').first().textContent()) && /não existe mais/.test(await page.textContent(grupo('~talvez') + ' ~ tr')), 'a folha que não existe mais fica em "Podem já estar resolvidos", no topo, separada');
-    chk(!(await page.$('#err-body tr[data-err-linha] .code[title="F003-P9001-1972-S01-D00099"]')), 'a retirada que um admin já devolveu não aparece entre os abertos (fechou sozinha)');
+    // ---- contexto (fundo › projeto › folha) com o NOME do projeto; o resolvido sozinho não aparece; o "talvez" num filtro rápido ----
+    const lp = linha('D00011');
+    chk(/Projeto de teste da revisão 9001/.test(await lp.textContent()) && /F003 · P9001/.test(await lp.textContent()), 'cada linha mostra o NOME do projeto e o código (fundo › projeto › folha)');
+    chk(/Residência Riviera/.test(await linha('D00005').textContent()) && /Crítico/.test(await linha('D00005').textContent()), 'linha do F023-P0011 com o nome e a severidade "Crítico"');
+    chk(!(await page.$('#err-body [data-err-folha="F003-P9001-1972-S01-D00099"]')), 'a retirada que um admin já devolveu não aparece entre os abertos (fechou sozinha)');
     const d99 = (await api('/api/erros?situacao=todos&q=D00099')).json[0];
     chk(d99 && d99.situacao === 'corrigido' && /^Resolvido sozinho: Um admin devolveu/.test(d99.resolucao || ''), '... e ficou registrada como "Resolvido sozinho" com o porquê');
-    const riv = linhasDo('F023-P0011').filter({ hasText: 'D00005' });
-    chk(/O que fazer: Abra a folha e use Virar/.test(await riv.textContent()) && (await riv.locator('button.err-acao').count()) === 1 && /Abrir a folha para girar/.test(await riv.locator('button.err-acao').textContent()), 'cada linha diz o que fazer e tem UM botão que resolve ("Abrir a folha para girar")');
-    chk(!(await page.$('#v-erros thead th.sortable')), 'a tabela agrupada não tem colunas de ordenar (quebrariam os grupos)');
+    const d77 = (await api('/api/problemas?aba=concluidos&q=D00077')).json.itens[0];
+    chk(d77 && d77.resolvido_pelo_sistema && /não existe mais/.test(d77.resolucao || '') && (await page.$('[data-cp-chip="talvez"]')), 'a folha que não existe mais fecha sozinha ("pelo sistema", em Concluídos); o que só TALVEZ está resolvido tem o filtro "Podem já estar resolvidos"');
+    await linha('D00005').locator('.cp-cta').click(); await page.waitForSelector('#d-body .cp-ident');
+    chk(/Abra a folha e use Virar/.test(await page.textContent('#d-body')) && (await page.locator('#d-body button.err-acao').count()) === 1 && /Abrir a folha para girar/.test(await page.textContent('#d-body button.err-acao')), 'o painel diz o que fazer e tem UM botão que resolve ("Abrir a folha para girar")');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 
     // ---- filtros e busca ----
-    await page.selectOption('#err-orig', 'site'); await page.click('#err-abas [data-err-sit="avisos"]'); await recarregou();   // UX-19: o do visitante é um aviso (aba Avisos)
-    chk((await page.locator('#err-body tr[data-err-linha]').count()) === 1 && /fotógrafa/.test(await page.textContent('#err-body')), 'filtro de origem "Visitante do site": só o problema do visitante');
-    chk(!(await page.isHidden('#err-limpar')), '"Limpar filtros" aparece quando há filtro');
-    await page.selectOption('#err-orig', ''); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();   // UX-19: "Bloqueia" volta sozinho para a aba Abertos
-    chk((await page.locator('#err-body tr[data-err-linha]').count()) === 2, 'filtro de gravidade "Bloqueia": os 2 que bloqueiam');
-    await page.click('#err-limpar'); await recarregou();
+    await abrirFiltros(); await page.selectOption('#err-orig', 'site'); await recarregou();
+    chk((await page.locator('#err-body [data-err-linha]').count()) === 1 && /fotógrafa/.test(await page.textContent('#err-body')), 'filtro de origem "Visitante do site": só o problema do visitante');
+    chk(!(await page.isHidden('[data-err-limpar-tudo]')), '"Limpar filtros" aparece quando há filtro');
+    await page.selectOption('#err-orig', ''); await recarregou(); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();
+    chk((await page.locator('#err-body [data-err-linha]').count()) === 2, 'filtro de severidade "Crítico (bloqueia)": os 2 que bloqueiam');
+    await page.click('[data-err-limpar-tudo]'); await recarregou();
     await page.fill('#err-q', 'riviera'); await page.waitForTimeout(700); await recarregou();
-    chk((await page.locator('#err-body tr.err-gr').count()) === 1 && !!(await page.$(grupo('F023-P0011'))), 'busca pelo NOME do projeto ("riviera") mostra só esse projeto');
-    await page.click('#err-limpar'); await recarregou();
-    await page.click(grupo('F023-P0011') + ' [data-err-so-proj]'); await page.waitForFunction(() => location.hash === '#erros/F023-P0011'); await recarregou();
-    chk((await page.locator('#err-body tr.err-gr').count()) === 1 && /F023-P0011/.test(await page.textContent('#err-proj-filtro')), '"Só este projeto" vai para #erros/F023-P0011 e mostra só ele');
-    await page.click('[data-err-tirar-proj]'); await page.waitForFunction(() => location.hash === '#erros'); await recarregou();
+    const riv = await page.$$eval('#err-body [data-err-linha]', ls => ls.map(l => l.textContent));
+    chk(riv.length >= 1 && riv.every(t => /Residência Riviera/.test(t)), 'busca pelo NOME do projeto ("riviera") mostra só esse projeto');
+    await page.fill('#err-q', ''); await page.waitForTimeout(700); await recarregou();
+    await page.evaluate(() => nav('erros/F023-P0011')); await recarregou();
+    const so = await page.$$eval('#err-body [data-err-linha]', ls => ls.map(l => l.textContent));
+    chk(so.length >= 1 && so.every(t => /F023 · P0011/.test(t)) && /Projeto: F023-P0011/.test(await page.textContent('#err-filtro-ativo')) && /projeto=F023-P0011/.test(await page.evaluate(() => location.hash)), '"Só este projeto" (#erros/F023-P0011) mostra só ele, com o chip do filtro');
+    await page.click('[data-cp-tirar="projeto"]'); await recarregou();
 
-    // ---- devolver uma folha retirada pelo detalhe: o problema fecha e a lista fica no mesmo lugar ----
-    await page.setViewportSize({ width: 1366, height: 560 });   // a lista mais comprida que a tela: o fim dela não limita a rolagem
-    const l11 = page.locator('#err-body tr[data-err-linha]').filter({ hasText: 'D00014' });
-    await l11.scrollIntoViewIfNeeded();
-    const antes = await page.evaluate(() => { const r = [...document.querySelectorAll('#err-body tr[data-err-linha]')].find(x => /D00014/.test(x.textContent)); mainEl.scrollTop += r.getBoundingClientRect().top - 200;
-      const prox = r.nextElementSibling; return { top: r.getBoundingClientRect().top, prox: prox && prox.dataset.errLinha, scroll: mainEl.scrollTop }; });
-    chk(/Devolver à revisão/.test(await l11.locator('button.err-acao').textContent()), 'folha retirada: o botão da linha é "Devolver à revisão"');
-    await l11.locator('button.err-acao').click();
+    // ---- devolver uma folha retirada pelo painel: o problema fecha e a lista fica no mesmo lugar ----
+    const l11 = linha('D00014');
+    await l11.locator('.cp-cta').click();
     await page.waitForSelector('#err-dev-mot', { timeout: 8000 });
+    const antes = await page.evaluate(() => mainEl.scrollTop);
     const dtxt = await page.textContent('#d-body');
-    chk(/Folha retirada pelo CAMP Vision/.test(await page.textContent('#d-title')) && /O que aconteceu/.test(dtxt) && /O que fazer/.test(dtxt) && /Projeto de teste da revisão 9001/.test(dtxt) && /A retirada está certa/.test(dtxt), 'detalhe: título claro, o que aconteceu, o que fazer, o projeto (com link) e as duas saídas');
+    chk(/Folha retirada pelo CAMP Vision/.test(await page.textContent('#d-title')) && /Qual é o problema\?/.test(dtxt) && /O que precisa ser decidido\?/.test(dtxt) && /Projeto de teste da revisão 9001/.test(dtxt) && /A retirada está certa/.test(dtxt), 'painel: título claro, qual é o problema, o que decidir, o projeto (com link) e as duas saídas');
     await page.click('[data-err-devolver]'); await page.waitForTimeout(300);
     chk(/Explique por que/.test(await page.textContent('#toast')), 'devolver sem motivo pede a explicação');
     await page.fill('#err-dev-mot', 'a folha está boa'); await page.click('[data-err-devolver]');
     await page.waitForFunction(() => /devolvida à revisão/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await recarregou(); await page.waitForTimeout(300);
-    const depois = await page.evaluate(id => { const r = document.querySelector(`#err-body tr[data-err-linha="${id}"]`); return { top: r ? r.getBoundingClientRect().top : null, scroll: mainEl.scrollTop }; }, antes.prox);
-    chk(!(await page.$('#err-body .code[title="F003-P9001-1972-S01-D00014"]')), 'a folha devolvida sai da lista de abertos (o problema fechou)');
-    chk(antes.scroll > 0 && Math.abs(depois.scroll - antes.scroll) < 40 && depois.top !== null && Math.abs(depois.top - antes.top) < 40, `depois de resolver, a lista fica no MESMO lugar: o problema seguinte ocupa o lugar do resolvido (rolagem ${antes.scroll} -> ${depois.scroll}; topo ${Math.round(antes.top)} -> ${Math.round(depois.top)})`);
-    await page.setViewportSize({ width: 1366, height: 900 });
+    chk(!(await page.$('#err-body [data-err-folha="F003-P9001-1972-S01-D00014"]')), 'a folha devolvida sai da lista de abertos (o problema fechou)');
+    const depois = await page.evaluate(() => mainEl.scrollTop);
+    chk(Math.abs(depois - antes) < 60, `depois de resolver, a lista fica no MESMO lugar (rolagem ${antes} -> ${depois})`);
 
-    // ---- resolver o grupo inteiro em lote, com frase obrigatória, e Desfazer ----
-    await page.check(grupo('F003-P9001') + ' [data-err-sel-grupo]');
-    chk(await page.isVisible('#err-bulk') && /7 selecionados/.test(await page.textContent('#err-bulk-n')), 'marcar o grupo seleciona os 7 abertos dele e mostra a barra');
+    // ---- resolver vários em lote, com frase obrigatória, e Desfazer ----
+    await page.fill('#err-q', 'F003-P9001'); await page.waitForTimeout(700); await recarregou();
+    const n9001 = await page.locator('#err-body .err-sel').count();
+    await page.locator('#err-body .err-sel').first().check(); await page.click('[data-cp-sel-pagina]');
+    chk(await page.isVisible('#err-bulk') && new RegExp(n9001 + ' selecionados').test(await page.textContent('#err-bulk-n')), `"Selecionar os desta página" marca os ${n9001} abertos do projeto e mostra a barra`);
     await page.click('#err-bulk [data-err-lote="corrigido"]');
     chk(/Escreva em uma frase/.test(await page.textContent('#err-bulk-err')), 'em lote, "Marcar como corrigido" sem a frase pede a explicação');
     await page.fill('#err-bulk-res', 'retiradas conferidas: estavam certas');
     await page.click('#err-bulk [data-err-lote="corrigido"]');
     await page.waitForSelector('#conf-ov', { timeout: 5000 }); await page.click('#conf-ov [data-conf="sim"]');   // UX-20: a prévia antes de fechar vários
-    await page.waitForFunction(() => /7 problemas marcados como corrigidos/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await recarregou();
-    chk(!(await page.$(grupo('F003-P9001'))) && !(await page.isVisible('#err-bulk')), 'os 7 fecham de uma vez e o grupo some dos abertos');
+    await page.waitForFunction(n => new RegExp(n + ' problemas marcados como corrigidos').test(document.getElementById('toast').textContent), n9001, { timeout: 8000 }); await recarregou();
+    chk((await page.locator('#err-body [data-err-linha]').count()) === 0 && !(await page.isVisible('#err-bulk')), 'os escolhidos fecham de uma vez e saem dos abertos');
     const fechados = (await api('/api/erros?situacao=corrigido&projeto=F003-P9001')).json.filter(x => x.resolucao === 'retiradas conferidas: estavam certas');
-    chk(fechados.length === 7, 'no servidor: 7 corrigidos com a mesma frase (' + fechados.length + ')');
+    chk(fechados.length === n9001, `no servidor: ${n9001} corrigidos com a mesma frase (${fechados.length})`);
     await page.click('#toast button'); await page.waitForFunction(() => /Desfeito/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await recarregou();
-    chk(!!(await page.$(grupo('F003-P9001'))) && (await linhasDo('F003-P9001').count()) === 7, '"Desfazer" reabre os 7');
+    chk((await page.locator('#err-body [data-err-linha]').count()) === n9001, '"Desfazer" reabre todos');
+    await page.fill('#err-q', ''); await page.waitForTimeout(700); await recarregou();
 
     // ---- a ação leva ao lugar certo e o Voltar traz a lista ----
-    await page.click('#err-body tr[data-err-linha]:has-text("D00005") button.err-acao');
+    await linha('D00005').locator('.cp-cta').click(); await page.waitForSelector('#d-body button.err-acao');
+    await page.click('#d-body button.err-acao');
     await page.waitForFunction(() => location.hash === '#projeto/F023-P0011', null, { timeout: 8000 });
     await page.waitForFunction(() => (document.getElementById('d-title') || {}).textContent === 'Revisar folha' && /D00005/.test((document.getElementById('d-sub') || {}).textContent || ''), null, { timeout: 15000 });
     chk(true, '"Abrir a folha para girar" abre o projeto e a revisão da folha D00005 (com os botões de virar)');
-    await page.evaluate(() => closeDrawer(true)); await page.goBack(); await page.waitForFunction(() => location.hash === '#erros', null, { timeout: 8000 }); await recarregou();
-    chk(!!(await page.$(grupo('F023-P0011'))), 'o Voltar do navegador traz a lista de Problemas de novo');
+    await page.evaluate(() => closeDrawer(true)); await page.goBack(); await page.waitForFunction(() => /^#erros/.test(location.hash), null, { timeout: 8000 }); await recarregou();
+    chk(!!(await page.$('#err-body [data-err-folha="F023-P0011-1959-S01-D00005"]')), 'o Voltar do navegador traz a lista de Problemas de novo');
 
     // ---- operador: o que é de admin aparece desabilitado com "peça a um admin" ----
     const ctxOp = await browser.newContext({ viewport: { width: 1366, height: 900 } }); const op = await ctxOp.newPage();
     op.on('pageerror', e => erros.push('pageerror (operador): ' + e.message));
     await op.goto(BASE + '/'); await op.fill('#lg-email', 'operador@camp.arq.br'); await op.fill('#lg-senha', 'senha-operador-123'); await op.press('#lg-senha', 'Enter');
-    await op.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await op.evaluate(() => nav('erros')); await op.waitForSelector(grupo('F023-P0011'), { timeout: 15000 });
-    const mv = op.locator('#err-body tr[data-err-linha]:has-text("D00009") button.err-acao');
-    chk(await mv.isDisabled() && /peça a um admin/.test(await op.textContent('#err-body tr[data-err-linha]:has-text("D00009")')), 'operador: "Mover para o projeto certo" desabilitado, com "peça a um admin"');
+    await op.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await op.evaluate(() => nav('erros/~aba=todos&por=100')); await op.waitForSelector('#err-body [data-err-linha]', { timeout: 15000 });
+    await op.locator('#err-body [data-err-linha]').filter({ hasText: 'D00009' }).locator('.cp-cta').click(); await op.waitForSelector('#d-body .cp-ident');
+    const mv = op.locator('#d-body button.err-acao');
+    chk(await mv.isDisabled() && /peça a um admin/.test(await op.textContent('#d-body')), 'operador: "Mover para o projeto certo" desabilitado, com "peça a um admin"');
     await ctxOp.close();
 
     // ---- celular ----

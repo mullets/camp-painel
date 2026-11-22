@@ -661,7 +661,18 @@ def detalhe(con, eid: int, u: dict) -> dict:
             if v["tipo"] != "justificativa":
                 hip.setdefault(v["hipotese"] or "Sem hipótese indicada", []).append(v)
         x["hipoteses"] = [{"hipotese": k, "fontes": vs} for k, vs in hip.items()]
-    x["previa"] = f"/api/itens/{x['folha']}/previa" if x.get("folha") and x.get("folha_existe") else None
+    x["previa"] = None
+    if x.get("folha") and x.get("folha_existe"):          # só quando há imagem (prévia do CAMP Vision ou a do site); sem ela, nada (nunca um 404)
+        it = con.execute("SELECT arquivo_jpg, pendencias FROM item WHERE codigo=?", (x["folha"],)).fetchone()
+        if it:
+            try:
+                pend = json.loads(it["pendencias"] or "{}") if isinstance(it["pendencias"], str) else {}
+            except ValueError:
+                pend = {}
+            if isinstance(pend, dict) and pend.get("previa"):
+                x["previa"] = f"/api/itens/{x['folha']}/previa"
+            elif str(it["arquivo_jpg"] or "").startswith(("http://", "https://")):
+                x["previa"] = it["arquivo_jpg"]
     x["responsavel_nome"] = nomes.get(e["responsavel"]) or e["responsavel"]
     x["enviado_revisao_nome"] = nomes.get(e["enviado_revisao_por"]) or e["enviado_revisao_por"]
     x["revisado_nome"] = nomes.get(e["revisado_por"]) or e["revisado_por"]
