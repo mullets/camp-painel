@@ -15355,12 +15355,13 @@ def filho(modo):
         # 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas"): visitas (admin) logo abaixo do ritmo
         ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material, e as visitas (admin) logo abaixo do ritmo",
             i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"', 'id="ini-visitas"'))
-            and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in esq)
+            and "${admin?`<div class=\"ini-vis\" id=\"ini-visitas\">" in esq)   # maquete (22/11): #ini-visitas guarda os cartões de visitas e de projetos
         # CAMP-HOME-UX (22/11/2026, documento do Rafael §3): a coluna da direita segue a prioridade do documento — alertas reais, progresso
         # (meta e conquistas), qualidade, publicação, sistemas (compacto) — e depois as melhorias e o "Hoje"; nada métrico some da Home
         il = html.find('<div class="ini-col ini-lateral">'); lat = html[il:html.find('</div>\n  </div>`;', il)]
-        ver("CAMP-HOME-UX: coluna da direita completa: alertas, progresso, qualidade, % no site, saúde, melhorias e Hoje, nessa ordem",
-            il > 0 and ordem(lat, ('id="ini-alertas"', 'id="ini-jogo"', 'id="ini-qualidade"', 'id="ini-t-site"', 'id="ini-saude"', 'id="ini-melhorias"', 'id="ini-t-hoje"')) and 'id="ini-visitas"' not in lat)
+        # maquete do Rafael (22/11/2026): "Está tudo funcionando?" sobe para logo depois do progresso
+        ver("CAMP-HOME-UX: coluna da direita completa: alertas, progresso, saúde, qualidade, % no site, melhorias e Hoje, nessa ordem",
+            il > 0 and ordem(lat, ('id="ini-alertas"', 'id="ini-jogo"', 'id="ini-saude"', 'id="ini-qualidade"', 'id="ini-t-site"', 'id="ini-melhorias"', 'id="ini-t-hoje"')) and 'id="ini-visitas"' not in lat)
         ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
             'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
         # 04/11 (especificação "Visitas ao site"): a Home não pede /api/analytics nunca; as visitas vêm só do banco (vmMontar → /api/visitas/evolucao e /projetos)
