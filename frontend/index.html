@@ -10645,8 +10645,8 @@ function cpAtualizarNumeros(){clearTimeout(CP_NUM_T);CP_NUM_T=setTimeout(async()
   document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
   const sub=document.getElementById('cp-sub');if(sub&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${fmtN(c.em_aberto)} ${c.em_aberto===1?'item que precisa':'itens que precisam'} de análise, conferência ou decisão.`}}catch(_){}
   atualizarPendencias();cpCarregarLateral()},150)}
-function cpToastRapido(r,mover){const pul=(r.pulados||[]).length?` · ${qtd(r.pulados.length,'ficou','ficaram')} de fora: ${r.pulados[0].motivo}`:'';
-  toast((r.mensagem||'Feito')+pul,r.desfazer?{acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
+function cpToastRapido(r,mover){const pul=(r.pulados||[]).length?` ${qtd(r.pulados.length,'ficou','ficaram')} de fora: ${r.pulados[0].motivo}`:'';
+  toast((r.mensagem||'Feito.')+pul,r.desfazer?{acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
 async function cpRapida(ids,acao,extra={},b){if(b)b.disabled=true;
   try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:ids.map(Number),acao,...extra})});cpTirarLinhas(r.resolvidos||[]);cpToastRapido(r,false);return r}
   catch(err){toast(err.message);if(b)b.disabled=false;return null}}
@@ -10654,7 +10654,7 @@ async function cpDesfazerRapido(tok,mover){try{
     if(mover){const s=await API('/api/problemas/rapido/desfazer/'+tok,{method:'POST',body:JSON.stringify({simular:true})});
       const ok_=await confirmar({titulo:'Voltar a folha para o projeto de antes?',html:`<p>A folha volta pela mesma rota de mover e o problema reabre.</p><ul class="conf-lista">${(s.voltam||[]).map(v=>`<li><span class="code">${escHtml(v.de)}</span> → <span class="code">${escHtml(v.para)}</span></li>`).join('')}</ul>${s.ficaram?`<p class="help">${escHtml(qtd(s.ficaram,'folha mudou','folhas mudaram'))} depois e fica como está.</p>`:''}`,botao:'Voltar a folha'});if(!ok_)return}
     const r=await API('/api/problemas/rapido/desfazer/'+tok,{method:'POST',body:JSON.stringify({simular:false})});
-    toast(r.ficaram?`Desfeito: ${qtd(r.voltaram,'problema voltou','problemas voltaram')}; ${qtd(r.ficaram,'foi mexido','foram mexidos')} depois e ficou como está`:`Desfeito: ${qtd(r.voltaram,'problema voltou','problemas voltaram')} ao que era`);
+    toast(r.ficaram?`Desfeito. ${qtd(r.ficaram,'foi mexido','foram mexidos')} depois e ficou como está.`:'Desfeito.');
     if(CP_TRI)cpTriRecarregar();else carregarErros();atualizarPendencias()}catch(err){toast(err.message)}}
 function cpConfBox(el){const box=el.closest('[data-cp-rap],[data-cp-grupo]');return box?box.querySelector(':scope>.cp-rap-conf'):null}
 function cpConfMostrar(el,html){const c=cpConfBox(el);if(!c)return null;c.innerHTML=html;c.hidden=false;const f=c.querySelector('input,button.pri');if(f)setTimeout(()=>f.focus(),0);return c}
@@ -10717,8 +10717,8 @@ function cpTriOpcoes(e){const r=e.rapido||{},o=[];if(!e.aberto)return o;
   return o}
 function cpTriDesenhar(){const T=CP_TRI,ov=document.getElementById('cp-tri');if(!T||!ov)return;const box=ov.querySelector('.cp-tri-box');const e=T.itens[T.i];
   const teclas='<p class="cp-tri-teclas"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> escolhem · <kbd>J</kbd> próxima · <kbd>K</kbd> anterior · <kbd>Enter</kbd> abre o painel · <kbd>Esc</kbd> sai</p>';
-  const topo=`<div class="cp-tri-top"><b>Resolver em sequência</b><span class="cp-tri-prog" id="cp-tri-prog">${e?`<b>${fmtN(T.i+1)}</b> de ${fmtN(T.total)}`:''}${T.feitos?` · ${escHtml(qtd(T.feitos,'resolvido','resolvidos'))}`:''}</span><button type="button" class="btn sm" data-cp-tri-sair>Sair (Esc)</button></div>`;
-  if(!e){box.innerHTML=topo+`<div class="cp-tri-fim"><h2>Fim da lista</h2><p>${escHtml(T.feitos?qtd(T.feitos,'problema resolvido','problemas resolvidos')+' nesta sequência.':'Nada mais nesta lista.')}</p><button type="button" class="btn pri" data-cp-tri-sair>Voltar à lista</button></div>`;return}
+  const topo=`<div class="cp-tri-top"><b>Resolver em sequência</b><span class="cp-tri-prog" id="cp-tri-prog">${e?`<b>${fmtN(T.i+1)}</b> de ${fmtN(T.total)}`:''}</span><button type="button" class="btn sm" data-cp-tri-sair>Sair (Esc)</button></div>`;
+  if(!e){box.innerHTML=topo+`<div class="cp-tri-fim"><h2>Fim da lista</h2><p>${escHtml(T.feitos?qtd(T.feitos,'resolvido','resolvidos')+'.':'Nada mais nesta lista.')}</p><button type="button" class="btn pri" data-cp-tri-sair>Voltar à lista</button></div>`;return}
   const r=e.rapido||{},ops=cpTriOpcoes(e);
   const img=e.miniatura?`<img class="cp-tri-img" src="${escHtml(e.miniatura)}" alt="${escHtml('Folha '+String(e.folha||'').slice(11))}">`:'<span class="cp-tri-img cp-rap-sem">sem imagem desta folha</span>';
   box.innerHTML=topo+`<div class="cp-tri-corpo" data-cp-tri-id="${escHtml(e.id)}">${img}<div class="cp-tri-info"><h2>${escHtml(e.titulo)} <small class="cp-id">nº ${escHtml(e.id)}</small></h2>

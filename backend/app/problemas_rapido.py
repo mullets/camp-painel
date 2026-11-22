@@ -428,13 +428,9 @@ def rota_rapida(d: Rapida, tarefas: BackgroundTasks, u: dict = Depends(auth.exig
             con.rollback()
             raise
         n = len(validos)
-        msg = {"deste_projeto": ("1 folha confirmada neste projeto", f"{n} folhas confirmadas neste projeto"),
-               "mesma_folha": ("Marcada como cópia", f"{n} folhas marcadas como cópia"),
-               "diferentes": ("Anotado: são folhas diferentes", f"{n} anotadas: são folhas diferentes"),
-               "metadado": ("Dado salvo na folha", "Dado salvo na folha"),
-               "nao_e_problema": ("Fechado: não é problema", f"{n} fechados: não é problema")}[d.acao][0 if n == 1 else 1]
-        return {"ok": True, "acao": d.acao, "resolvidos": [x["id"] for x in validos], "pulados": pulados, "desfazer": tok,
-                "mensagem": msg + (" · problema resolvido" if n == 1 and d.acao != "nao_e_problema" else f" · {n} problemas resolvidos" if d.acao != "nao_e_problema" else "")}
+        # curto e neutro (Rafael: "não quero que fique infantil o sistema, é algo bem sério"): "Resolvido." / "3 resolvidos."
+        msg = ("Fechado: não é problema." if n == 1 else f"{n} fechados: não é problema.") if d.acao == "nao_e_problema" else ("Resolvido." if n == 1 else f"{n} resolvidos.")
+        return {"ok": True, "acao": d.acao, "resolvidos": [x["id"] for x in validos], "pulados": pulados, "desfazer": tok, "mensagem": msg}
     finally:
         con.close()
 
@@ -528,7 +524,7 @@ def rota_mover(d: MoverRapido, tarefas: BackgroundTasks, u: dict = Depends(auth.
     n = len(validos)
     return {"ok": True, "simulado": False, **base, "movidos": r.get("movidos") or [], "duplicatas": r.get("duplicatas") or [],
             "site_antigo": r.get("site_antigo"), "resolvidos": [x["id"] for x in validos], "desfazer": tok,
-            "mensagem": (f"Folha movida para {destino}" if n == 1 else f"{n} folhas movidas para {destino}") + (" · problema resolvido" if n == 1 else f" · {n} problemas resolvidos")}
+            "mensagem": (f"Movida para {destino}. Resolvido." if n == 1 else f"{n} movidas para {destino}. {n} resolvidos.")}
 
 
 # ---------------- Desfazer ----------------

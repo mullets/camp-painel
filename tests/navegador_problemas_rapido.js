@@ -77,7 +77,7 @@ const idDe = (cod) => +py(`print(con.execute("SELECT id FROM erro WHERE codigo=?
     chk(await cnt(page) === n0 - 1 && await crit(page) === c0 - 1, `"É deste projeto" na linha: a linha sai, a lista e o cartão Críticos caem 1 (${n0}→${await cnt(page)}, ${c0}→${await crit(page)})`);
     chk(await page.$eval('#err-body', el => +el.dataset.render) === r0, 'sem recarregar a lista (a lista não foi desenhada de novo)');
     chk(py(`print(con.execute("SELECT situacao||'|'||fase FROM erro WHERE id=${id1}").fetchone()[0])`) === 'corrigido|resolvido', 'no banco: Resolvido');
-    chk(await page.$eval('#toast', el => el.classList.contains('on') && /Desfazer/.test(el.textContent)), 'aparece o aviso com Desfazer');
+    chk(await page.$eval('#toast', el => el.classList.contains('on') && /^Resolvido\.\s*Desfazer$/.test(el.textContent.trim())), `aviso curto e neutro: "Resolvido. Desfazer" (${await page.$eval('#toast', el => el.textContent)})`);
     await page.click('#toast .toast-acao'); await espera(page); await page.waitForTimeout(500);
     chk(!!(await page.$(linha1)) && await cnt(page) === n0 && py(`print(con.execute("SELECT situacao FROM erro WHERE id=${id1}").fetchone()[0])`) === 'aberto', 'Desfazer: o problema volta para a lista e o número volta');
     // "Não é problema…" do ⋯ não aparece em tipo sensível
@@ -105,7 +105,7 @@ const idDe = (cod) => +py(`print(con.execute("SELECT id FROM erro WHERE codigo=?
     const hashAntes = await page.evaluate(() => location.hash);
     await page.keyboard.press('1');
     await page.waitForFunction(a => { const el = document.querySelector('#cp-tri [data-cp-tri-id]'); return !el || +el.dataset.cpTriId !== a; }, antes, { timeout: 10000 });
-    chk(py(`print(con.execute("SELECT situacao FROM erro WHERE id=${antes}").fetchone()[0])`) === 'corrigido' && /1 resolvido/.test(await prog()), `tecla 1 resolve e avança sozinho (${await prog()})`);
+    chk(py(`print(con.execute("SELECT situacao FROM erro WHERE id=${antes}").fetchone()[0])`) === 'corrigido' && /^\d+ de \d+$/.test((await prog()).trim()), `tecla 1 resolve e avança sozinho; o progresso é só "N de M" (${await prog()})`);
     chk(await page.evaluate(() => location.hash) === hashAntes, 'a tecla 1 não foi para "Precisa de você" (as teclas do menu não valem na sequência)');
     const atual = await page.$eval('#cp-tri [data-cp-tri-id]', el => +el.dataset.cpTriId);
     await page.keyboard.press('j'); await page.waitForTimeout(250);
