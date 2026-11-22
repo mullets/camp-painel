@@ -12,7 +12,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8951', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
@@ -59,20 +59,24 @@ async function abrirHome(page) {
     py(`con.execute("UPDATE decisao SET situacao='pendente' WHERE id IN (${idsDec})")`);   // devolve a semente como estava
     // ---------- UX-21 (Redesenho §8, 03/11/2026: a fila virou UMA lista; a intenção continua: o que é de outro papel fica esmaecido,
     // no fim e visível, com "quem faz é um admin"; nada some) ----------
-    const grupos = pg => pg.evaluate(() => { INI_FILTRO = 'todas'; INI_VER_TODOS = true; iniListaDesenhar();
-      return [...document.querySelectorAll('#ini-lista .ini-task')].map(t => ({ id: t.dataset.iniGrupo, outro: t.classList.contains('ini-outro'), op: +getComputedStyle(t).opacity, txt: t.textContent })); });
+    // 11/11 (CAMP-UX): "Para fazer" não mostra Melhorar a base (fica no filtro dela); CAMP-HOME-UX (22/11): abas Minha fila · Todos ·…;
+    // a aba "Todos" é a fila inteira da função e das outras. Nada some: o que não está em "Para fazer" está em "Melhorar a base".
+    const grupos = (pg, filtro = 'todas') => pg.evaluate(f => { INI_ABA = 'todos'; INI_FILTRO = f; INI_VER_TODOS = true; iniListaDesenhar();
+      return [...document.querySelectorAll('#ini-lista .ini-task')].map(t => ({ id: t.dataset.iniGrupo, outro: t.classList.contains('ini-outro'), op: +getComputedStyle(t).opacity, txt: t.textContent })); }, filtro);
     await abrirHome(P);
     const gA = await grupos(P);
     chk(gA.length > 1 && gA.every(g => !g.outro && g.op === 1), `UX-21: admin (master) executa todas as filas: nada esmaecido (${[...new Set(gA.map(g => g.id))].join(', ')})`);
     chk(gA[0].id === 'decidir', `UX-21: para o admin, a decisão (urgente: o CAMP Vision está parado) continua no topo (${gA[0].id})`);
     const op = await entrar(browser, 'operador@camp.arq.br', 'senha-operador-123', erros);
     await abrirHome(op.page);
-    const api = await op.page.evaluate(async () => (await (await fetch('/api/painel', { credentials: 'same-origin' })).json()).fila.itens.map(i => ({ id: i.grupo, quem: i.quem })));
+    const api = await op.page.evaluate(async () => (await (await fetch('/api/painel', { credentials: 'same-origin' })).json()).fila.itens.map(i => ({ id: i.grupo, quem: i.quem, filtro: i.filtro })));
     const gO = await grupos(op.page);
     const dO = gO.filter(g => g.id === 'decidir'), meusO = gO.filter(g => !g.outro);
     chk(dO.length > 0 && dO.every(g => g.outro && g.op < 1 && /quem faz é um admin/.test(g.txt)), `UX-21: operador vê as decisões esmaecidas e com "quem faz é um admin" (${dO.length})`);
     chk(gO[gO.length - 1].id === 'decidir' && meusO.length >= 1 && meusO.every(g => g.op === 1 && api.find(a => a.id === g.id).quem !== 'admin') && gO.findIndex(g => g.outro) === meusO.length, `UX-21: as linhas do operador vêm primeiro, sem esmaecer; as de admin, no fim (${gO.map(g => g.id + (g.outro ? '*' : '')).join(', ')})`);
-    chk(gO.length === api.length, `UX-21: nenhuma linha escondida: só esmaecida (${gO.length} linhas = servidor ${api.length})`);
+    const apiBase = api.filter(a => a.filtro === 'base').length, gOBase = await grupos(op.page, 'base');
+    chk(gO.length === api.length - apiBase && gOBase.length === apiBase, `UX-21: nenhuma linha escondida: só esmaecida (Para fazer ${gO.length} + Melhorar a base ${gOBase.length} = servidor ${api.length})`);
+    await grupos(op.page);
     const kO = await op.page.evaluate(() => { const b = document.querySelector('#v-painel .ini-kpi[data-ini-rota="decisoes"]'); return b ? { outro: b.classList.contains('ini-outro'), op: +getComputedStyle(b).opacity } : null; });
     chk(!!kO && kO.outro && kO.op < 1, `UX-21: o número de decisões (de admin) esmaecido para o operador: ${JSON.stringify(kO)}`);
     await op.ctx.close();

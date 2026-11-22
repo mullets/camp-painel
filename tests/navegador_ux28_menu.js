@@ -7,11 +7,17 @@
 // nome do menu = título de cada página; as teclas de antes continuam iguais; trilha do projeto por onde se entrou (Projetos × Fundos).
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8953';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const linhas = [], prob = [], erros = [];
 const chk = (ok, m) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + m); if (!ok) prob.push(m) };
 // as teclas de ANTES do UX-28 (nenhuma pode mudar)
 const TECLAS = { painel: '1', projetos: '2', fundos: '3', solicitacoes: '4', estacoes: '5', decisoes: 'D', filas: 'N', erros: 'P', arquitetos: 'I', localizacao: 'W', estante: 'X', etiquetas: 'T', emprestimos: 'O', relatorios: 'L', uso: 'U', auditoria: 'A', qualidade: 'Q', config: 'C', caminho: 'M', glossario: 'G' };
+// itens que entraram depois do UX-28, com a tecla de cada um em NAV_ATALHOS (nenhuma tecla antiga mudou):
+// Inscrições (S), Visitas ao site (V); 18–21/11/2026: Amigos da CAMP (H), Ingressos (Z), Cobranças avulsas (R), Doações de acervo (J) em
+// "Público e processos", sempre à vista (não ficam no "Mais"), e E-mails (E, CAMP-EMAIL) em Administração
+const TECLAS_TODAS = { ...TECLAS, inscricoes: 'S', visitas: 'V', amigos: 'H', ingressos: 'Z', cobrancas: 'R', doacoes: 'J', emails: 'E' };
+// único título de página decidido diferente do nome do menu (docs/vocabulario.md, Menu: "Inscrições (título da tela: Inscrições em cursos)")
+const H1_DECIDIDO = { inscricoes: 'Inscrições em cursos' };
 const visiveis = pg => pg.$$eval('#nav > button, #nav > .grp', es => es.filter(e => e.offsetParent !== null).map(e => e.classList.contains('grp') ? '#' + e.textContent.trim() : (e.dataset.v || e.id)));
 const entrar = async (b, email, senha) => {
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
@@ -33,26 +39,26 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
 
   // 1) com o "Mais" fechado: o topo (filas do dia) e os destinos, pela ordem do trabalho
   const v0 = await visiveis(page);
-  chk(v0.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público e processos,solicitacoes,inscricoes,#Administração,estacoes,nav-mais-pc',
+  chk(v0.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público e processos,solicitacoes,inscricoes,amigos,ingressos,cobrancas,doacoes,#Administração,estacoes,emails,nav-mais-pc',
       '"Mais" fechado: Visão geral (Precisa de você · Material novo · Problemas · Decisões · Projetos · Busca) · Acervo · Público e processos · Administração: ' + v0.join(','));
   chk(['filas', 'erros', 'decisoes'].every(v => v0.includes(v)), 'as filas do dia (Material novo, Problemas, Decisões) à vista sem abrir o "Mais"');
 
   // 2) com o "Mais" aberto: todos os grupos, na ordem pedida
   await page.click('#nav-mais-pc'); await page.waitForTimeout(200);
   const v1 = await visiveis(page);
-  chk(v1.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público e processos,solicitacoes,inscricoes,uso,visitas,relatorios,#Administração,estacoes,config,auditoria,qualidade,#Ajuda,caminho,glossario,nav-mais-pc',
+  chk(v1.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público e processos,solicitacoes,inscricoes,amigos,ingressos,cobrancas,doacoes,uso,visitas,relatorios,#Administração,estacoes,emails,config,auditoria,qualidade,#Ajuda,caminho,glossario,nav-mais-pc',
       '"Mais" aberto: Visão geral · Acervo · Público e processos · Administração (com Histórico e Qualidade do CAMP Vision, só admin) · Ajuda: ' + v1.join(','));
   await page.click('#nav-mais-pc');
 
   // 3) nome do menu = título da página (h1 e trilha); o topo fica vazio nas páginas do menu (Rafael 21/11: "repetindo")
   const nomeMenu = v => page.$eval(`#nav button[data-v="${v}"]`, e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim());
   const pares = [];
-  for (const v of Object.keys(TECLAS)) {
+  for (const v of Object.keys(TECLAS_TODAS)) {
     await page.evaluate(v => go(v), v); await page.waitForTimeout(v === 'painel' ? 900 : 500);
     const menu = await nomeMenu(v);
     const h1 = v === 'painel' ? null : await page.$eval(`#v-${v} .hdr h1`, e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()).catch(() => '(sem h1)');
     const topo = (await page.textContent('#where')).trim(), trilha = await page.$eval('#gcrumb b:last-of-type', e => e.textContent.trim()).catch(() => '');
-    const ok = (h1 === null || h1 === menu) && topo === '' && trilha === menu;   // 21/11: o topo não repete o nome da página (só a trilha e o h1)
+    const ok = (h1 === null || h1 === (H1_DECIDIDO[v] || menu)) && topo === '' && trilha === menu;   // 21/11: o topo não repete o nome da página (só a trilha e o h1)
     pares.push(`${v}: menu "${menu}" · h1 "${h1}" · topo "${topo}" · trilha "${trilha}"`);
     chk(ok, `nome do menu = título da página em "${v}" (menu "${menu}", h1 "${h1}", topo "${topo}", trilha "${trilha}")`);
   }
@@ -65,10 +71,9 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
   // 4) as teclas de antes, com o "Mais" fechado
   await page.evaluate(() => { navSecAbrir(false, true); go('painel') }); await page.waitForTimeout(700);
   const kbd = await page.$$eval('#nav button[data-v]', bs => Object.fromEntries(bs.map(x => [x.dataset.v, (x.querySelector('kbd') || {}).textContent || null])));
-  const TECLAS_TODAS = { ...TECLAS, inscricoes: 'S', visitas: 'V' };   // itens que entraram depois do UX-28 (Inscrições, Visitas ao site)
   chk(JSON.stringify(kbd) === JSON.stringify(Object.fromEntries(Object.keys(kbd).map(v => [v, TECLAS_TODAS[v]]))), 'o menu anuncia as mesmas teclas de antes: ' + JSON.stringify(kbd));
   const errTecla = [];
-  for (const [v, k] of Object.entries(TECLAS)) { await page.evaluate(() => go('glossario')); await page.waitForTimeout(200); const r = await tecla(page, k.toLowerCase()); if (v === 'glossario' ? r !== 'glossario' : r !== v) errTecla.push(`${k}→${r} (esperado ${v})`) }
+  for (const [v, k] of Object.entries(TECLAS_TODAS)) { await page.evaluate(() => go('glossario')); await page.waitForTimeout(200); const r = await tecla(page, k.toLowerCase()); if (v === 'glossario' ? r !== 'glossario' : r !== v) errTecla.push(`${k}→${r} (esperado ${v})`) }
   chk(!errTecla.length, 'cada tecla abre a mesma tela de antes' + (errTecla.length ? ': ' + errTecla.join(', ') : ''));
 
   // 5) Busca no topo do menu = a busca do ⌘K

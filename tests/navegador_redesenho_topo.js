@@ -16,7 +16,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8982', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const problemas = [], linhas = [];
 let ESPERA_500 = false;   // enquanto o teste simula a falha do ritmo, o 500 no console é esperado
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
@@ -87,7 +87,11 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     chk(/^(Bom dia|Boa tarde|Boa noite), Rafael\.$/.test(h1), `§5: título forte só com a saudação: "${h1}"`);
     chk(n > 0 && sub === `${n} ${n === 1 ? 'coisa pede' : 'coisas pedem'} sua atenção hoje`, `§5: subtítulo com a contagem real da fila (${n}): "${sub}"`);
     const todas = pa.fila.contagens.todas, base = pa.fila.contagens.base;
-    chk(n === todas - base && n === pa.fila.itens.filter(i => i.meu && i.filtro !== 'base').length, `§5: a contagem é a fila sem "Melhorar a base" (${todas} − ${base} = ${n})`);
+    // 11/11 (CAMP-UX, Rafael: "só fala em 1 e tem vários itens na lista"): "Para fazer" (contagens.todas) já não soma a base; a saudação é
+    // "Para fazer" menos o que é de outro papel (o admin não tem nada de outro papel). Antes, todas incluía a base e o teste subtraía.
+    chk(base > 0 && n === todas - pa.fila.de_outro_papel && pa.fila.filtros.find(f => f.id === 'todas').n === todas
+        && n === pa.fila.itens.filter(i => i.meu && i.filtro !== 'base').length,
+        `§5: a contagem é a fila da função sem "Melhorar a base" (Para fazer ${todas} − de outro papel ${pa.fila.de_outro_papel} = ${n}; base ${base} fora)`);
     chk(/\d{4} · \d{2}:\d{2}$/.test(data), `§5: dia e hora numa linha discreta: "${data}"`);
     const fs = await P.evaluate(() => ({ h1: parseFloat(getComputedStyle(document.getElementById('ini-saud')).fontSize), d: parseFloat(getComputedStyle(document.querySelector('.ini-data')).fontSize) }));
     chk(fs.h1 >= 26 && fs.h1 <= 32 && fs.d < fs.h1, `§5: título entre 26 e 32 px (${fs.h1}), data menor (${fs.d})`);
@@ -188,6 +192,18 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     await abrirHome(P);
 
     // ---------- §9: saúde ----------
+    // "Cópias das imagens" só tem linha quando a réplica está configurada, quando o aviso "uma cópia só" está ligado
+    // (replica.avisar_sem_copia, 05/11, padrão 0) ou quando a medida falhou. A semente não tem réplica: o teste liga o aviso para a linha
+    // existir sempre (antes dependia de a resposta de /api/replica falhar ou demorar) e depois prova que, desligado, ela some.
+    const temLinha = () => P.evaluate(() => !!document.querySelector('#ini-saude .ini-srv[data-srv="replica"]'));
+    const recarregarHome = async () => { await P.reload(); await P.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await abrirHome(P);
+      await P.waitForFunction(() => typeof PAINEL_REP !== 'undefined' && PAINEL_REP && document.querySelector('#ini-saude .ini-srv'), null, { timeout: 15000 }); };
+    py(`con.execute("UPDATE configuracao SET valor='0' WHERE chave='replica.avisar_sem_copia'")`);
+    await recarregarHome();
+    const rep0 = (await api(P, '/api/replica')).json || {};
+    chk(!rep0.configurada && rep0.avisar_sem_copia === false && !(await temLinha()), '§9 (05/11): sem réplica e com o aviso desligado, não há linha "Cópias das imagens"');
+    py(`con.execute("UPDATE configuracao SET valor='1' WHERE chave='replica.avisar_sem_copia'")`);
+    await recarregarHome();
     const srv = await P.evaluate(() => [...document.querySelectorAll('#ini-saude .ini-srv')].map(x => ({ id: x.dataset.srv, n: x.dataset.nivel, tag: x.querySelector('.tag').textContent, ic: x.querySelector('.ini-srv-ic').textContent, t: x.innerText })));
     const ordem = { r: 0, a: 1, c: 2, g: 3 };
     chk(['qnap', 'campvision', 'site', 'estacoes', 'replica', 'backup'].every(id => srv.some(s => s.id === id)), `§9: uma linha por sistema: ${srv.map(s => s.id).join(', ')}`);
@@ -196,10 +212,13 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     chk(q && q.n === 'r' && q.tag === 'crítico' && q.ic === '✕' && /desconectado/.test(q.t) && /importação/.test(q.t) && /copiadas/.test(q.t), '§9: QNAP desconectado: estado em texto ("crítico") e ícone, com o impacto na importação e nas cópias');
     chk(srv.every(s => ['crítico', 'atenção', 'não medido', 'normal', 'fora do expediente'].includes(s.tag)), '§9: todo estado tem rótulo em texto (não só cor)');
     chk(!srv.some(s => /em dia/i.test(s.t) && !/\d{2}:\d{2}/.test(s.t)), '§9: nada "em dia" sem a data da última cópia certa');
+    const rp = srv.find(s => s.id === 'replica');
+    chk(rp && rp.n === 'r' && /só uma cópia/.test(rp.t), '§9: com o aviso ligado, "Cópias das imagens" em vermelho diz que as imagens têm só uma cópia');
     chk(/Verificado às \d{2}:\d{2}/.test(await P.innerText('#ini-saude-quando')) && await P.locator('#ini-saude .ini-rodape[data-ini-rota="estacoes"]').count() === 1, '§9: hora da verificação e "Ver detalhes dos sistemas"');
     const fresco = []; P.on('request', r => { if (/\/api\/estacoes\?fresco=1/.test(r.url())) fresco.push(1); });
     await P.click('#ini-saude [data-ini-verificar]'); await P.waitForTimeout(2500);
     chk(fresco.length === 1 && /Verificado agora/.test(await P.innerText('#ini-saude-quando')), '§9: "Verificar agora" mede de novo e diz a hora');
+    py(`con.execute("UPDATE configuracao SET valor='0' WHERE chave='replica.avisar_sem_copia'")`);
 
     // ---------- 1366×768: indicadores e a 1ª tarefa sem rolar (uma visita nova, com a ajuda já usada) ----------
     await P.reload(); await P.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await abrirHome(P);
