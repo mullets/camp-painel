@@ -55,8 +55,7 @@ CAMPOS = {"ano_folha": "Ano da folha", "titulo": "Título da folha"}
 ACOES = ("deste_projeto", "mesma_folha", "diferentes", "metadado", "nao_e_problema", "fica_fora")
 _DOC = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-8]|S99)-D(\d{4,6})$")     # o mesmo CODIGO_DOCUMENTO do importador
 MINI_LADO = 240
-MOVER_FORA = ("esta folha ainda não entrou no painel (o CAMP Vision a deixou fora do lote), então não dá para mover: \"É deste projeto\" a devolve ao lote; "
-              "se for de outro projeto, ela fica fora e o CAMP Vision precisa reidentificar o lote para levá-la ao projeto certo")
+MOVER_FORA = "não dá para mover: esta folha ainda não entrou no painel (o CAMP Vision a deixou fora do lote)"
 _CARIMBO = re.compile(r"carimbo diz\s*:?\s*[\"'“‘«]([^\"'”’»]{2,160})", re.I)
 _FOLHA = re.compile(r"\bF\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}\b")
 
@@ -324,10 +323,9 @@ def rapido_do_grupo(g: dict, u: dict) -> None:
         fora = sum(1 for r in rs if r.get("fora_do_painel"))
         nota = None
         if "mover" not in acoes:   # CAMP-PROB-REAL: diz por que não há "Mover todas para…" (antes o grupo só tinha "Ver uma a uma")
-            nota = ("Mover: " + MOVER_FORA.replace("esta folha ainda não entrou", "estas folhas ainda não entraram").replace("a deixou", "as deixou")
-                    .replace("a devolve", "as devolve").replace("ela fica", "elas ficam").replace("levá-la", "levá-las")) if fora == len(rs) else \
-                   (f"Mover: {fora} das {len(rs)} folhas ainda não entraram no painel; mova uma a uma as que estão no painel." if fora else
-                    ("Mover: " + (rs[0].get("mover_porque_nao") or "não vale para todas") + "."))
+            nota = ("Não dá para mover: estas folhas ainda não entraram no painel (o CAMP Vision as deixou fora do lote)." if fora == len(rs) else
+                    f"Não dá para mover o grupo: {fora} das {len(rs)} folhas ainda não entraram no painel; mova uma a uma as que estão no painel." if fora else
+                    "Mover: " + (rs[0].get("mover_porque_nao") or "não vale para todas") + ".")
         g["rapido"] = {"tipo": "outro_projeto", "acoes": acoes, "sugestao": rs[0].get("sugestao") if len(sugs) == 1 and "mover" in acoes else None,
                        "carimbos": sorted({r.get("carimbo") for r in rs if r.get("carimbo")})[:5], "fora_do_painel": fora == len(rs), "nota": nota}
         if not acoes:

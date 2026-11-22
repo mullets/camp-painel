@@ -12641,7 +12641,7 @@ def filho(modo):
         ver("folha importada de lote antigo (pendências sem 'previa', arquivo_jpg no QNAP): miniatura pela rota, que serve o JPG",
             mi.get(ANTIGA) == rota(ANTIGA) and mi.get(EXISTENTE) == rota(EXISTENTE) and r_ant.status_code == 200, f"{mi} HTTP {r_ant.status_code}")
         ver("grupo de folhas retiradas: 'Todas são deste projeto' e 'Ficam fora' valem para todas; o porquê de não ter Mover",
-            (g1.get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"] and "não dá para mover" in ((g1.get("rapido") or {}).get("nota") or "")
+            (g1.get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"] and "não dá para mover" in ((g1.get("rapido") or {}).get("nota") or "").lower()
             and (g2.get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"], str(g1.get("rapido"))[:300])
         r21 = s21.get("rapido") or {}
         ver("linha solta real (erros.json de uma folha retirada, F001·P0021·D00001): É deste projeto · É de outro projeto, com o carimbo e a miniatura",

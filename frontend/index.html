@@ -2383,37 +2383,50 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-c-ic{grid-area:ic;width:26px;height:26px}
 .cp-c-rot{grid-area:rot;font-size:var(--fs-md);color:var(--ink2);margin-top:2px}
 .cp-cartao small{display:none}
+/* CAMP-PROB-REAL: cartões mais baixos (número e rótulo na mesma linha): a 1ª linha da lista aparece em 1366×768 sem rolar */
+.cp-cartao{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"n rot ic";gap:8px;padding:8px 12px;align-items:center}
+.cp-cartao .cp-c-n{font-size:var(--fs-xl)}
+.cp-cartao .cp-c-ic{width:20px;height:20px}
+.cp-cartao .cp-c-rot{margin:0;line-height:1.2;font-size:var(--fs-2xs)}
+.cp-principal{gap:12px}
+@container (max-width:760px){.cp-cartao .cp-c-ic{display:none}.cp-cartao{grid-template-columns:auto minmax(0,1fr)}}
 .cp-c-aberto{background:var(--red-soft);border-color:transparent}
 .cp-c-aberto .cp-c-n,.cp-c-aberto .cp-c-ic,.cp-c-crit .cp-c-n,.cp-c-crit .cp-c-ic{color:var(--red)}
 .cp-c-anal .cp-c-ic,.cp-c-rev .cp-c-ic{color:var(--blue)}
 .cp-c-res .cp-c-ic{color:var(--green)}
 .cp-lista-painel{border-radius:var(--r-md);padding:4px 0 0}
-.cp-abas-linha{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px}
+.cp-abas-linha{display:flex;align-items:flex-end;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;padding:2px 14px 0;border-bottom:1px solid var(--line)}
 .cp-abas-linha .cp-ordem select{width:auto}
-.cp-abas{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:4px;display:inline-flex;gap:2px;flex-wrap:wrap;margin:0}
-.cp-aba{border:0;background:transparent;color:var(--ink);padding:7px 14px;border-radius:var(--r);font-size:var(--fs-md)}
-.cp-aba b{font-weight:500}
-.cp-abas .cp-aba{box-shadow:none;border-bottom:0}
-.cp-abas .cp-aba[aria-pressed="true"]{background:var(--blue);color:var(--on-blue,#fff);box-shadow:none}
-.cp-abas .cp-aba[aria-pressed="true"] b,.cp-abas .cp-aba b{color:inherit;background:transparent;border:0}
+/* CAMP-PROB-REAL: abas normais (sublinhado azul e contagem em selo, como as das listas), não pílulas numa caixa cinza com "(N)" em monoespaçada */
+.cp-abas{display:flex;gap:0;flex-wrap:wrap;border-bottom:0;margin:0 0 -1px;background:none;padding:0}
+.cp-abas .cp-aba{padding:9px 10px;font-size:var(--fs-md);border-radius:0;border:0;border-bottom:2px solid transparent;background:none;box-shadow:none;color:var(--ink2)}
+.cp-abas .cp-aba[aria-pressed="true"]{color:var(--sel-ink,var(--blue));border-bottom-color:var(--blue);font-weight:600;background:none}
+.cp-abas .cp-aba b,.cp-abas .cp-aba .n{font:600 var(--fs-xs)/1.5 var(--sans);font-variant-numeric:tabular-nums;padding:0 7px;border-radius:var(--r-pill);background:var(--surface2);border:1px solid var(--line);color:var(--ink2)}
+.cp-abas .cp-aba[aria-pressed="true"] b{background:var(--sel);border-color:var(--sel);color:var(--sel-ink)}
+.cp-ctl{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;margin-left:auto;padding:4px 0 6px}   /* Resolver em sequência · Agrupar · Ordenar por: na MESMA linha */
+.cp-ctl .cp-agrupar{display:flex;align-items:center;gap:4px;font-size:var(--fs-md);color:var(--ink2);white-space:nowrap}
+.cp-ctl .cp-ordem{white-space:nowrap}
 .cp-ordem{display:flex;align-items:center;gap:6px;font-size:var(--fs-md);color:var(--ink2)}
-.cp-filtros{flex-wrap:wrap;gap:8px;border-top:1px solid var(--line)}
+.cp-filtros{flex-wrap:wrap;gap:8px;border-top:0;padding-top:8px;padding-bottom:6px}
 .cp-filtros #err-q{flex:1 1 260px;min-width:0}
 .cp-filtros-mais{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:12px 14px;border-top:1px solid var(--line);background:var(--surface2)}
 .cp-filtros-mais[hidden]{display:none}
 .cp-filtros-mais label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-2xs);color:var(--ink2)}
 .cp-filtros-mais select,.cp-filtros-mais input{min-width:0;width:100%}
 .cp-gaveta-topo,.cp-gaveta-fim{display:none}
-.cp-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 0}
+.cp-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}.cp-chips:empty{display:none}
 .cp-chip{font-size:var(--fs-2xs);padding:3px 10px}
 .cp-chip{border-radius:var(--r-pill)}
 .cp-chip[aria-pressed="true"]{background:var(--sel);color:var(--sel-ink);border-color:var(--blue)}
-.cp-ativos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 14px 0}
+.cp-ativos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 14px 0}
+/* CAMP-PROB-REAL: a faixa dos filtros ativos é uma linha fina normal (antes uma barra bege) */
+.err-filtro-ativo.cp-ativos{background:none;border-bottom:0;padding:4px 14px 0;gap:4px 8px;font-size:var(--fs-2xs)}
+.cp-ativos .btn.sm{padding:1px 8px;min-height:0}
 .cp-ativo{display:inline-flex;align-items:center;gap:4px;background:var(--blue-soft);color:var(--blue);border-radius:var(--r-pill);padding:2px 4px 2px 10px;font-size:var(--fs-2xs)}
 .cp-ativo-x{all:unset;cursor:pointer;width:18px;height:18px;display:inline-grid;place-items:center;border-radius:50%}
 .cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
 .cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
-.cp-lista{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.cp-lista{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
 .cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
 .cp-linha:hover{border-color:var(--blue)}
 .cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
@@ -2560,6 +2573,8 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .cp-rap-txt>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-rap-txt small{color:var(--ink2)}
 .cp-rap-bts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cp-rap-nota{display:block;color:var(--ink3);font-size:var(--fs-2xs);white-space:normal;line-height:1.35}   /* CAMP-PROB-REAL: por que não há Mover */
+.cp-rap-motivo{grid-column:1/-1;margin:2px 0 0;padding-top:6px;border-top:1px dashed var(--line);font-size:var(--fs-2xs);color:var(--ink2);cursor:default}
 .cp-rap-bts input{width:110px}
 .cp-rap-conf{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface2);border-radius:var(--r);padding:8px 10px;font-size:var(--fs-md)}
 .cp-rap-conf[hidden]{display:none}
@@ -2752,7 +2767,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
         <div class="cp-cartoes" id="cp-cartoes" role="group" aria-label="Resumo dos problemas"></div>
         
         <div class="panel cp-lista-painel">
-          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><button type="button" class="btn sm cp-seq-bt" data-cp-seq title="Um problema por vez, com a imagem grande e as teclas 1, 2 e 3">Resolver em sequência</button><label class="cp-agrupar" title="O mesmo projeto e o mesmo tipo numa linha só (os números continuam contando problemas)"><input type="checkbox" id="cp-agrupar"> Agrupar</label><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div>
+          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><div class="cp-ctl" role="group" aria-label="Como ver a lista"><button type="button" class="btn sm cp-seq-bt" data-cp-seq title="Um problema por vez, com a imagem grande e as teclas 1, 2 e 3">Resolver em sequência</button><label class="cp-agrupar" title="O mesmo projeto e o mesmo tipo numa linha só (os números continuam contando problemas)"><input type="checkbox" id="cp-agrupar"> Agrupar</label><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div></div>
           <div class="filterbar cp-filtros"><input type="search" id="err-q" placeholder="Buscar título, nº, arquiteto, obra, fundo ou palavra… (tecla /)" aria-label="Buscar problemas" autocomplete="off">
             <button type="button" class="btn sm" id="cp-filtros-btn" aria-expanded="false" aria-controls="cp-filtros-mais">Filtros</button>
             <select id="cp-visoes" aria-label="Visões salvas" hidden></select><span class="cnt" id="err-cnt"></span></div>
@@ -10542,8 +10557,9 @@ function cpCartoesHTML(r){const c=r&&r.cartoes;if(!c)return '';
     +card('em_analise','Em análise',c.em_analise,'ampulheta','cp-c-anal','triagem, análise, aguardando informação')
     +card('aguardando_revisao','Aguardando conferência',c.aguardando_revisao,'camadas','cp-c-rev','aguardando revisão de outra pessoa')
     +card('resolvidos',`Resolvidos (${{hoje:'hoje',semana:'7 dias',mes:'30 dias'}[CP_PER]})`,c.resolvidos[CP_PER],'ok','cp-c-res',CP_PER==='mes'&&c.resolvidos_sistema_mes?`${fmtN(c.resolvidos_sistema_mes)} pelo sistema (o painel conferiu)`:'')}
-function cpAbasHTML(r){const n=r&&r.abas;return CP_ABAS.map(([k,t,d])=>`<button class="btn sm cp-aba" data-err-sit="${k}" aria-pressed="${CP.aba===k}" title="${escHtml(d)}">${t}${n?` <b>(${fmtN(n[k]||0)})</b>`:''}</button>`).join('')}
-function cpChipsHTML(r){const n=(r&&r.chips)||{},on=cpChips();return CP_CHIPS.filter(([k])=>!(CP.aba==='concluidos'&&['minha_revisao','rapidos','talvez'].includes(k))&&!(CP.aba==='prioridades'&&k==='avisos')).map(([k,t])=>`<button type="button" class="btn sm cp-chip" data-cp-chip="${k}" aria-pressed="${on.has(k)}">${t}${n[k]!=null?` <b>${fmtN(n[k])}</b>`:''}</button>`).join('')}
+function cpAbasHTML(r){const n=r&&r.abas;return CP_ABAS.map(([k,t,d])=>`<button class="btn sm cp-aba" data-err-sit="${k}" aria-pressed="${CP.aba===k}" title="${escHtml(d)}">${t}${n?` <b class="n">${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
+/* CAMP-PROB-REAL: filtro rápido com 0 some (o ativo fica sempre à vista) — Rafael via a fileira cheia de "0" */
+function cpChipsHTML(r){const n=(r&&r.chips)||{},on=cpChips();return CP_CHIPS.filter(([k])=>!(CP.aba==='concluidos'&&['minha_revisao','rapidos','talvez'].includes(k))&&!(CP.aba==='prioridades'&&k==='avisos')&&(on.has(k)||!r||n[k]==null||+n[k]>0)).map(([k,t])=>`<button type="button" class="btn sm cp-chip" data-cp-chip="${k}" aria-pressed="${on.has(k)}">${t}${n[k]!=null?` <b>${fmtN(n[k])}</b>`:''}</button>`).join('')}
 function cpAtivos(){const L=[],op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
   if(CP.q)L.push(['q',`Busca: "${CP.q}"`]);if(CP.projeto)L.push(['projeto','Projeto: '+CP.projeto]);if(CP.fundo)L.push(['fundo','Fundo: '+op('cp-fundo',CP.fundo)]);
   if(CP.fase)L.push(['fase','Fase: '+CP.fase.split(',').map(f=>CP_FASES[f]||f).join(' ou ')]);if(CP.gravidade)L.push(['gravidade','Severidade: '+(CP_GRAV[CP.gravidade]||CP.gravidade)]);
@@ -10560,9 +10576,10 @@ function cpSincronizarCampos(){const v=(id,x)=>{const el=document.getElementById
 /* ---- linha compacta ---- */
 function cpOndeHTML(e){const p=[];if(e.fundo_codigo)p.push(`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair title="${escHtml(e.fundo_titulo||'')}">${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`);
   if(e.projeto_codigo)p.push(`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo)}</a>`);
-  if(e.folha){const curto=String(e.folha).slice(11)||e.folha;p.push(e.folha_existe&&e.tipo==='comum'?`<a class="lnk" href="#item/${escHtml(e.folha)}" data-err-sair>folha ${escHtml(curto)}</a>`:`<span>folha ${escHtml(curto)}${e.tipo==='retirada'?' (fora do painel)':e.folha_existe===false?(e.folha_atual?' (agora é '+escHtml(e.folha_atual.slice(11))+')':' (não existe mais)'):''}</span>`)}
+  if(e.folha){const curto=String(e.folha).slice(11)||e.folha;const fora=cpFora(e);p.push(e.folha_existe&&e.tipo==='comum'?`<a class="lnk" href="#item/${escHtml(e.folha)}" data-err-sair>folha ${escHtml(curto)}</a>`:`<span>folha ${escHtml(curto)}${fora?' (fora do painel)':e.folha_existe===false?(e.folha_atual?' (agora é '+escHtml(e.folha_atual.slice(11))+')':' (não existe mais)'):''}</span>`)}
   return p.join(' <span class="cp-sep" aria-hidden="true">›</span> ')||`<span class="code">${escHtml(e.codigo)}</span>`}
-function cpCodigoCurto(e){const c=String(e.projeto_codigo||e.fundo_codigo||e.codigo).replace('-',' · '),d=e.folha?(String(e.folha).match(/-(D\d+)$/)||[])[1]:'';return d?`${c} · ${d}${e.tipo==='retirada'?' (fora do painel)':''}`:c}   /* F026 · P0001 · D00012, como no mockup */
+function cpFora(e){return e.tipo==='retirada'||!!(e.rapido&&e.rapido.fora_do_painel)}   /* CAMP-PROB-REAL: o problema do erros.json da folha retirada também está fora do painel */
+function cpCodigoCurto(e){const c=String(e.projeto_codigo||e.fundo_codigo||e.codigo).replace('-',' · '),d=e.folha?(String(e.folha).match(/-(D\d+)$/)||[])[1]:'';return d?`${c} · ${d}${cpFora(e)?' (fora do painel)':''}`:c}   /* F026 · P0001 · D00012, como no mockup */
 function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.severidade||'medio',pr=e.prioridade||{};
   const semFiltro=CP.responsavel==='ninguem'||cpChips().has('sem_responsavel');   /* CAMP-PROB-RAPIDO: filtrando por "sem responsável", a linha não repete */
   const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?(semFiltro?'':'<span class="cp-resp cp-sem">Sem responsável</span>'):'<span class="cp-resp cp-sem">—</span>');
@@ -10591,30 +10608,36 @@ const CP_GRUPO_TIT={projeto_errado:n=>`${fmtN(n)} folhas podem ser de outro proj
 function cpAgrupa(){return CP.aba!=='concluidos'&&(CP.agrupar==='1'||(CP.agrupar!=='0'&&(CP.aba==='prioridades'||cpChips().has('critico'))))}
 function cpProjNome(e){return tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo||''}
 function cpMiniHTML(url,alt,cls='cp-rap-mini'){return url?`<img class="${cls}" src="${escHtml(url)}" alt="${escHtml(alt)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls} cp-rap-sem',textContent:'sem imagem'}))">`:`<span class="${cls} cp-rap-sem">sem imagem</span>`}
-function cpRapHTML(e){const r=e.rapido;if(!e.aberto||!r||r.sensivel||!r.tipo)return '';const id=escHtml(e.id),f=e.folha?String(e.folha).slice(11):'';
+/* CAMP-PROB-REAL: linha sem decisão rápida diz por quê (nunca fica calada) */
+function cpMotivoHTML(txt){return txt?`<p class="cp-rap-motivo" data-no-nav><b>Por que não tem decisão rápida:</b> ${escHtml(txt)}</p>`:''}
+function cpRapHTML(e){const r=e.rapido;if(!e.aberto)return '';if(!r||r.sensivel||!r.tipo)return cpMotivoHTML(e.rapido_motivo||(r&&r.motivo));const id=escHtml(e.id),f=e.folha?String(e.folha).slice(11):'';
   const abrir=`<button type="button" class="btn sm lnk" data-cp-abrir="${id}">Abrir</button>`;let txt='',bts='',mini=cpMiniHTML(e.miniatura,'Folha '+f);
   if(r.tipo==='outro_projeto'){
     txt=`<span>${r.carimbo?`O carimbo diz: <b>${escHtml(r.carimbo)}</b>`:r.sem_identificacao?'<b>A folha não diz de qual obra é</b> (pasta com várias obras)':'<b>O CAMP Vision acha que é de outro projeto</b>'}</span><span><small>Está em:</small> <b>${escHtml(cpProjNome(e))}</b> <small class="code">${escHtml(e.projeto_codigo||'')}</small></span>`;
     bts=(r.acoes.includes('deste_projeto')?`<button type="button" class="btn sm" data-cp-r="deste_projeto" data-cp-id="${id}">É deste projeto</button>`:'')
       +(r.acoes.includes('mover')&&r.sugestao?`<button type="button" class="btn sm" data-cp-r="mover" data-cp-id="${id}" data-cp-destino="${escHtml(r.sugestao.codigo)}" title="${escHtml(r.sugestao.codigo+' · '+(r.sugestao.titulo||''))}">Mover para ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</button>`:'')
-      +(r.acoes.includes('escolher')?`<button type="button" class="btn sm lnk" data-cp-r="escolher" data-cp-id="${id}" data-cp-fundo="${escHtml(e.fundo_codigo||'')}">Escolher outro projeto…</button>`:'')}
+      +(r.acoes.includes('escolher')?`<button type="button" class="btn sm lnk" data-cp-r="escolher" data-cp-id="${id}" data-cp-fundo="${escHtml(e.fundo_codigo||'')}">Escolher outro projeto…</button>`:'')
+      +(r.acoes.includes('fica_fora')?`<button type="button" class="btn sm" data-cp-r="fica_fora" data-cp-id="${id}" title="A folha continua fora deste projeto e do site; os problemas sobre ela fecham">É de outro projeto (fica fora)</button>`:'');
+    if(r.mover_porque_nao&&!r.acoes.includes('mover')){const m=String(r.mover_porque_nao);txt+=`<small class="cp-rap-nota">${escHtml(m.charAt(0).toUpperCase()+m.slice(1))}.</small>`}}
   else if(r.tipo==='duplicata'){mini=`<span class="cp-g-thumbs">${cpMiniHTML(e.miniatura,'Folha '+f,'')}${r.original?cpMiniHTML(r.original_miniatura,'Original '+String(r.original).slice(11),''):''}</span>`;
     txt=`<span>${r.original?`Parece cópia de <b class="code">${escHtml(String(r.original).slice(11))}</b>`:'<b>Parece repetida</b> (a original não foi indicada)'}</span><span><small>${escHtml(cpProjNome(e))}</small></span>`;
     bts=(r.acoes.includes('mesma_folha')?`<button type="button" class="btn sm" data-cp-r="mesma_folha" data-cp-id="${id}">É a mesma folha</button>`:'')+(r.acoes.includes('diferentes')?`<button type="button" class="btn sm" data-cp-r="diferentes" data-cp-id="${id}">São diferentes</button>`:'')}
   else if(r.tipo==='metadado'){txt=`<span><b>${escHtml(r.campo_rotulo)}</b> <small>falta ou está errado</small></span>`;
     bts=r.acoes.includes('metadado')?`<input type="text" class="cp-rap-valor" data-cp-id="${id}" ${r.campo==='ano_folha'?'inputmode="numeric" maxlength="4" placeholder="ex.: 1971"':'maxlength="200" placeholder="Título da folha"'} aria-label="${escHtml(r.campo_rotulo)}"><button type="button" class="btn sm" data-cp-r="metadado" data-cp-id="${id}">Salvar</button>`:''}
-  if(!bts&&!r.nao_e_problema)return '';
+  if(!bts)return cpMotivoHTML(e.rapido_motivo);
   return `<div class="cp-rap" data-no-nav data-cp-rap="${id}">${mini}<div class="cp-rap-txt">${txt}</div><div class="cp-rap-bts">${bts}${abrir}</div><div class="cp-rap-conf" hidden role="group" aria-label="Confirmar"></div></div>`}
 function cpGrupoHTML(g){const sev=g.severidade||'medio',r=g.rapido||{},adm=cpAdmin(),id=escHtml(g.chave),tit=(CP_GRUPO_TIT[g.categoria]||(n=>`${fmtN(n)} problemas: ${g.titulo}`))(g.n);
   const thumbs=g.membros.slice(0,8).map(m=>cpMiniHTML(m.miniatura,'Folha '+String(m.folha||'').slice(11),'')).join('')+(g.n>8?`<span class="cp-g-mais">+${fmtN(g.n-8)}</span>`:'');
   const pr=g.prioridade||{};
-  const bts=(r.acoes||[]).includes('deste_projeto')?`<button type="button" class="btn sm" data-cp-g="deste_projeto" data-cp-gid="${id}">Todas são deste projeto</button>`:'';
+  const bts=((r.acoes||[]).includes('deste_projeto')?`<button type="button" class="btn sm" data-cp-g="deste_projeto" data-cp-gid="${id}">Todas são deste projeto</button>`:'')
+    +((r.acoes||[]).includes('fica_fora')?`<button type="button" class="btn sm" data-cp-g="fica_fora" data-cp-gid="${id}">Todas são de outro projeto (ficam fora)</button>`:'');
+  const nota=r.nota||((r.acoes||[]).length?'':r.motivo);   /* CAMP-PROB-REAL: sem ação para o grupo, o porquê (antes só "Ver uma a uma") */
   const mov=(r.acoes||[]).includes('mover')&&adm?`<button type="button" class="btn sm" data-cp-g="mover" data-cp-gid="${id}"${r.sugestao?` data-cp-destino="${escHtml(r.sugestao.codigo)}"`:''} data-cp-fundo="${escHtml(g.fundo_codigo||'')}">Mover todas para…</button>`:'';
   return `<div class="cp-linha cp-grupo sev-${sev}" role="listitem" data-cp-grupo="${id}">
     <span class="cp-sel"></span><span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(cpProjNome(g))} · <span data-cp-gtit>${escHtml(tit)}</span></b></div>
       <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}<span>${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span>${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
-      <div class="cp-g-thumbs">${thumbs}</div></div>
+      <div class="cp-g-thumbs">${thumbs}</div>${nota?`<small class="cp-rap-nota" data-cp-gnota>${escHtml(nota)}</small>`:''}</div>
     <span class="cp-sev-tag"${pr.razao?` title="${escHtml(pr.razao)}"`:''}>${escHtml(g.severidade_rotulo||'')}</span>
     <div class="cp-acoes">${bts}${mov}<button type="button" class="btn sm lnk" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
     <div class="cp-rap-conf" hidden data-no-nav role="group" aria-label="Confirmar"></div>
@@ -10642,7 +10665,7 @@ function cpAtualizarNumeros(){clearTimeout(CP_NUM_T);CP_NUM_T=setTimeout(async()
 function cpToastRapido(r,mover){const pul=(r.pulados||[]).length?` ${qtd(r.pulados.length,'ficou','ficaram')} de fora: ${r.pulados[0].motivo}`:'';
   toast((r.mensagem||'Feito.')+pul,r.desfazer?{acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
 async function cpRapida(ids,acao,extra={},b){if(b)b.disabled=true;
-  try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:ids.map(Number),acao,...extra})});cpTirarLinhas(r.resolvidos||[]);cpToastRapido(r,false);return r}
+  try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:ids.map(Number),acao,...extra})});cpTirarLinhas([...(r.resolvidos||[]),...(r.fechados||[])]);cpToastRapido(r,false);return r}
   catch(err){toast(err.message);if(b)b.disabled=false;return null}}
 async function cpDesfazerRapido(tok,mover){try{
     if(mover){const s=await API('/api/problemas/rapido/desfazer/'+tok,{method:'POST',body:JSON.stringify({simular:true})});
@@ -10674,7 +10697,7 @@ document.addEventListener('click',async e=>{const t=e.target;
     if(a==='nao'){r.closest('details')?.removeAttribute('open');const lin=document.querySelector(`#err-body [data-err-linha="${id}"]`);const alvo=lin&&lin.querySelector('[data-cp-rap]');
       const html=`<span>Não é problema porque…</span>${CP_NAO_MOTIVOS.map(([k,t])=>`<button type="button" class="btn sm" data-cp-nao="${k}" data-cp-id="${id}">${escHtml(t)}</button>`).join('')}<button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`;
       if(alvo)cpConfMostrar(alvo,html);else{const ok_=await confirmar({titulo:'Não é problema?',opcoes:CP_NAO_MOTIVOS.map(([k,t])=>({valor:k,rotulo:t})),botao:'Fechar: não é problema'});if(ok_)cpRapida([id],'nao_e_problema',{motivo:ok_.valor})}return}
-    if(a==='deste_projeto'||a==='mesma_folha'||a==='diferentes'){cpRapida([id],a,{},r);return}
+    if(a==='deste_projeto'||a==='mesma_folha'||a==='diferentes'||a==='fica_fora'){cpRapida([id],a,{},r);return}
     if(a==='metadado'){const v=(r.parentElement.querySelector('.cp-rap-valor')||{}).value||'';if(!v.trim()){toast('Preencha o dado antes de salvar');return}cpRapida([id],'metadado',{valor:v.trim()},r);return}
     if(a==='mover'){cpMoverSimular([id],r.dataset.cpDestino,r);return}
     if(a==='escolher'){cpConfMostrar(r,cpEscolherHTML(r.dataset.cpFundo||(it&&it.fundo_codigo)||''));const i=cpConfBox(r).querySelector('.cp-rap-q');if(i)i.dispatchEvent(new Event('input',{bubbles:true}));return}
@@ -10683,10 +10706,12 @@ document.addEventListener('click',async e=>{const t=e.target;
   const esc=t.closest('[data-cp-escolhido]');if(esc){cpMoverSimular(cpIdsDoBotao(esc),esc.dataset.cpEscolhido,esc);return}
   const mok=t.closest('[data-cp-mover-ok]');if(mok){cpMoverAgora(mok.dataset.cpIds.split(',').map(Number),mok.dataset.cpMoverOk,mok);return}
   const dok=t.closest('[data-cp-deste-ok]');if(dok){cpRapida(dok.dataset.cpIds.split(',').map(Number),'deste_projeto',{},dok);return}
+  const fok=t.closest('[data-cp-fora-ok]');if(fok){cpRapida(fok.dataset.cpIds.split(',').map(Number),'fica_fora',{},fok);return}
   const g=t.closest('[data-cp-g]');
   if(g){const gr=cpGrupoPorId(g.dataset.cpGid);if(!gr)return;const a=g.dataset.cpG;
     if(a==='ver'){const m=g.closest('[data-cp-grupo]').querySelector('.cp-g-membros');m.hidden=!m.hidden;g.setAttribute('aria-expanded',String(!m.hidden));g.textContent=m.hidden?'Ver uma a uma':'Recolher';return}
-    if(a==='deste_projeto'){cpConfMostrar(g,`<span>As ${escHtml(qtd(gr.n,'folha','folhas'))} são de <b>${escHtml(cpProjNome(gr))}</b>? Cada problema fica resolvido com a conclusão do modelo de decisão.</span><button type="button" class="btn sm pri" data-cp-deste-ok data-cp-ids="${escHtml(gr.ids.join(','))}">Sim, todas são deste projeto</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`);return}
+    if(a==='deste_projeto'){cpConfMostrar(g,`<span>As ${escHtml(qtd(gr.n,'folha','folhas'))} são de <b>${escHtml(cpProjNome(gr))}</b>? Cada problema fica resolvido com a conclusão do modelo de decisão.${(gr.rapido||{}).fora_do_painel?' As folhas voltam ao lote e entram no painel na próxima importação.':''}</span><button type="button" class="btn sm pri" data-cp-deste-ok data-cp-ids="${escHtml(gr.ids.join(','))}">Sim, todas são deste projeto</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`);return}
+    if(a==='fica_fora'){cpConfMostrar(g,`<span>As ${escHtml(qtd(gr.n,'folha','folhas'))} são de outro projeto? Elas continuam fora de <b>${escHtml(cpProjNome(gr))}</b> e do site, e os problemas sobre elas fecham (dá para desfazer).</span><button type="button" class="btn sm pri" data-cp-fora-ok data-cp-ids="${escHtml(gr.ids.join(','))}">Sim, ficam fora deste projeto</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`);return}
     if(a==='mover'){if(g.dataset.cpDestino)cpConfMostrar(g,`<span>O carimbo combina com <b>${escHtml(g.dataset.cpDestino)}</b>.</span><button type="button" class="btn sm" data-cp-escolhido="${escHtml(g.dataset.cpDestino)}">Simular o mover para ${escHtml(g.dataset.cpDestino)}</button>`+cpEscolherHTML(g.dataset.cpFundo));else cpConfMostrar(g,cpEscolherHTML(g.dataset.cpFundo));
       const i=cpConfBox(g).querySelector('.cp-rap-q');if(i)i.dispatchEvent(new Event('input',{bubbles:true}));return}}
   const tri=t.closest('[data-cp-seq]');if(tri){cpTriAbrir();return}});
@@ -10704,7 +10729,7 @@ async function cpTriAbrir(){if(CP_TRI)return;CP_TRI={itens:[],i:0,pagina:1,total
 function cpTriFechar(){window.removeEventListener('keydown',cpTriTecla,true);document.getElementById('cp-tri')?.remove();const mudou=CP_TRI&&CP_TRI.feitos;CP_TRI=null;if(mudou)carregarErros()}
 async function cpTriRecarregar(){if(!CP_TRI)return;const i=CP_TRI.i;CP_TRI.itens=[];CP_TRI.pagina=1;CP_TRI.fim=false;CP_TRI.total=0;await cpTriCarregarMais();CP_TRI.i=Math.min(i,Math.max(0,CP_TRI.itens.length-1));cpTriDesenhar()}
 function cpTriOpcoes(e){const r=e.rapido||{},o=[];if(!e.aberto)return o;
-  if(r.tipo==='outro_projeto'){if(r.acoes.includes('deste_projeto'))o.push({k:'1',rot:'É deste projeto',fn:()=>cpTriFazer(e,'deste_projeto')});if(r.acoes.includes('mover')&&r.sugestao)o.push({k:'2',rot:`Mover para ${tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo} (${r.sugestao.codigo})`,fn:()=>cpTriMover(e,r.sugestao.codigo)})}
+  if(r.tipo==='outro_projeto'){if(r.acoes.includes('deste_projeto'))o.push({k:'1',rot:'É deste projeto',fn:()=>cpTriFazer(e,'deste_projeto')});if(r.acoes.includes('mover')&&r.sugestao)o.push({k:'2',rot:`Mover para ${tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo} (${r.sugestao.codigo})`,fn:()=>cpTriMover(e,r.sugestao.codigo)});if(r.acoes.includes('fica_fora'))o.push({k:'2',rot:'É de outro projeto (fica fora)',fn:()=>cpTriFazer(e,'fica_fora')})}
   else if(r.tipo==='duplicata'){if(r.acoes.includes('mesma_folha'))o.push({k:'1',rot:'É a mesma folha',fn:()=>cpTriFazer(e,'mesma_folha')});if(r.acoes.includes('diferentes'))o.push({k:'2',rot:'São diferentes',fn:()=>cpTriFazer(e,'diferentes')})}
   else if(r.tipo==='metadado'&&r.acoes.includes('metadado'))o.push({k:'1',rot:'Salvar o dado (escreva e aperte Enter)',campo:true,fn:()=>{const v=(document.getElementById('cp-tri-valor')||{}).value||'';if(v.trim())cpTriFazer(e,'metadado',{valor:v.trim()});else document.getElementById('cp-tri-valor')?.focus()}});
   if(r.nao_e_problema)o.push({k:'3',rot:'Não é problema (o aviso não muda nada na folha)',fn:()=>cpTriFazer(e,'nao_e_problema',{motivo:'sem_efeito'})});
@@ -10724,7 +10749,7 @@ function cpTriDesenhar(){const T=CP_TRI,ov=document.getElementById('cp-tri');if(
     <div class="cp-rap-conf" id="cp-tri-conf" hidden></div>${teclas}</div></div>`;
   box.tabIndex=-1;box.focus({preventScroll:true})}   /* o foco fica na caixa (não num botão): Enter abre o painel, 1/2/3 escolhem */
 async function cpTriFazer(e,acao,extra={}){try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:[e.id],acao,...extra})});
-    cpToastRapido(r,false);cpTriAvancar(r.resolvidos||[])}catch(err){toast(err.message)}}
+    cpToastRapido(r,false);cpTriAvancar([...(r.resolvidos||[]),...(r.fechados||[])])}catch(err){toast(err.message)}}
 async function cpTriMover(e,destino){const c=document.getElementById('cp-tri-conf');c.hidden=false;c.innerHTML='<span class="help">Simulando o mover…</span>';
   try{const s=await API('/api/problemas/rapido/mover',{method:'POST',body:JSON.stringify({ids:[e.id],destino,simular:true})});const m=(s.movidos||[])[0];
     c.innerHTML=`<span>Mover para <b>${escHtml(destino)}</b>${s.destino&&s.destino.titulo?' · '+escHtml(tituloExibicao(s.destino.titulo)):''}?${m?` Vira <span class="code">${escHtml(m.para)}</span>.`:''} (simulação)</span><button type="button" class="btn sm pri" data-cp-tri-mover="${escHtml(destino)}">Mover agora (Enter)</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`;
