@@ -253,7 +253,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Coluna da direita (começa no topo, ao lado do título), em tom sério (22/11/2026): **Seu trabalho** (**Ver na Home**; "Pontos validados nesta
   semana" e "no mês", a **Meta da semana · equipe** — "N de M pontos validados (N%)", a barra padrão do painel, **Como conta?** — e "Equipe nesta
   semana (dd – dd mês): N problemas corrigidos · N que bloqueavam"; ocultos: "Você ocultou os seus pontos e marcos (vale também na Home)." +
-  **Mostrar de novo**), **Marcos** (texto, sem ícone; **Ocultar**, a mesma preferência da Home; "N folhas conferidas · N lotes aprovados"; os de
+  **Mostrar de novo**), **Marcos** (a única exceção ao tom sério: os 4 selos grandes dos totais e um emoji por marco; **Ocultar**, a mesma preferência da Home; os de
   qualidade da Central, sem pontos: **Primeira resolução validada**, **5 problemas resolvidos com fonte ou evidência**, **3 resoluções de outras
   pessoas com evidência sua**, **5 revisões aprovadas**, **Um fundo sem problemas abertos** · marco coletivo; os da Home com a data "· da Home dd/mm";
   os que faltam em cinza com "N de M"), **Pontos validados no mês · equipe** (o Ranking da equipe do mês, ligado por padrão, decisão do Rafael de
@@ -279,8 +279,15 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Regras de texto
 - **Tom sério e profissional** (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): nada de nível,
   "XP", título de nível, medalha, selo, troféu, estrela de prêmio, confete, emoji, "Parabéns" nem frase com exclamação. Confirmação é discreta e
-  com ponto final ("Ficha completa."). Pontos aparecem como "pontos validados"; conquistas são **Marcos**, em texto. Status usa ✓ ✕ ! ou ícone
+  com ponto final ("Ficha completa."). Pontos aparecem como "pontos validados"; conquistas são **Marcos**. Status usa ✓ ✕ ! ou ícone
   de traço neutro. `scripts/check_ui.py` falha se algo disso voltar.
+- **Marcos é a única exceção: pode ter ícones e emojis (decisão do Rafael 22/11)** ("aqui sim pode ficar gamificado como estava antes, com ícones
+  e emojis"). No cartão **Marcos** (Home e Problemas): os totais em 4 selos grandes coloridos com o número e o rótulo embaixo — escudo verde
+  (**folhas conferidas**), hexágono roxo (**lotes aprovados**), círculo azul (**decisões**), escudo dourado (**problemas corrigidos**); cada marco
+  com um emoji do tipo num selinho colorido (⭐ "Primeira …", 🏅 folhas, 📦 lotes, ✅ decisões, 🛠️ problemas, 🔍 revisões, 🤝 apoio, 🏛️ fundo);
+  "🎯 **Próximo marco: …**" com uma barra. Os textos continuam sérios (sem "Parabéns", exclamação, nível ou XP). **Seu trabalho**, o ranking e
+  o resto da interface seguem sem emoji nem selo: o `check_ui.py` só aceita emoji e selo no trecho `MARCOS-ICONES-INICIO … MARCOS-ICONES-FIM`
+  do `index.html` (só funções `marco*`/`MARCOS_*`), e `tests/teste_check_ui_tom.py` prova que fora dele continua barrado.
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".
@@ -459,7 +466,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Resultados**: período **7 dias · 14 dias · 30 dias · 90 dias** para o ritmo (14 = "últimas 2 semanas") e as visitas (7, 30 e 90);
   "**Frente aos N dias anteriores**" só quando o período anterior teve alguma folha conferida; **Ver relatório completo**.
 - **Seu trabalho** (tom sério, 22/11/2026): "**Pontos validados nesta semana**" e "**no mês**", a meta da equipe; **Marcos** (marcos pessoais,
-  nunca comparação, em texto com a data: "Primeira folha conferida · 12/11"; "N folhas conferidas · N lotes aprovados"), "**Próximo marco: …**",
+  nunca comparação, com selos e emoji — a única exceção — e a data: "Primeira folha conferida · 12/11"; "N folhas conferidas · N lotes aprovados"), "**Próximo marco: …**",
   **Como os pontos são contados?**, **Ocultar** / **Mostrar de novo** ("Seus pontos e marcos ficam ocultos só para você…"). **Pontos validados no
   mês · equipe** (o Ranking da equipe do mês, ligado por padrão; tabela **Posição** · **Nome** · **Pontos**; o **?** diz que não serve para avaliar desempenho e que "Um admin desliga
   o ranking em Configurações"; vazio: "Ninguém pontuou neste mês ainda."). Em **Configurações › Progresso e ranking**: a caixa "**Mostrar o Ranking
@@ -486,7 +493,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   é outro cartão ("os 5 primeiros", **Ver análise completa de visitas →**).
 - **Coluna da direita**: cartão branco **Seu trabalho** ("Pontos validados nesta semana" · "no mês" e, abaixo de uma linha, "**Meta da semana ·
   equipe**", "**N de M pontos validados (N%)**", a barra padrão do painel e **Como conta?**; leitura e pontos ocultos: o mesmo cartão só com a
-  meta; jogo desligado: some tudo); **Marcos** (texto, sem ícone: "N folhas conferidas · N lotes aprovados" e os últimos marcos com a data;
+  meta; jogo desligado: some tudo); **Marcos** (a única exceção: 4 selos grandes — folhas conferidas · lotes aprovados · decisões · problemas corrigidos —, os últimos marcos com emoji e a data, 🎯 + barra no próximo marco;
   **Ocultar**; **Como os pontos são contados?**); **Pontos validados no mês · equipe** (tabela). **Está tudo funcionando?**: uma linha por sistema, ✓ e "**Online**" (cópias:
   "**Em dia**"); o que falha vem primeiro com o selo e a frase; **Ver detalhes e histórico →**. **Qualidade da base**: o índice, "**↓ −N p.p.**"
   só com comparação ("sem comparação ainda"), 4 barras, **Como o índice é calculado? →** e **O que mais baixa o índice →**. **Quanto do acervo
