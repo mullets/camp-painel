@@ -67,6 +67,18 @@ const REG = (id, etapa, extra) => Object.assign({ id, protocolo: 'CAMP-2026-000'
       chk(est.some(e => e === 'feito:Aprovada:02/11/2026') && est.some(e => e === 'feito:Contrato assinado:06/11/2026') && est.some(e => e.startsWith('pulado:Visita'))
         && est.filter(e => e.startsWith('atual:')).length === 1, W + '[B] etapas: feito com data, visita pulada, um próximo passo');
       chk(/Próximo passo:/.test(await P.textContent('.doa-prox-det')), W + '[B] "Próximo passo: …" no detalhe');
+      // [B2] CAMP-DOA-CENTRAL (22/11): com o detalhe aberto a 1366 px a coluna "Próximo passo" da lista ficava cortada e a tabela rolava
+      // para o lado. Com o detalhe aberto, a 1366 e a 1440 px: nenhuma rolagem lateral na tabela e "Próximo passo" (título e célula) à vista.
+      if (w === 1366) {
+        for (const vw of [1366, 1440]) {
+          await P.setViewportSize({ width: vw, height: h }); await P.waitForTimeout(400);
+          const m = await P.evaluate(() => { const tw = document.querySelector('#v-doacoes .tw'), r = tw.getBoundingClientRect(), vis = el => { if (!el) return false; const b = el.getBoundingClientRect(); return getComputedStyle(el).display !== 'none' && b.width > 40 && b.left >= r.left - 1 && b.right <= r.right + 1; };
+            const th = [...document.querySelectorAll('#v-doacoes thead th')].find(t => /Próximo passo/.test(t.textContent)), td = document.querySelector('#doa-lista tr[data-doa-abrir="941"] .doa-prox');
+            return { gaveta: mainEl.classList.contains('with-drawer'), sw: tw.scrollWidth, cw: tw.clientWidth, th: vis(th), td: vis(td), pag: document.documentElement.scrollWidth - innerWidth }; });
+          chk(m.gaveta && m.sw <= m.cw && m.th && m.td && m.pag <= 0, `[${vw}px] [B2] detalhe aberto: a lista sem rolagem lateral e "Próximo passo" à vista: ` + JSON.stringify(m));
+        }
+        await P.setViewportSize({ width: w, height: h }); await P.waitForTimeout(300);
+      }
       // [C]
       chk(await P.locator('.doa-aviso-roteiro').count() === 1 && /defina os próximos passos/.test(await P.textContent('.doa-aviso-roteiro')), W + '[C] contrato assinado e nada a fazer: aviso do roteiro');
       await P.click('.doa-aviso-roteiro [data-doac="roteiro"]');

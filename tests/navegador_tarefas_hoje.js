@@ -1,14 +1,14 @@
 // Dashboard "Tarefas de hoje" no navegador de verdade (Playwright + Chromium): fila com "Melhorar a base", "Agora não",
 // qualidade da base (painel inicial e página do fundo), melhorias por pessoa, ficha do arquiteto pela rota, celular, e NENHUM erro no console.
 // Uso: suba a API com o banco de tests/semear_banco_teste.py e rode
-//   CAMP_BASE=http://127.0.0.1:8880 CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome NODE_PATH=$(npm root -g) node tests/navegador_tarefas_hoje.js
+//   CAMP_BASE=http://127.0.0.1:8880 CHROME=/opt/pw-browsers/chromium NODE_PATH=$(npm root -g) node tests/navegador_tarefas_hoje.js
 const {chromium} = require('playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8880';
 const problemas = [], oks = [];
 const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
 
 (async () => {
-  const browser = await chromium.launch({executablePath: process.env.CHROMIUM || undefined});
+  const browser = await chromium.launch({executablePath: process.env.CHROME || process.env.CHROMIUM || '/opt/pw-browsers/chromium'});
   const ctx = await browser.newContext({viewport: {width: 1366, height: 900}});
   // qualidade da base e melhorias ficam abertas na coluna da direita da Home (o bloco recolhido do UX-30 saiu a pedido do Rafael, 27/10/2026)
   const page = await ctx.newPage();

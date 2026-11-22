@@ -70,7 +70,7 @@ const dom=new JSDOM(html,{url:BASE+'/',runScripts:'dangerously',pretendToBeVisua
   w.addEventListener('DOMContentLoaded',()=>{new w.MutationObserver(()=>{const ov=w.document.getElementById('conf-ov');if(!ov||ov.dataset.respondido||w.__semAutoResposta)return;ov.dataset.respondido='1';const resp=w.confirm(ov.textContent);setTimeout(()=>{if(!w.document.body.contains(ov))return;
     if(resp){const dg=ov.querySelector('#conf-dig');if(dg){dg.value=ov.dataset.digitar||'';dg.dispatchEvent(new w.Event('input',{bubbles:true}))}const mt=ov.querySelector('#conf-motivo');if(mt&&!mt.value){mt.value='teste';mt.dispatchEvent(new w.Event('input',{bubbles:true}))}}
     const b=ov.querySelector(resp?'[data-conf="sim"]':'[data-conf="nao"]')||ov.querySelector('[data-conf="sim"]');b&&b.click()},0)}).observe(w.document.body,{childList:true})});
-    w.fetch=(u,o={})=>adm.f(u,o); w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
+    w.fetch=(u,o={})=>adm.f(u,o); w.Element.prototype.scrollTo=()=>{};w.Element.prototype.scrollIntoView=w.Element.prototype.scrollIntoView||(()=>{}); w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
   w.URL.createObjectURL=()=>'blob:teste'; w.URL.revokeObjectURL=()=>{}; w.HTMLAnchorElement.prototype.click=function(){w.__baixou=(w.__baixou||[]).concat(this.download||this.href)};
   w.console.error=(...a)=>problems.push('console.error: '+a.join(' '));
   w.addEventListener('error',e=>problems.push('window.error: '+(e.error&&e.error.stack||e.message)));
@@ -161,7 +161,7 @@ r=await J(adm,'/api/eventos?entidade=item&codigo='+IT); const evs=JSON.stringify
 okl.push('edição de folha: catalogação salva + site recusado (sem WordPress no teste) -> aviso fixo na folha');
 w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(900); chk(!d.querySelector('#idet .edit-alerta'),'o aviso de falha deveria aparecer só uma vez');
 // leitura não vê o botão
-{ const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
+{ const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
   dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(2800); chk(!dl.window.document.getElementById('qnap-atualizar'),'leitura não deveria ver o botão Atualizar agora do QNAP (Estações é só do admin)'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!dl.window.document.getElementById('imp-ver')&&!dl.window.document.getElementById('bk-agora'),'leitura não deveria ver "Ver o que está faltando" nem "Fazer backup agora" (Estações é só do admin)'); dl.window.close(); }
 
@@ -169,11 +169,12 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
 const cardsSem=[...d.querySelectorAll('#pd .thumb')]; chk(cardsSem.length>=2,'projeto sem imagens: cards não apareceram ('+cardsSem.length+')');
 chk(cardsSem.every(c=>c.querySelector('.sem-imagem')),'folha sem imagem deveria mostrar a caixa "Sem imagem"');
-chk(![...d.querySelectorAll('#pd .thumb svg')].some(s=>!s.closest('.sem-imagem .si-ic')),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
+// a alça de arrastar (ordem manual das folhas, .cap-alca) é um ícone da interface, não uma imagem no lugar da folha
+chk(![...d.querySelectorAll('#pd .thumb svg')].some(s=>!s.closest('.sem-imagem .si-ic')&&!s.closest('.cap-alca')),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
 chk(/Sem imagem|Sem prévia/.test(txt('#pd .sem-imagem')),'texto "Sem prévia" ausente');
 await w.showProjeto('F026-P0001','itens'); await sleep(1000);
 chk(d.querySelectorAll('#pd .thumb img.img-real').length>=6,'folhas com miniatura do site deveriam mostrar a imagem real');
-chk(!d.querySelector('#pd .thumb svg'),'projeto com imagens também não pode ter SVG sintético');
+chk(![...d.querySelectorAll('#pd .thumb svg')].some(s=>!s.closest('.cap-alca')),'projeto com imagens também não pode ter SVG sintético');
 okl.push('grade do projeto: folhas sem imagem mostram "Sem imagem"; com miniatura mostram a imagem real; zero SVG inventado');
 w.route_to('item/F001-P0001-1961-S01-D00001'); await sleep(1000);
 chk(!!d.querySelector('#idet .sem-imagem')&&![...d.querySelectorAll('#idet .viewer svg')].some(s=>!s.closest('.sem-imagem .si-ic')),'folha sem imagem: deveria mostrar aviso, não desenho (o ícone do aviso não conta)');
@@ -250,7 +251,7 @@ w.route_to('estacoes'); await sleep(2800);
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
   chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Downloads" (Uso do acervo) com o atalho U');
-  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Público','[UX-28] "Downloads" deveria ficar no grupo Público do menu, está em "'+(el&&el.textContent.trim())+'"'); }
+  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Público e processos','[UX-28 + redesenho §3, 04/11] "Downloads" deveria ficar no grupo Público e processos do menu, está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
   const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
@@ -325,39 +326,41 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/3 folhas novas/.test(txt('[data-aviso="lote"]'))&&/Próximo passo: conferir/.test(txt('[data-aviso="lote"]'))&&!!d.querySelector('[data-aviso="lote"] [data-pp="conferir"]'),'[H4] depois de importar, o resultado deveria ficar NA TELA com o próximo passo e o botão "Começar a conferir": "'+txt('[data-aviso="lote"]')+'"');
   const dt=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b;
   chk(dt.itens.length===3&&dt.itens.every(i=>i.revisao==='pendente'&&i.lote_id===loteId),'importar deveria criar 3 folhas pendentes ligadas ao lote: '+dt.itens.length);
-  chk(/3 a conferir/.test(txt('#pj-revisao'))&&/Aprovar todas \(3\)/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="todas"]')&&!d.querySelector('#pj-revisao [data-rev-lote="aprovar"]'),'depois de importar: 3 a conferir e UM botão principal "Aprovar todas (3)" (o "Aprovar o lote" só aparece quando não restar nenhuma): "'+txt('#pj-revisao').slice(0,200)+'"');
+  // 10/11 e CAMP-094/CAMP-150/11-11: o pacote de amostra do CAMP Vision traz D1 como cópia de D3 e D2 como cópia de D1. As cópias não
+  // entram na conta "a conferir" ("2 cópias sem conferir", que não impedem aprovar) e ficam escondidas da grade (o "+1 cópia" da original
+  // abre as duplicatas lado a lado). Antes o teste esperava 3 folhas a conferir, 3 cartões e "Aprovar todas (3)": parava aqui (linha ~353)
+  // porque o botão "Aprovar todas" já tinha sumido (não restava folha sem cópia a conferir). A folha precisa de título para ser conferida.
+  chk(/1 a conferir/.test(txt('#pj-revisao'))&&/2 cópias sem conferir/.test(txt('#pj-revisao'))&&/Aprovar todas \(1\)/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="todas"]')&&!d.querySelector('#pj-revisao [data-rev-lote="aprovar"]'),'depois de importar: 1 a conferir, as 2 cópias à parte e UM botão "Aprovar todas (1)" (o "Aprovar o lote" só aparece quando não restar nenhuma): "'+txt('#pj-revisao').slice(0,200)+'"');
   chk(!/Encontradas no QNAP, ainda não catalogadas/.test(txt('#pj-qnap'))||!/contatos/.test(txt('#pj-qnap')),'o painel do QNAP não deveria listar a folha de contatos (pasta catalogacao) como documento esperando');
-  const cards=[...d.querySelectorAll('.thumb')].filter(x=>x.textContent.includes(pc));
-  chk(cards.length===3&&cards.every(x=>/a conferir/.test(x.textContent)&&x.hasAttribute('data-rev-abrir')&&!x.querySelector('button')),'cada cartão deveria ter o selo "a conferir" e ABRIR a revisão ao clicar (sem botão repetido em cada folha): '+cards.length);
-  cards[0].click(); await sleep(1800); chk(/Revisar folha/.test(txt('#d-title'))&&/Ainda faltam 3 folha/.test(txt('#d-body')),'clicar no cartão deveria abrir a revisão da folha: "'+txt('#d-body').slice(0,100)+'"'); w.closeDrawer(true);
+  const cards=[...d.querySelectorAll('.thumb:not([hidden])')].filter(x=>x.textContent.includes(pc)), escondidas=[...d.querySelectorAll('.thumb[hidden]')].filter(x=>x.textContent.includes(pc)).map(x=>x.dataset.revAbrir).sort();
+  const cp0=cards[0]&&cards[0].querySelector('.pj-copias');
+  chk(cards.length===1&&cards[0].dataset.revAbrir===D(3)&&/a conferir/.test(cards[0].textContent)&&!cards[0].querySelector('[data-rev-item]')&&!!cp0&&cp0.dataset.dupvAbrir===pc&&/\+1 cópia/.test(cp0.textContent)&&escondidas.join()===[D(1),D(2)].join(),'a grade mostra só a original D3 ("a conferir", abre a revisão ao clicar, sem botão de conferir no cartão, com "+1 cópia" que abre as duplicatas); D1 e D2 ficam escondidas: '+JSON.stringify({vis:cards.map(x=>x.dataset.revAbrir),esc:escondidas,cp:cp0&&cp0.textContent}));
+  cards[0].click(); await sleep(1800); chk(/Revisar folha/.test(txt('#d-title'))&&d.querySelector('#d-body [data-rev-item="conferida"]')?.dataset.codigo===D(3)&&/É a última/.test(txt('#d-body')),'clicar no cartão deveria abrir a revisão da folha D3, que é a última a conferir ("É a última"): "'+txt('#d-title')+'"'); w.closeDrawer(true);
+  d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3200);
+  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===0&&/aviso/.test(txt('#toast')),'[CAMP-094] "Aprovar todas" não confere folha com aviso (D3: orientação incerta; as cópias também não): "'+txt('#toast')+'"');
   d.querySelector('[data-rev-lote="conferir"]').click(); await sleep(3200);
   chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===0,'conferir em lote não deveria marcar folha com pendência apontada pelo CAMP Vision (todas as 3 têm)');
   w.abrirRevisaoItem(D(3)); await sleep(1800);
-  chk(/O que o CAMP Vision leu/.test(txt('#d-body'))&&/orientação incerta/.test(txt('#d-body'))&&!!d.querySelector('#rv-titulo')&&!!d.querySelector('#rv-tipo')&&!!d.querySelector('[data-rev-item="conferida"]'),'a janela de revisão deveria mostrar o que o CAMP Vision apontou e os campos: "'+txt('#d-body').slice(0,140)+'"');
-  d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3000);
-  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===1,'"Está certo" deveria marcar a folha como conferida');
-  chk(new RegExp('Folha '+D(3)+' conferida').test(txt('#toast'))&&/Desfazer/.test(txt('#toast .toast-acao')),'[H4] conferir não pergunta: o aviso diz a folha e traz "Desfazer": "'+txt('#toast')+'"');
-  const bx=d.querySelector('#d-body [data-rev-item="conferida"]'); chk(/Revisar folha/.test(txt('#d-title'))&&!!bx&&bx.dataset.codigo===D(1)&&w.eval('mainEl').classList.contains('with-drawer'),'depois de conferir, a janela deveria passar SOZINHA para a próxima folha pendente ('+D(1)+'): '+(bx&&bx.dataset.codigo));
-  chk([...d.querySelectorAll('.thumb[data-rev-abrir="'+D(3)+'"] .rev-tag')].every(t=>/conferida/.test(t.textContent)),'o selo do cartão deveria virar "conferida" SEM recarregar a página');
+  chk(/orientação incerta/i.test(txt('#d-body'))&&!!d.querySelector('#rv-titulo')&&!!d.querySelector('#rv-tipo')&&!!d.querySelector('#rv-escala')&&!!d.querySelector('[data-rev-item="conferida"]'),'a janela de revisão deveria mostrar o que o CAMP Vision apontou (orientação incerta) e os campos: "'+txt('#d-body').replace(/ⓘ Como funciona.*?Ver os passos/,'').slice(0,160)+'"');
   d.querySelector('[data-rev-girar="90"]').click(); await sleep(1500);
-  chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/g=90/.test(d.getElementById('rv-img').getAttribute('src'))&&[...d.querySelectorAll('.thumb[data-rev-abrir="'+D(1)+'"] img')].every(i=>/g=90/.test(i.getAttribute('src'))),'"Virar à direita" deveria gravar o giro (90) e atualizar a imagem da janela e o cartão');
+  chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(3)).giro_manual===90&&/g=90/.test(d.getElementById('rv-img').getAttribute('src'))&&[...d.querySelectorAll('.thumb[data-rev-abrir="'+D(3)+'"] img')].every(i=>/g=90/.test(i.getAttribute('src'))),'"Girar 90°" deveria gravar o giro (90) e atualizar a imagem da janela e o cartão');
   d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500);
-  chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===0,'"Virar à esquerda" deveria voltar o giro a 0');
+  chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(3)).giro_manual===0,'"Girar à esquerda" deveria voltar o giro a 0');
   { const ta=d.querySelector('#toast .toast-acao'); chk(!!ta&&/girada para a esquerda/.test(txt('#toast')),'[H4] girar deveria dizer o que fez e trazer "Desfazer": "'+txt('#toast')+'"');
-    if(ta){ ta.click(); await sleep(1500); chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/Giro desfeito/.test(txt('#toast'))&&!d.querySelector('#toast .toast-acao'),'[H4] "Desfazer" do giro deveria voltar a 90 (e não oferecer outro Desfazer): "'+txt('#toast')+'"');
+    if(ta){ ta.click(); await sleep(1500); chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(3)).giro_manual===90&&/Giro desfeito/.test(txt('#toast'))&&!d.querySelector('#toast .toast-acao'),'[H4] "Desfazer" do giro deveria voltar a 90 (e não oferecer outro Desfazer): "'+txt('#toast')+'"');
       d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500); } }
+  d.querySelector('[data-rev-item="conferida"]').click(); await sleep(2500);
+  chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(3)).revisao==='pendente'&&/Preencha o título/.test(txt('#toast')),'folha sem título não é conferida: o aviso pede o título: "'+txt('#toast')+'"');
   d.getElementById('rv-titulo').value='Planta corrigida no teste'; d.getElementById('rv-escala').value='1:75';
   d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3400);
-  const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
-  chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
-  w.closeDrawer(true); d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3600);
-  // CAMP-094 (20/10): "Aprovar todas" não confere a folha com aviso (aqui a duplicata D2): ela fica para conferir uma a uma
-  { const pend=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.filter(i=>i.revisao==='pendente');
-    chk(pend.length===1&&!!pend[0].duplicata_de,'"Aprovar todas" deveria deixar só a folha com aviso (a duplicata) para conferir: '+JSON.stringify(pend.map(i=>i.codigo)));
-    for(const i of pend) await J(adm,'/api/itens/'+encodeURIComponent(i.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});
-    await w.showProjeto(pc); await sleep(3500); }
-  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'conferida a que ficou, não resta folha pendente');
-  chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/Pronto para publicar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
+  const e1=(await J(adm,'/api/itens/'+D(3)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(3));
+  chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar e próxima folha" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
+  chk(new RegExp('Correção da folha '+D(3)+' salva e folha conferida').test(txt('#toast')),'[H4] conferir não pergunta: o aviso diz a folha: "'+txt('#toast')+'"');
+  chk([...d.querySelectorAll('.thumb[data-rev-abrir="'+D(3)+'"] .rev-tag')].every(t=>/corrigida|conferida/.test(t.textContent)),'o selo do cartão deveria sair de "a conferir" SEM recarregar a página');
+  chk(/Completar a ficha/.test(txt('#d-title'))&&/Folhas conferidas/.test(txt('#d-body')),'[11/11] conferida a última folha, a janela passa sozinha para a ficha do projeto ("Folhas conferidas. Agora a ficha…"): "'+txt('#d-title')+'"');
+  w.closeDrawer(true); await w.showProjeto(pc); await sleep(3500);
+  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'conferida a original, não resta folha pendente (as cópias contam à parte)');
+  chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/Pronto para publicar/.test(txt('#pj-revisao'))&&/2 cópias sem conferir \(não impedem aprovar\)/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar (as 2 cópias sem conferir não impedem): "'+txt('#pj-revisao').slice(0,200)+'"');
   d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').click(); await sleep(3600);
   const ap=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0];
   chk(!!ap.aprovado_em&&ap.etapa==='revisao'&&/aprovado por/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="reabrir"]'),'aprovar deveria registrar quem/quando, manter a etapa e oferecer "Reabrir a revisão": '+JSON.stringify({a:ap.aprovado_em,e:ap.etapa}));
@@ -428,9 +431,11 @@ w.route_to('estacoes'); await sleep(2800);
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
 // ---------- MENU POR TRABALHO e PRÓXIMO PASSO no topo do projeto ----------
 { w.confirm=()=>true;
-  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Acervo','Público','Acompanhamento','Administração','Ajuda']),'[UX-28] os grupos do menu: Acervo, Público, Acompanhamento, Administração, Ajuda: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
+  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Visão geral','Acervo','Público e processos','Administração','Ajuda']),'[UX-28 + redesenho §3, 04/11] os grupos do menu: Visão geral, Acervo, Público e processos, Administração, Ajuda: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
   const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
-  chk(grupo('Acervo')==='fundos,arquitetos,localizacao,estante,etiquetas,emprestimos'&&grupo('Público')==='solicitacoes,uso'&&grupo('Acompanhamento')==='relatorios,auditoria,qualidade'&&grupo('Administração')==='estacoes,config'&&grupo('Ajuda')==='caminho,glossario','[UX-28] cada grupo do menu deveria ter os itens certos: '+['Acervo','Público','Acompanhamento','Administração','Ajuda'].map(grupo).join(' | '));
+  // redesenho §3 (04/11): Relatórios e Visitas em Público e processos; Histórico e Qualidade em Administração; depois entraram Inscrições,
+  // Amigos, Ingressos, Cobranças avulsas, Doações de acervo (Público e processos) e E-mails (Administração), na ordem de NAV_ATALHOS
+  chk(grupo('Visão geral')==='painel,filas,erros,decisoes,projetos'&&grupo('Acervo')==='fundos,arquitetos,localizacao,estante,etiquetas,emprestimos'&&grupo('Público e processos')==='solicitacoes,inscricoes,amigos,ingressos,cobrancas,doacoes,uso,visitas,relatorios'&&grupo('Administração')==='estacoes,emails,config,auditoria,qualidade'&&grupo('Ajuda')==='caminho,glossario','[UX-28] cada grupo do menu deveria ter os itens certos: '+['Visão geral','Acervo','Público e processos','Administração','Ajuda'].map(grupo).join(' | '));
   chk(txt('#nav [data-v="painel"] kbd')==='1'&&txt('#nav [data-v="projetos"] kbd')==='2'&&txt('#nav [data-v="decisoes"] kbd')==='D'&&txt('#nav [data-v="filas"] kbd')==='N'&&txt('#nav [data-v="etiquetas"] kbd')==='T','(CAMP-154/UX-28) os atalhos não mudam (Precisa de você 1, Projetos 2, Decisões D, Material novo N, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!d.querySelector('#pj-status .steps')&&!!d.querySelector('#pj-status #pj-proximo')&&/Próximo passo/.test(txt('#pj-status .pjs-tit')),'(CAMP-147) o topo do projeto é UM bloco "Próximo passo" (frase + botão), sem o caminho de 7 passos: "'+txt('#pj-status').slice(0,120)+'"');
@@ -473,7 +478,7 @@ w.route_to('estacoes'); await sleep(2800);
   w.route_to('solicitacoes'); await sleep(1800); chk(!!d.querySelector('#v-solicitacoes tbody tr'),'Solicitações deveria carregar ao abrir');
   w.route_to('fundos'); await sleep(1800); chk(!!d.querySelector('#v-fundos tbody tr'),'Fundos deveria carregar ao abrir'); }
 // ---------- [Auditoria P0-1] F5 ou link direto numa página de detalhe mostra a página COMPLETA ----------
-{ const abrirEm=async hash=>{ const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(4000); const t=sel=>(dx.window.document.querySelector(sel)||{textContent:''}).textContent.replace(/\s+/g,' ').trim(); const o={proj:t('#v-projeto'),fundo:t('#v-fundo'),item:t('#v-item')}; dx.window.close(); return o };
+{ const abrirEm=async hash=>{ const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(4000); const t=sel=>(dx.window.document.querySelector(sel)||{textContent:''}).textContent.replace(/\s+/g,' ').trim(); const o={proj:t('#v-projeto'),fundo:t('#v-fundo'),item:t('#v-item')}; dx.window.close(); return o };
   let o=await abrirEm('#projeto/F003-P9001'); chk(o.proj.length>200&&o.proj.includes('Projeto de teste da revisão 9001'),'F5 em #projeto/... deveria mostrar o projeto, mas só há: "'+o.proj.slice(0,80)+'"');
   o=await abrirEm('#fundo/F003'); chk(o.fundo.length>200&&o.fundo.includes('Burle Marx'),'F5 em #fundo/... deveria mostrar o fundo, mas só há: "'+o.fundo.slice(0,80)+'"');
   o=await abrirEm('#item/F003-P9001-1972-S01-D00001'); chk(o.item.length>100&&o.item.includes('F003-P9001-1972-S01-D00001'),'F5 em #item/... deveria mostrar a folha, mas só há: "'+o.item.slice(0,80)+'"'); }
@@ -483,8 +488,9 @@ w.route_to('estacoes'); await sleep(2800);
   w.route_to('filas'); await sleep(2000); const lf=d.querySelector('#v-filas tbody tr[data-nav]'); chk(!!lf&&/^projeto\//.test(lf.getAttribute('data-nav')),'a linha da Fila deveria abrir o projeto (data-nav)');
   w.route_to('solicitacoes'); await sleep(2000); const ls=d.querySelector('#v-solicitacoes tbody tr[data-abrir]');
   if(ls){ w.closeDrawer&&w.closeDrawer(true); ls.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar numa Solicitação deveria abrir o pedido real, sem botões inventados: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
-  await w.carregarErros('todos'); await sleep(1200); const le=d.querySelector('#v-erros tbody tr[data-abrir]');
-  if(le){ le.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Erro deveria abrir o erro real, sem botões inventados: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
+  // CAMP-PROB-UX (22/11): a lista de Problemas virou linhas compactas (.cp-linha, data-err-linha); antes era uma tabela com tr[data-abrir]
+  await w.carregarErros('todos'); await sleep(1200); const le=d.querySelector('#err-body [data-err-linha]');
+  if(le){ le.click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Erro deveria abrir o erro real, sem botões inventados: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
   w.route_to('arquitetos'); await sleep(2000); const la=d.querySelector('#v-arquitetos tbody tr[data-abrir]');
   chk(!!la,'a linha de Arquitetos deveria abrir o detalhe real para admin (data-abrir)');
   if(la){ la.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Arquiteto deveria abrir o cadastro real: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
@@ -510,7 +516,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(!!bp&&/etiquetas\/projeto\/F003-P9001/.test(bp.getAttribute('onclick')),'o botão "Etiquetas" da página do projeto deveria levar o código do projeto: '+(bp&&bp.getAttribute('onclick')));
   w.route_to('fundo/F026'); await sleep(3000); const bf=[...d.querySelectorAll('#v-fundo .act button')].find(x=>/Etiqueta do fundo/.test(x.textContent));
   chk(!!bf&&/etiquetas\/fundo\/F026/.test(bf.getAttribute('onclick')),'o botão "Etiqueta do fundo" deveria levar o código do fundo: '+(bf&&bf.getAttribute('onclick')));
-  const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/#etiquetas',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(3500);
+  const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/#etiquetas',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(3500);
   const dd=dx.window.document; chk(dd.getElementById('l-fundo').value===''&&/Escolha o fundo/.test(dd.getElementById('lab-origem').textContent),'pelo menu lateral a etiqueta deveria abrir SEM fundo pré-escolhido (antes: sempre F014): "'+dd.getElementById('l-fundo').value+'" / "'+dd.getElementById('lab-origem').textContent+'"'); dx.window.close(); w.route_to('painel'); }
 // ---------- [Auditoria P0-6] "Publicar" em lote: plano antes (quem publica, quem fica de fora e por quê) e execução que repete até acabar ----------
 { w.limparSelecaoProjetos(); w.eval("PROJETOS_SELECIONADOS.add('F003-P9001');PROJETOS_SELECIONADOS.add('F003-P9002')"); await w.acaoLoteProjetos('publicar'); await sleep(1500);
@@ -546,12 +552,15 @@ w.route_to('estacoes'); await sleep(2800);
   chk(!A({estado:'sem_resposta',alerta:false,ok:false})&&A({estado:'sem_resposta',alerta:true,ok:false})&&A({ok:false})&&!A({ok:true}),'só "sem resposta" confirmada (alerta) vira alerta vermelho; servidor antigo sem estado continua valendo'); w.route_to('painel'); }
 // ---------- [Auditoria P1-9] depois de gravar, a janela fecha SEM perguntar "alterações não salvas" (e a proteção continua para quem fecha sem salvar) ----------
 { const cOrig=w.confirm, asked=[]; w.confirm=m=>{asked.push(String(m));return true}; const perguntou=()=>asked.some(m=>/alterações não salvas/i.test(m));
-  for(const f of ['salvarSolicitacao','salvarErro','salvarDireitos']) chk(/closeDrawer\(true\)/.test(String(w[f]))&&!/closeDrawer\(\)/.test(String(w[f])),f+' deveria fechar com closeDrawer(true) depois de gravar');
+  // CAMP-PROB-UX (22/11): a Central de Problemas trocou o salvarErro (situação + resolução) pelo cpMudarFase (fase do problema); a regra é a mesma
+  for(const f of ['salvarSolicitacao','cpMudarFase','salvarDireitos']) chk(/closeDrawer\(true\)/.test(String(w[f]))&&!/closeDrawer\(\)/.test(String(w[f])),f+' deveria fechar com closeDrawer(true) depois de gravar');
   chk(/limparAlteracoes\('drawer'\)/.test(String(w.alocar)),'alocar deveria limpar as alterações antes de reabrir a janela');
   const cat=d.getElementById('ne-cat').options[0].value;
   const er=(await (await adm.f('/api/erros',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:'F003-P9001',gravidade:'corrigir',categoria:cat,descricao:'teste do fechar sem perguntar'})})).json());
-  await w.carregarErros('todos'); await w.abrirErro(er.id); await sleep(300); w.marcarAlteracoes('drawer'); asked.length=0; await w.salvarErro(er.id); await sleep(600);
-  chk(!perguntou(),'depois de salvar o Erro não deveria aparecer "Existem alterações não salvas": '+asked.join('|'));
+  await w.carregarErros('todos'); await w.abrirErro(er.id); await sleep(300); w.marcarAlteracoes('drawer'); asked.length=0;
+  const bFase=d.querySelector('#d-body [data-cp-fase="em_analise"]'); chk(!!bFase,'o painel do problema novo deveria ter "Começar análise"');
+  if(bFase){ await w.cpMudarFase('em_analise',bFase); await sleep(600); }
+  chk(!perguntou()&&((await J(adm,'/api/problemas/'+er.id)).b||{}).fase==='em_analise','depois de salvar o problema (mudar a fase) não deveria aparecer "Existem alterações não salvas": '+asked.join('|'));
   w.openDrawer('t','s','<input id="zz">'); w.marcarAlteracoes('drawer'); asked.length=0; w.closeDrawer(); await sleep(150);
   chk(perguntou(),'fechar a janela com alteração NÃO salva deveria continuar perguntando'); w.closeDrawer(true); w.confirm=cOrig; }
 // ---------- [Auditoria P1-11] códigos inexistentes são recusados, com a mensagem no campo ----------
@@ -572,7 +581,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/^#(projeto|fundo|item)\//.test(w.location.hash)&&!/#projeto\/F026-P0001$/.test('')||/^#(projeto|fundo|item)\//.test(w.location.hash),'Enter sem escolher deveria abrir o primeiro resultado: '+w.location.hash);
   q.value=''; q.closest('.search').classList.remove('tem-texto'); w.route_to('painel'); }
 // ---------- [Auditoria P1-10] permissões: cada papel só vê os botões e telas que pode usar (tabela única PODE) ----------
-{ const abrir=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
+{ const abrir=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
   const visivel=(dd,sel)=>[...dd.querySelectorAll(sel)].some(e=>!e.hidden);
   let dx=await abrir(ope,'#fundos'), dd=dx.window.document;
   chk(!visivel(dd,'[data-pode="fundo.reservar"]')&&visivel(dd,'[data-pode="fundos.exportar"]'),'operador não deveria ver "Reservar próximo código", mas vê "Exportar fundos.json"');
@@ -647,7 +656,7 @@ w.route_to('estacoes'); await sleep(2800);
   for(const [rota,k] of [['projeto/F003-P9001','projeto'],['fundo/F003','fundo'],['item/F003-P9001-1972-S01-D00001','item']]){ w.route_to(rota); await sleep(3500); chk(!!d.querySelector('#v-'+k+' > .ajuda-caixa'),'a caixa deveria aparecer também na página de '+k+' (mesmo depois de a página desenhar o conteúdo)') }
   w.route_to('painel'); await sleep(700); d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(1000);
   chk(!d.querySelector('#v-painel > .ajuda-caixa'),'"Entendi" deveria fechar a caixa'); const pf=(await J(adm,'/api/auth/eu/preferencias')).b; chk(pf['ajuda.painel']===String(w.eval('AJUDA_PAGINAS.painel.v')),'"Entendi" deveria gravar no servidor a versão vista: '+JSON.stringify(pf));
-  const abrirJan=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
+  const abrirJan=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
   let dx=await abrirJan(adm,'#painel'); chk(!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'depois do F5 (ou em outro computador) a caixa que a pessoa já fechou deveria continuar fechada'); dx.window.close();
   dx=await abrirJan(ope,'#painel'); chk(!!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'outra pessoa (operador) deveria ver a caixa aberta: a preferência é por PESSOA'); dx.window.close();
   w.route_to('painel'); await sleep(500); w.abrirAjuda(); await sleep(400); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'"?" deveria reabrir a caixa'); await sleep(500); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'a caixa reaberta pelo "?" não deveria sumir sozinha');
@@ -863,7 +872,10 @@ w.route_to('estacoes'); await sleep(2800);
   chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'"O que fazer agora" deveria listar a decisão com o botão Decidir ('+li.length+')');
   chk(/CAMP Vision está parado/.test(txt('#ini-tarefas')),'deveria avisar que o CAMP Vision está parado esperando');
   chk(/^Decis/i.test(txt('#ini-lista .ini-task .ini-tipo')),'a decisão (urgente: o CAMP Vision está parado) deveria ser a primeira linha de "O que fazer agora": "'+txt('#ini-lista .ini-task .ini-tipo')+'"');
-  const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
+  // CAMP-HOME-UX (22/11): a fila da Home segue a prioridade; a 1ª linha não é mais, necessariamente, a 1ª decisão de /api/decisoes:
+  // a decisão aberta pela linha é a que o botão da janela diz (data-dec-id), e a outra é a segunda
+  li[0].querySelector('button.pri').click(); await sleep(1600);
+  const id1=+((d.querySelector('#d-body [data-dec-acao="novo"]')||{dataset:{}}).dataset.decId||dl.itens[0].id), id2=dl.itens.map(x=>x.id).find(x=>x!==id1);
   chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
   chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folhas no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
   const nProj0=(await J(adm,'/api/painel')).b.projetos.total;
@@ -929,7 +941,7 @@ okl.push('backup: painel na tela de Estações, banner global (some depois do ba
 // ---------- FOLHAS SÓ NO SITE: abrir importa e passa a editar como as demais ----------
 { const SO='F002-P0002-1977-S01-D00002', SO1='F002-P0002-1977-S01-D00001';
   // quem só lê: recebe a explicação e NADA é importado
-  const dl2=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
+  const dl2=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.Element.prototype.scrollIntoView=x.Element.prototype.scrollIntoView||(()=>{});x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl2.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl2.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl2.window.fazerLogin({preventDefault(){}}); await sleep(800);
   dl2.window.route_to('item/'+SO1); await sleep(2000);
   chk(/existe só no site/.test(dl2.window.document.body.textContent)&&/operador/.test(dl2.window.document.body.textContent),'leitura deveria ver a explicação "existe só no site… peça a um operador"');
@@ -1333,7 +1345,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   okl.push('H26: entrar com ajuda e olho na senha, força da senha, sessões em linguagem, boas-vindas por papel'); }
 // ---------- [H25] Navegação: menu por tarefa, "?" ao lado do título, menu do avatar, "Site conferido há…", faixa com o que fazer e "Fechar por hoje" ----------
 { chk(txt('#nav [data-v="painel"]').startsWith('Precisa de você')&&txt('#nav [data-v="fundos"]').startsWith('Fundos')&&txt('#nav [data-v="arquitetos"]').startsWith('Arquitetos')&&txt('#nav [data-v="filas"]').startsWith('Material novo')&&txt('#nav [data-v="erros"]').startsWith('Problemas')&&txt('#nav [data-v="solicitacoes"]').startsWith('Pedidos de alta resolução')&&txt('#nav [data-v="estacoes"]').startsWith('Máquinas')&&txt('#nav [data-v="auditoria"]').startsWith('Histórico de ações'),'[H25/UX-28] o menu deveria usar os nomes das páginas');
-  chk([...d.querySelectorAll('#nav > button[data-v]:not(.nav-sec)')].map(b=>b.dataset.v).join(',')==='painel,filas,erros,decisoes,projetos,fundos,arquitetos,solicitacoes,estacoes'&&!!d.getElementById('nav-mais-pc'),'[UX-28] o menu deveria ter as filas do dia à vista, pela ordem do trabalho, e o "Mais"');
+  chk([...d.querySelectorAll('#nav > button[data-v]:not(.nav-sec)')].map(b=>b.dataset.v).join(',')==='painel,filas,erros,decisoes,projetos,fundos,arquitetos,solicitacoes,inscricoes,amigos,ingressos,cobrancas,doacoes,estacoes,emails'&&!!d.getElementById('nav-mais-pc'),'[UX-28] o menu deveria ter as filas do dia à vista, pela ordem do trabalho, e o "Mais"');
   w.route_to('filas'); await sleep(1200); chk(/^Material novo/.test(txt('#v-filas h1'))&&/Material novo/.test(txt('#gcrumb')),'[H25] título e trilha deveriam acompanhar o nome do menu: "'+txt('#v-filas h1')+'" / "'+txt('#gcrumb')+'"');
   chk(!!d.querySelector('#v-filas .hdr .help-h1')&&!d.querySelector('.top .help-top'),'[H25] o "?" deveria ficar ao lado do título da página, e não perdido no topo');
   chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);

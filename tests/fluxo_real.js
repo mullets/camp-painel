@@ -10,7 +10,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs'), path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE, DB = process.env.CAMP_DB_PATH, RAIZ = process.env.FLUXO_RAIZ, SAIDA = process.env.SAIDA || '/tmp/fluxo_real';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 if (!BASE || !DB || !RAIZ) { console.error('use tests/rodar_fluxo_real.sh'); process.exit(2); }
 fs.mkdirSync(SAIDA, { recursive: true });
 const linhas = [], problemas = [];

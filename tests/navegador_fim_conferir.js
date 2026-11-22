@@ -1,11 +1,12 @@
 // CAMP-070 (20/10, relato da operadora: "etapas menos claras, não consegui publicar diretamente após conferir todas as folhas,
 // foi necessário sair da página e clicar em publicar a partir daí"). Prova no navegador de verdade (Playwright + Chromium):
 //  (A) tela de conferir (#conferir/<projeto>): ao conferir a última folha, o painel da direita mostra o caminho com "você está aqui"
-//      em Aprovar e o botão "Aprovar o lote"; aprovar (com confirmação) atualiza ali mesmo para "Publicar"; "Publicar" abre a
-//      publicação guiada (chama /publicar/plano) SEM sair da tela de conferir;
+//      em Aprovar e o botão "Aprovar o lote"; aprovar (com confirmação) atualiza ali mesmo para "Publicar"; "Publicar" é o clique único
+//      do CAMP-147 (lê /publicar/plano e já publica, com o andamento no Próximo passo do projeto; a janela do plano saiu);
 //  (B) gaveta da página do projeto: a última folha conferida mostra "Aprovar o lote" na própria gaveta; ao aprovar, a gaveta mostra
 //      "Publicar" e a página por baixo (próximo passo e cartão Folhas) se atualiza sem recarregar;
-//  (C) problema que impede publicar: depois de aprovar, diz o que falta ("erro bloqueante") com o botão para a lista;
+//  (C) problema que impede publicar (registrado por uma pessoa no PROJETO; desde 21/10 (4.1) bloqueio numa folha só deixa essa folha
+//      de fora): depois de aprovar, diz o que falta ("erro bloqueante") com o botão para a lista;
 //  (D) operador: ao terminar, vê "Falta um admin aprovar", sem o botão.
 // O site do teste não existe (WP_BASE_URL=http://127.0.0.1:9): nada é publicado de verdade.
 // Uso (servidor PRÓPRIO numa porta 89xx):
@@ -15,7 +16,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8941', DB = process.env.CAMP_DB_PATH, SHOTS = process.env.CAMP_SHOTS || '';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const problemas = [], linhas = [];
 const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg + (ok || !det ? '' : ' -> ' + det)); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
@@ -34,7 +35,7 @@ py(`
 con.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.exige_direitos'")
 ${montar(PA, 171)}
 ${montar(PB, 172)}
-${montar(PC, 173, `con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','revisao','${ult(PC)}','Título ilegível')")`)}
+${montar(PC, 173, `con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','revisao','${PC}','Título da obra ilegível')")`)}
 ${montar(PD, 174)}
 `);
 
@@ -53,6 +54,10 @@ ${montar(PD, 174)}
   const conferir = async (pg, host) => { await pg.click(`${host} [data-rev-item="conferida"]`); if (await ate(pg, '#conf-ov [data-conf="sim"]', 2500)) { await pg.click('#conf-ov [data-conf="sim"]'); await pg.waitForSelector('#conf-ov', { state: 'detached', timeout: 5000 }).catch(() => {}) } };
   try {
     const pg = await nova('rafael@camp.arq.br', 'senha-bem-longa-123');
+    // 11/11: ao terminar a conferência, 1,2 s depois a ficha do projeto abre sozinha por cima (para admin, se faltar dado). Aqui o que se
+    // prova é o quadro do fim da conferência: a ficha automática fica de fora (ela tem o próprio teste, tests/ficha_automatica_ui.js);
+    // antes, (B) passava ou falhava conforme o tempo até a verificação (a ficha trocava a gaveta "Conferência concluída").
+    await pg.evaluate(ps => ps.forEach(p => FICHA_AUTO_FEITA.add(p)), [PA, PB, PC, PD]);
     const planos = []; pg.on('request', r => { if (/\/publicar\/plano$/.test(r.url())) planos.push(r.url()) });
 
     // ---- (A) tela de conferir ----
@@ -71,11 +76,16 @@ ${montar(PD, 174)}
       chk(/^conferir\//.test(await pg.evaluate(() => rotaAtual())), '(A) continua na tela de conferir');
       if (SHOTS) await pg.screenshot({ path: SHOTS + '/fim_conferir_A_publicar.png' });
       if (pubA) {
+        // CAMP-147 (22/10, "Publicar em um clique"): a janela do plano saiu; o "Publicar" do fim da conferência é o MESMO clique do bloco
+        // do projeto: lê o plano (/publicar/plano) e já publica (publicar-tudo), mostrando o andamento no Próximo passo do projeto.
+        // A queixa do CAMP-070 ("foi necessário sair da página e clicar em publicar a partir daí") continua resolvida: não há 2º clique.
+        const tudo = []; pg.on('request', r => { if (/\/publicar-tudo\?tarefa=1$/.test(r.url()) && r.method() === 'POST') tudo.push(r.url()) });
         await pg.click('#cf-pane [data-fim-passo] [data-pp="publicar"]');
-        const abriu = await pg.waitForFunction(() => (document.getElementById('d-title') || {}).textContent === 'Publicar', null, { timeout: 10000 }).then(() => true, () => false);
-        chk(abriu && planos.some(u => u.includes(PA)), '(A) "Publicar" abre a publicação guiada do projeto (rota /publicar/plano)', planos.join(' '));
-        chk(/^conferir\//.test(await pg.evaluate(() => rotaAtual())), '(A) a publicação abre por cima, sem sair da tela de conferir');
-        await pg.evaluate(() => closeDrawer(true));
+        const abriu = await pg.waitForFunction(p => rotaAtual() === 'projeto/' + p && !!document.getElementById('pj-status'), PA, { timeout: 10000 }).then(() => true, () => false);
+        const foi = await pg.waitForFunction(() => /Publicando|Não terminou|Publicado/.test((document.getElementById('pj-status') || {}).textContent || ''), null, { timeout: 15000 }).then(() => true, () => false);
+        chk(abriu && planos.some(u => u.includes(PA)), '(A) "Publicar" lê o plano de publicação do projeto (rota /publicar/plano) e mostra o projeto', planos.join(' '));
+        chk(foi && tudo.some(u => u.includes(PA)), '(A) o mesmo clique já publica (POST publicar-tudo), sem um segundo "Publicar" e sem janela de plano', await txt(pg, '#pj-status'));
+        chk(!(await pg.evaluate(() => mainEl.classList.contains('with-drawer'))), '(A) nenhuma janela lateral de plano se abre (CAMP-147)');
       }
     }
 

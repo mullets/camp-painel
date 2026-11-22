@@ -16,7 +16,7 @@
 const fs = require('fs');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8954';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const AXE = process.env.AXE_JS && fs.existsSync(process.env.AXE_JS) ? fs.readFileSync(process.env.AXE_JS, 'utf-8') : null;
 const linhas = [], prob = [], erros = [];
 const chk = (ok, m, det) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + m + (!ok && det ? '\n        ' + det : '')); if (!ok) prob.push(m) };

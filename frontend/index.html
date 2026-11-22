@@ -547,6 +547,8 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 .dupv-folha.publica{border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
 .dupv-folha .act{display:flex;gap:6px;flex-wrap:wrap}
 .dupv-img{display:grid;place-items:center;aspect-ratio:4/3;background:var(--surface2);border-radius:var(--r-sm);overflow:hidden;cursor:zoom-in}
+.dupv-vis{display:grid;gap:6px;min-width:0}.dupv-barra{gap:4px 6px}.dupv-barra .btn.sm{padding-left:6px;padding-right:6px}.dupv-imgbox{min-width:0}.dupv-imgbox .aj-ed{margin:0}
+.dupv-folha:focus-within{outline:2px solid var(--blue);outline-offset:1px}   /* CAMP-VIEW: o lado que recebe as teclas */
 .dupv-img img{max-width:100%;max-height:100%;object-fit:contain}
 .dupv-folha figcaption{font-size:var(--fs-sm2);display:grid;gap:4px;overflow-wrap:anywhere}
 .dupv-pq{color:var(--ink2)}.dupv-folha figcaption>.tag{justify-self:start}
@@ -2091,6 +2093,12 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 .doa-det .act{flex-wrap:wrap;align-items:flex-end}.doa-notas{margin:6px 0;padding-left:18px}
 .doa-texto textarea{width:100%;font-family:var(--mono);font-size:var(--fs-sm2);white-space:pre}   /* CAMP-DOA-TEXTO */
 @media (max-width:900px){#v-doacoes .doa-local{display:none}}
+/* CAMP-DOA-CENTRAL (22/11): com o detalhe da doação aberto (gaveta à direita), a 1366 px a coluna "Próximo passo" ficava cortada e a tabela
+   rolava para o lado. Com a gaveta aberta: a coluna "Recebida" sai (a data e o protocolo estão no detalhe), o e-mail e a etapa quebram em
+   linhas e o próximo passo ocupa o espaço que sobra, quebrando em linhas. Sem rolagem lateral a 1366 e 1440 px. */
+.main.with-drawer #v-doacoes .doa-col-rec,.main.with-drawer #v-doacoes td.doa-dt{display:none}
+.main.with-drawer #v-doacoes #doa-lista small{overflow-wrap:anywhere}.main.with-drawer #v-doacoes #doa-lista .tag{white-space:normal}
+.main.with-drawer #v-doacoes .doa-prox{max-width:none;min-width:9em}
 /* CAMP-DOA-CENTRAL: linha de etapas, próximos passos, arquivos e histórico da doação */
 .doa-abas{margin:4px 0 0}.doa-abas b{font-weight:600;color:var(--ink3);margin-left:2px}.doa-abas button.on b{color:inherit}#v-doacoes .doa-prox{font-size:var(--fs-sm);max-width:240px}
 .doa-passos{list-style:none;margin:8px 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:6px}.doa-passos li{display:grid;grid-template-columns:auto 1fr;column-gap:6px;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:var(--r-md);font-size:var(--fs-sm);color:var(--ink3);background:var(--surface)}
@@ -3009,7 +3017,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
     <div class="panel"><div class="filterbar"><input id="doa-q" type="search" placeholder="nome, e-mail, arquiteto ou escritório, protocolo, cidade" aria-label="Buscar"><span class="help" id="doa-cnt"></span></div>
       <div class="tabs doa-abas" id="doa-abas" role="tablist" aria-label="Situação das doações"><button type="button" role="tab" class="on" aria-selected="true" data-doa-aba="abertas">Em andamento <b id="doa-t-abertas"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="recebidos">Recebidos <b id="doa-t-recebidos"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="encerradas">Não aprovadas e arquivadas <b id="doa-t-encerradas"></b></button><button type="button" role="tab" aria-selected="false" tabindex="-1" data-doa-aba="">Todas <b id="doa-t-total"></b></button></div>
       <div class="tw"><table>
-      <thead><tr><th>Recebida</th><th>Quem oferece</th><th>Acervo</th><th>Etapa</th><th>Próximo passo</th></tr></thead>
+      <thead><tr><th class="doa-col-rec">Recebida</th><th>Quem oferece</th><th>Acervo</th><th>Etapa</th><th class="doa-col-prox">Próximo passo</th></tr></thead>
       <tbody id="doa-lista"><tr><td class="empty">Carregando…</td></tr></tbody>
     </table></div></div>
     <details class="panel" id="doa-aut"><summary><b>Assinatura eletrônica (Autentique)</b> <span class="help" id="doa-aut-sit"></span></summary>
@@ -6973,7 +6981,9 @@ async function espelharFolha(codigo,desfazendo){
    O TIF e os arquivos do CAMP Vision não mudam; "Desfazer recorte/alinhamento" volta à imagem do CAMP Vision. */
 let AJ=null;
 const AJ_MIN=.05,ajInteira=b=>b.x<=.0005&&b.y<=.0005&&b.w>=.9995&&b.h>=.9995,ajGrau=v=>String(Math.round(v*10)/10).replace('.',',');
-function ajHost(){return revSel('.rev-col-img')||(rotaAtual().split('/')[0]==='item'?document.querySelector('#idet [data-visor-img]'):null)}   /* CAMP-VIEW: a página da folha também recorta */
+let DUPV_AJ=null;   /* CAMP-VIEW: a folha da tela Duplicatas que está sendo recortada */
+function ajHost(){if(rotaAtual().split('/')[0]==='duplicatas'&&DUPV_AJ&&!mainEl.classList.contains('with-drawer'))return document.querySelector(`#dupv [data-dupv-aj="${CSS.escape(DUPV_AJ)}"]`);   /* o corpo da gaveta fechada pode guardar uma revisão antiga */
+  return revSel('.rev-col-img')||(rotaAtual().split('/')[0]==='item'?document.querySelector('#idet [data-visor-img]'):null)}   /* CAMP-VIEW: a página da folha também recorta */
 async function abrirAjuste(codigo){
   const col=ajHost();if(!col||document.getElementById('aj-ed'))return;
   let a;try{a=await API('/api/itens/'+encodeURIComponent(codigo)+'/ajuste')}catch(e){toast(e.message);return}
@@ -7217,16 +7227,25 @@ let DUPV={code:null,d:null,filtro:'a_conferir',foco:0,mexidos:new Set(),seq:0};
 const DUPV_TIPO={exata:'o CAMP Vision achou a imagem idêntica',perceptual:'o CAMP Vision achou a imagem quase igual',mesma_folha:'mesma folha (mesmo número e título)'};
 function dupvImg(it,t){const pv=it.pendencias&&it.pendencias.previa;return !pv&&it.thumb_url?urlThumbSite(it):urlPreviaFolha(it.codigo,it.giro_manual,t,it.espelhar,ajusteChave(it))}
 function dupvGrande(it){const pv=it.pendencias&&it.pendencias.previa;if(!pv&&(it.documento_url||it.thumb_url))return it.documento_url&&/\.(jpe?g|png|webp)(\?|$)/i.test(it.documento_url)?it.documento_url:(it.thumb_url||it.documento_url);return urlPreviaFolha(it.codigo,it.giro_manual,0,it.espelhar,ajusteChave(it))}
+/* CAMP-VIEW (22/11): cada lado da comparação tem a barra padrão do visualizador (visorBarraHTML, a mesma da página da folha, da gaveta,
+   da tela cheia e da tela de conferir): ‹ Anterior · grupo N de M · Próxima › (andam entre os grupos) | girar | recortar | − % + Ajustar | abrir.
+   Girar e recortar só para operador, admin e master, e só com a prévia do CAMP Vision (as mesmas rotas: girarFolha e abrirAjuste).
+   Teclas: valem para o lado com o foco ou sob o mouse (dupvAlvo); fora das folhas continuam J/K/C/N da tela. */
+function dupvBarraHTML(it,o){const op=EU&&['operador','admin','master'].includes(EU.papel),prev=!!(it.pendencias&&it.pendencias.previa),n=o&&o.n,k=o&&o.k;
+  return visorBarraHTML({ctx:'dupv',codigo:it.codigo,classe:'dupv-barra',
+    nav:n?{ant:k>0,prx:k<n-1,pos:`<span class="visor-pos">grupo ${k+1} de ${n}</span>`}:null,
+    attrs:{anterior:'title="Grupo anterior (tecla ←)"',proxima:'title="Próximo grupo (tecla →)"','zoom-menos':'data-zoom-acao="-"','zoom-mais':'data-zoom-acao="+"','zoom-ajustar':'data-zoom-acao="0"',pct:'data-zoom-pct'},
+    girar:op&&prev,recortar:op&&prev,zoom:true,abrir:dupvGrande(it)})}
 function dupvFolhaHTML(it,papel,o){const pode=DUPV.d&&DUPV.d.pode_decidir,pq=[it.tipo_duplicata?DUPV_TIPO[it.tipo_duplicata]||it.tipo_duplicata:'',...(it.motivos||[])].filter(Boolean);
   const tag=papel==='publica'?'<span class="tag g">vai ao site</span>':papel==='copia'?(it.conferida?'<span class="tag g">cópia conferida</span>':'<span class="tag a">cópia</span>'):'';
-  return `<figure class="dupv-folha${papel==='publica'?' publica':''}"${papel==='copia'?` data-dupv-copia="${escHtml(it.codigo)}"`:''}><a class="dupv-img" href="${escHtml(dupvGrande(it))}" target="_blank" rel="noopener" title="Abrir a imagem grande em outra aba"><img src="${escHtml(dupvImg(it,640))}" alt="${escHtml(it.codigo)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'qf-sem',textContent:'sem imagem'}))"></a>
+  return `<figure class="dupv-folha${papel==='publica'?' publica':''}" data-dupv-folha="${escHtml(it.codigo)}"${papel==='copia'?` data-dupv-copia="${escHtml(it.codigo)}"`:''}><div class="img dupv-vis">${dupvBarraHTML(it,o)}<div class="dupv-imgbox" data-dupv-aj="${escHtml(it.codigo)}"><a class="dupv-img zoom-box" data-zoom href="${escHtml(dupvGrande(it))}" target="_blank" rel="noopener" title="Abrir a imagem grande em outra aba"><img src="${escHtml(dupvImg(it,640))}" alt="${escHtml(it.codigo)}" loading="lazy" draggable="false" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'qf-sem',textContent:'sem imagem'}))"></a></div></div>
     <figcaption>${tag} <span><span class="code" title="${escHtml(it.codigo)}">${escHtml(it.codigo.slice(-6))}</span> · ${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}${it.folha?` · folha ${escHtml(it.folha)}`:''}</span>${it.titulo?`<small>${escHtml(it.titulo)}</small>`:''}<span>${it.lote_id?tagRevisao(it.revisao,it.retida):''}${it.no_site?` <span class="tag b">${it.status_site==='no_ar'?'publicada':'rascunho'}</span>`:''}</span>
     ${papel==='copia'&&pq.length?`<small class="dupv-pq">Por quê: ${pq.map(escHtml).join(' · ')}</small>`:''}${papel==='copia'&&it.conferida?`<small class="help">Conferida por ${escHtml(it.duplicata_conferida_por||'—')} em ${escHtml(fmtDataHora(it.duplicata_conferida_em))}</small>`:''}</figcaption>
     ${papel==='copia'&&pode&&!o.fora?`<div class="act"><button class="btn sm" data-dupv-trocar="${escHtml(it.codigo)}" data-dupv-orig="${escHtml(o.orig)}">Publicar esta em vez da outra</button><button class="btn sm" data-dupv-nao="${escHtml(it.codigo)}">Não é duplicata</button></div>`:''}${o.extra||''}</figure>`}
 function dupvGrupos(){const G=(DUPV.d&&DUPV.d.grupos)||[];return DUPV.filtro==='a_conferir'?G.filter(g=>!g.conferido):DUPV.filtro==='conferidos'?G.filter(g=>g.conferido):G}
 function dupvGrupoHTML(g,k,n){const o=g.original,pode=DUPV.d.pode_decidir,orig=o.codigo;
   return `<section class="panel dupv-grupo${k===DUPV.foco?' foco':''}" data-dupv-grupo="${escHtml(orig)}" aria-label="Grupo ${k+1} de ${n}"><div class="ph"><h2>${escHtml(o.tipo_documento||nomeSerieProjeto(o.serie_codigo))}${o.folha?` · folha ${escHtml(o.folha)}`:''} <small class="help">${escHtml(qtd(g.copias.length,'cópia','cópias'))}</small></h2>${g.conferido?'<span class="tag g">conferido</span>':'<span class="tag a">a conferir</span>'}</div>
-    <div class="dupv-folhas">${dupvFolhaHTML(o,'publica',{orig})}${g.copias.map(c=>dupvFolhaHTML(c,'copia',{orig,fora:g.fora_do_projeto})).join('')}</div>
+    <div class="dupv-folhas">${dupvFolhaHTML(o,'publica',{orig,k,n})}${g.copias.map(c=>dupvFolhaHTML(c,'copia',{orig,fora:g.fora_do_projeto,k,n})).join('')}</div>
     ${g.fora_do_projeto?'<p class="help dupv-acoes">A folha que vai ao site é de outro projeto: decida na revisão da folha.</p>':pode&&!g.conferido?`<div class="dupv-acoes"><button class="btn sm pri" data-dupv-confirmar="${escHtml(orig)}">Confirmar: são cópias, publica a primeira</button></div>`:''}</section>`}
 function dupvSugHTML(s,k){const pode=DUPV.d.pode_decidir;
   return `<div class="dupv-sug" data-dupv-sug="${k}"><p class="help"><b>${escHtml(qtd(s.folhas.length,'folha','folhas'))}</b> · ${escHtml(s.motivo)}</p><div class="dupv-folhas">${s.folhas.map(f=>dupvFolhaHTML(f,'sug',{extra:pode?`<div class="act"><button class="btn sm" data-dupv-sug-marcar="${escHtml(f.codigo)}" data-dupv-sug-k="${k}">Esta vai ao site; as outras são cópias</button></div>`:''})).join('')}</div>${pode?`<div class="dupv-acoes"><button class="btn sm" data-dupv-sug-dispensar="${k}">Não são duplicatas</button></div>`:''}</div>`}
@@ -7237,7 +7256,7 @@ function dupvHTML(){const d=DUPV.d,G=d.grupos,vis=dupvGrupos(),aconf=G.filter(g=
   const sug=(d.sugestoes||[]).length?`<div class="panel dupv-sugs"><div class="ph"><h2>Talvez sejam duplicatas</h2><span class="tag">${escHtml(qtd(d.sugestoes.length,'sugestão','sugestões'))}</span></div><div class="pb"><p class="help">Ninguém marcou estas folhas como cópias, mas elas parecem iguais. É só sugestão: nada muda sem você decidir.</p>${d.sugestoes.map(dupvSugHTML).join('')}</div></div>`:'';
   return `<div class="dethdr"><div><h1>Duplicatas</h1><div class="meta"><span class="code">${escHtml(d.projeto.codigo)}</span> · ${escHtml(tituloExibicao(d.projeto.titulo||''))}</div></div><div class="act"><button class="btn" data-dupv-voltar="${escHtml(d.projeto.codigo)}">Voltar ao projeto</button></div></div>
   <div class="panel dupv-topo"><div class="pb"><div class="dupv-prog"><b id="dupv-cont">${fmtN(d.conferidas)} de ${fmtN(d.total_copias)} conferidas</b><progress max="${d.total_copias||1}" value="${d.conferidas}" aria-labelledby="dupv-cont"></progress></div>
-    <p class="help">Cada grupo mostra a folha que vai ao site (borda verde) e as cópias dela, lado a lado. Clique numa imagem para abri-la grande em outra aba. Nada é apagado: a cópia só não vai ao site.${d.pode_decidir?' Atalhos: <kbd>J</kbd> e <kbd>K</kbd> grupo seguinte e anterior, <kbd>C</kbd> confirmar, <kbd>N</kbd> não é duplicata (grupo com uma cópia só).':' Só operador, admin e master decidem.'}</p>
+    <p class="help">Cada grupo mostra a folha que vai ao site (borda verde) e as cópias dela, lado a lado. Clique numa imagem para abri-la grande em outra aba. Nada é apagado: a cópia só não vai ao site.${d.pode_decidir?' Atalhos: <kbd>J</kbd> e <kbd>K</kbd> grupo seguinte e anterior, <kbd>C</kbd> confirmar, <kbd>N</kbd> não é duplicata (grupo com uma cópia só).':' Só operador, admin e master decidem.'} Na folha sob o mouse (ou com o foco nela), as teclas são as do visualizador: <kbd>←</kbd> <kbd>→</kbd> grupo anterior e seguinte${EU&&['operador','admin','master'].includes(EU.papel)?', <kbd>R</kbd> e <kbd>L</kbd> giram, <kbd>C</kbd> ou <kbd>K</kbd> recortam':''}, <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> ampliam.</p>
     <div class="abas-sit" role="group" aria-label="Filtrar grupos">${ab}</div>
     ${d.pode_decidir&&soltos.length?`<div class="act"><button class="btn" data-dupv-todos>Confirmar todos os grupos que eu não mexi (${fmtN(soltos.length)})</button><small class="help">${escHtml(qtd(nSolt,'cópia fica conferida','cópias ficam conferidas'))}</small></div>`:''}</div></div>
   <div id="dupv-grupos">${lista}</div>${sug}`}
@@ -7251,6 +7270,8 @@ async function dupvDecidir(decisoes,msg){try{const r=await API('/api/projetos/'+
     const falha=(r.resultados||[]).find(x=>!x.ok);toast(falha?(r.feitas?`${msg} · ${r.falhas} não ${r.falhas===1?'foi feita':'foram feitas'}: ${falha.erro}`:falha.erro):msg);await showDuplicatas(DUPV.code,true);return r}
   catch(e){toast(e.message);return null}}
 function dupvGrupo(orig){return ((DUPV.d&&DUPV.d.grupos)||[]).find(g=>g.original.codigo===orig)}
+function dupvItem(cod){const d=DUPV.d;if(!d)return null;for(const g of d.grupos||[]){if(g.original.codigo===cod)return g.original;const c=g.copias.find(x=>x.codigo===cod);if(c)return c}for(const s of d.sugestoes||[]){const f=s.folhas.find(x=>x.codigo===cod);if(f)return f}return null}
+document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('#dupv a.dupv-img.ampliada');if(a)e.preventDefault()},true);   /* ampliada, o clique é para arrastar (o "Abrir a imagem" fica na barra) */
 async function dupvConfirmar(orig){const g=dupvGrupo(orig);if(!g)return;DUPV.mexidos.add(orig);const nc=g.copias.filter(c=>!c.conferida),cs=(nc.length?nc:g.copias).map(c=>c.codigo);
   await dupvDecidir([{acao:'confirmar',original:orig,copias:cs}],`${qtd(cs.length,'cópia conferida','cópias conferidas')}: publica ${orig.slice(-6)}`)}
 async function dupvTrocar(nova,orig){DUPV.mexidos.add(orig);DUPV.mexidos.add(nova);
@@ -7280,8 +7301,15 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-dupv-abrir
   else if(s.dupvSugMarcar)dupvSugMarcar(s.dupvSugMarcar,+s.dupvSugK);
   else if(s.dupvSugDispensar!=null)dupvSugDispensar(+s.dupvSugDispensar)});
 /* atalhos da tela (captura: C aqui é "confirmar", não o menu Configurações) */
+let DUPV_SOB=null;   /* o código da folha (lado) sob o mouse; o foco vence o mouse. Pelo código: depois de girar, a tela se redesenha sob o mouse parado */
+document.addEventListener('pointerover',e=>{const f=e.target.closest&&e.target.closest('#dupv-grupos .dupv-folha');DUPV_SOB=f?f.dataset.dupvFolha:null},true);
+function dupvAlvo(){const a=document.activeElement,f=a&&a.closest&&a.closest('#dupv .dupv-folha');if(f)return f;
+  const s=DUPV_SOB&&document.querySelector(`#dupv-grupos .dupv-folha[data-dupv-folha="${CSS.escape(DUPV_SOB)}"]`);return s&&s.matches(':hover')?s:null}
 document.addEventListener('keydown',e=>{if(rotaAtual().split('/')[0]!=='duplicatas'||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||'')||e.metaKey||e.ctrlKey||e.altKey)return;
-  if(mainEl.classList.contains('with-drawer')||document.querySelector('.modal.on,#conf-ov,#ct-ov')||!DUPV.d)return;
+  if(mainEl.classList.contains('with-drawer')||document.querySelector('.modal.on,#conf-ov,#ct-ov,#aj-ed')||!DUPV.d)return;
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();e.stopPropagation();dupvFocar(DUPV.foco+(e.key==='ArrowLeft'?-1:1),true);return}   /* CAMP-VIEW: ← → = ‹ Anterior · Próxima › da barra */
+  {const f=!(e.shiftKey&&/^[a-z]$/i.test(e.key))&&dupvAlvo(),kv=e.key.length===1?e.key.toLowerCase():e.key;   /* CAMP-VIEW: R L C K + − 0 no lado com foco ou sob o mouse */
+    if(f&&VISOR_TECLAS[kv]){if(!visorTecla(e,f.querySelector('.visor-barra'))){e.preventDefault();e.stopPropagation()}return}}   /* ferramenta que este lado não tem (sem prévia, só leitura): a tecla não vira "confirmar" nem vai ao menu */
   const k=e.key.toLowerCase(),L=[...document.querySelectorAll('#dupv-grupos .dupv-grupo')];if(!'jkcn'.includes(k)||k.length!==1)return;
   e.preventDefault();e.stopPropagation();if(!L.length)return;
   if(k==='j')dupvFocar(DUPV.foco+1,true);else if(k==='k')dupvFocar(DUPV.foco-1,true);
@@ -8043,10 +8071,14 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
     if((a==='anterior'||a==='proxima')&&b.dataset.ir){e.preventDefault();nav('item/'+b.dataset.ir)}
     else if(a==='girar-esq'||a==='girar-dir'){e.preventDefault();girarFolha(c,a==='girar-esq'?-90:90,false,window.ITEM_ATUAL)}
     else if(a==='recortar'){e.preventDefault();abrirAjuste(c)}}
-  else if(ctx==='conf'&&(a==='anterior'||a==='proxima')){e.preventDefault();confMover(a==='anterior'?-1:1)}});
+  else if(ctx==='conf'&&(a==='anterior'||a==='proxima')){e.preventDefault();confMover(a==='anterior'?-1:1)}
+  else if(ctx==='dupv'){const g=b.closest('.dupv-grupo'),L=[...document.querySelectorAll('#dupv-grupos .dupv-grupo')],i=g?L.indexOf(g):DUPV.foco;   /* CAMP-VIEW: Duplicatas */
+    if(a==='anterior'||a==='proxima'){e.preventDefault();dupvFocar(i+(a==='anterior'?-1:1),true)}
+    else if(a==='girar-esq'||a==='girar-dir'){e.preventDefault();girarFolha(c,a==='girar-esq'?-90:90,false,dupvItem(c))}
+    else if(a==='recortar'){e.preventDefault();DUPV_AJ=c;abrirAjuste(c)}}});
 /* depois de girar ou recortar na página da folha: mostra a prévia do painel (a imagem do site pode ainda ser a antiga) */
 const VISOR_PREVIA=new Set();
-function visorItemAtualizar(codigo){VISOR_PREVIA.add(codigo);if(rotaAtual()==='item/'+codigo)showItem(codigo)}
+function visorItemAtualizar(codigo){VISOR_PREVIA.add(codigo);if(rotaAtual()==='item/'+codigo)showItem(codigo);else if(rotaAtual()==='duplicatas/'+DUPV.code&&dupvItem(codigo))showDuplicatas(DUPV.code,true)}
 async function showItem(code){if(!EU){document.getElementById('login').classList.add('on');return}let d;const _car=carregandoPagina('idet',code);try{d=await API(`/api/itens/${code}`)}catch(e){if(e.status===404){if(await adotarFolhaDoSite(code))return showItem(code)}else toast(e.message);return}const it=d.item;window.ITEM_ATUAL=it;PROJ_INFO[it.projeto_codigo]={f:it.fundo_codigo,fn:it.fundo,t:tituloExibicao(it.projeto_titulo)};if(it.fundo)FUNDO_NOME[it.fundo_codigo]=it.fundo;if(rotaAtual()==='item/'+code){setWhere(rotaAtual());crumbs(rotaAtual())}registrarRecente('item/'+code,code+' · '+(it.tipo_documento||it.serie_codigo||'Documento'),'documento');
   (document.getElementById('id-back')||{}).onclick=()=>voltar('projeto/'+it.projeto_codigo);
   /* CAMP-086: folha do CAMP Vision ainda fora do site não tinha imagem nesta página ("Sem prévia do CAMP Vision", "Imagem mostrada: nenhuma"),

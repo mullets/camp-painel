@@ -8,7 +8,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8781', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const ETAPAS = process.argv.slice(2).length ? process.argv.slice(2) : ['auditoria', 'fundo', 'publicar'];
 const problemas = [], linhas = [], BLOQUEADAS = [];   // pedidos para fora do servidor de teste: barrados e anotados
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };

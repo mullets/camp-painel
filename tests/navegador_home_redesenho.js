@@ -19,7 +19,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8931', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const TOPO_SHA = 'd16698c156c1c43c';   // sha256 (16 primeiros) da marcação de <div class="top"> no main de 22/11/2026 (9319c38): "não mude o menu superior"
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };

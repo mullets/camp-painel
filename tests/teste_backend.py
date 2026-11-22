@@ -17741,7 +17741,7 @@ def filho(modo):
         ver("#item usa a barra padrão (girar e recortar só com prévia e papel)", "barraV=visorBarraHTML({ctx:'item'" in html and "girar:opV&&temPrevia&&!!fonteImg,recortar:opV&&temPrevia&&!!fonteImg" in html)
         ver("a gaveta, a tela cheia e a tela de conferir usam a mesma barra", "const barra=visorBarraHTML({ctx:conf?'conf':'rev'" in html)
         ver("girar em #item é a rotina de sempre (girarFolha → POST /api/itens/{c}/girar)", "girarFolha(c,a==='girar-esq'?-90:90,false,window.ITEM_ATUAL)" in html and "API('/api/itens/'+encodeURIComponent(codigo)+'/girar'" in html)
-        ver("recortar em #item é o editor de sempre (abrirAjuste → /ajuste), na própria página", "function ajHost(){return revSel('.rev-col-img')||" in html)
+        ver("recortar em #item é o editor de sempre (abrirAjuste → /ajuste), na própria página", "return revSel('.rev-col-img')||(rotaAtual().split('/')[0]==='item'?document.querySelector('#idet [data-visor-img]')" in html)   # CAMP-VIEW 22/11: ajHost antes atende Duplicatas
         ver("as mesmas teclas: ← → R L C K + − 0", "const VISOR_TECLAS={ArrowLeft:'anterior',ArrowRight:'proxima',r:'girar-dir',l:'girar-esq',c:'recortar',k:'recortar','+':'zoom-mais','=':'zoom-mais','-':'zoom-menos','0':'zoom-ajustar'};" in html)
         for l in res: print(l)
 

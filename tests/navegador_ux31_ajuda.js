@@ -9,7 +9,7 @@
 //   CAMP_DB_PATH=/tmp/ux31/x.db CAMP_BASE=http://127.0.0.1:8949 node tests/navegador_ux31_ajuda.js
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8949';
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium';
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 
