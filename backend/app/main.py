@@ -123,6 +123,8 @@ from .rotas_clima import router as rotas_clima   # clima das salas (sensores Tuy
 app.include_router(rotas_clima)
 from .home_trabalho import router as rotas_home_trabalho   # CAMP-HOME-UX: responsável, meta da semana e conquistas da Home
 app.include_router(rotas_home_trabalho)
+from .problemas_rapido import router as rotas_problemas_rapido   # CAMP-PROB-RAPIDO: decisões rápidas na lista (antes da Central: /api/problemas/{eid})
+app.include_router(rotas_problemas_rapido)
 from .central_problemas import router as rotas_central_problemas   # CAMP-PROB-UX: Central de Problemas
 app.include_router(rotas_central_problemas)
 

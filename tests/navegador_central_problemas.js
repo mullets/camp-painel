@@ -72,10 +72,11 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     chk(menuN === abaN, `número do menu (${menuN}) = aba Prioridades (${abaN})`);
     await page.click('#err-abas [data-err-sit="todos"]'); await espera(page);
     await page.click('[data-cp-chip="sem_responsavel"]'); await espera(page);
-    const semResp = await page.$$eval('#err-body [data-err-linha] .cp-resp', rs => rs.every(r => /Sem responsável/.test(r.textContent)));
-    chk(semResp && await page.$eval('[data-cp-chip="sem_responsavel"]', b => b.getAttribute('aria-pressed') === 'true'), 'filtro rápido Sem responsável: todas as linhas "Sem responsável" e o chip marcado');
+    // CAMP-PROB-RAPIDO: filtrando por "Sem responsável", a linha não repete a frase (o chip do filtro já diz); nenhuma linha tem responsável
+    const semResp = await page.$$eval('#err-body [data-err-linha]', ls => ls.length > 0 && ls.every(l => !l.querySelector('.cp-resp:not(.cp-sem)') && !/Sem responsável/.test(l.querySelector('.cp-quando').textContent)));
+    chk(semResp && await page.$eval('[data-cp-chip="sem_responsavel"]', b => b.getAttribute('aria-pressed') === 'true'), 'filtro rápido Sem responsável: nenhuma linha com responsável (sem repetir a frase) e o chip marcado');
     await page.click('[data-cp-chip="critico"]'); await espera(page);
-    const ambos = await page.$$eval('#err-body [data-err-linha]', ls => ls.every(l => /sev-critico/.test(l.className) && /Sem responsável/.test(l.querySelector('.cp-resp').textContent)));
+    const ambos = await page.$$eval('#err-body [data-err-linha],#err-body [data-cp-grupo]', ls => ls.length > 0 && ls.every(l => /sev-critico/.test(l.className) && !l.querySelector('.cp-resp:not(.cp-sem)')));   // Críticos agrupa por padrão (CAMP-PROB-RAPIDO)
     chk(ambos, 'Críticos + Sem responsável: toda linha satisfaz os dois');
     // busca e paginação
     await page.click('[data-cp-tirar="chip:critico"]'); await espera(page);
@@ -106,6 +107,7 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     // resolver atualiza os contadores (crítico com fonte: autoria pede fonte)
     await page.click('[data-err-limpar-tudo]'); await espera(page);
     await page.click('[data-cp-cartao="criticos"]'); await espera(page);
+    if (await page.$eval('#cp-agrupar', c => c.checked)) { await page.click('#cp-agrupar'); await espera(page); }   // Críticos agrupa por padrão (CAMP-PROB-RAPIDO): aqui, um a um
     const c1 = await num(page, 'criticos');
     await page.click('#err-body [data-err-linha] .cp-cta'); await page.waitForSelector('#cp-conclusao');
     await page.click('[data-cp-fase="resolvido"]'); await page.waitForFunction(() => document.getElementById('cp-erro').textContent.length > 0, null, { timeout: 5000 }).catch(() => {});
@@ -126,7 +128,7 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     // J/K na lista (fora de campo de texto)
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press('j'); await page.keyboard.press('j');
-    chk(await page.evaluate(() => { const k = document.querySelector('#err-body .kb-atual'); return !!k && k === document.querySelectorAll('#err-body [data-err-linha]')[1]; }), 'J desce na lista (fora de campo de texto)');
+    chk(await page.evaluate(() => { const k = document.querySelector('#err-body .kb-atual'); return !!k && k === [...document.querySelectorAll('#err-body [data-err-linha],#err-body [data-cp-grupo]')].filter(x => x.offsetParent !== null)[1]; }), 'J desce na lista (fora de campo de texto)');
     // coluna da direita e gráficos de dados reais; Ranking da equipe (mês) ligado por padrão (decisão do Rafael, migração 243)
     // tom sério (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): "Seu trabalho" (pontos da semana e do mês +
     // meta da equipe), "Marcos" em texto, ranking em tabela e "Atividade recente" com ícone neutro; nada de nível, XP, selo, hexágono ou troféu
@@ -154,7 +156,7 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     const gav = await m.page.$eval('#cp-filtros-mais', el => { const r = el.getBoundingClientRect(); return !el.hidden && r.width >= window.innerWidth - 1 && getComputedStyle(el).position === 'fixed'; });
     chk(gav, '390 px: os filtros abrem numa gaveta de tela cheia');
     await m.page.click('#cp-filtros-mais .cp-gaveta-fim [data-cp-filtros-fechar]');
-    await m.page.click('#err-body [data-err-linha] .cp-cta'); await m.page.waitForSelector('#d-body .cp-ident');
+    await m.page.click('#err-body [data-err-linha]:visible .cp-cta'); await m.page.waitForSelector('#d-body .cp-ident');
     const cheio = await m.page.$eval('#drawer', d => d.getBoundingClientRect().width >= window.innerWidth - 1);
     const ov2 = await m.page.evaluate(() => document.getElementById('drawer').scrollWidth - document.getElementById('drawer').clientWidth);
     chk(cheio && ov2 <= 0, `390 px: o painel vira tela de detalhe (tela cheia, sem rolar para o lado: ${ov2})`);

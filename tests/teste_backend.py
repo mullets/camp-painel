@@ -58,6 +58,7 @@ MODOS_RAPIDOS |= {"amigo_duplicado"}   # CAMP-AMIGO-DUP 21/11/2026: e-mail repet
 MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doação paga com a doação de origem; Conferir Amigos das doações pagas (site falso; contrato 1.30, migração 240; linha própria)
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
+MODOS_RAPIDOS |= {"problemas_rapido"}   # CAMP-PROB-RAPIDO 22/11/2026: decisões rápidas na lista de Problemas (modelo de decisão, Desfazer, mover pela rota de sempre, grupos; migração 244; linha própria)
 MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking da equipe ligado por padrão desde a 243; migração 242; linha própria)
 
 MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking da equipe ligado por padrão (linha própria)
@@ -12418,6 +12419,170 @@ def filho(modo):
         f99 = next((x for x in PF if x["fundo"] == "F099"), {})
         ver("contador por fundo: proporção sobre as folhas avaliadas", f99.get("folhas_avaliadas") == 5 and f99.get("proporcao") == round(f99.get("avaliadas_com_problema", 0) / 5, 4), str(f99))
         for l in res: print(l)
+    elif modo == "problemas_rapido":
+        # CAMP-PROB-RAPIDO (22/11/2026, Rafael: "Decisões simples e rápidas podem ser clicks aí mesmo para resolver, não?"): ações rápidas na
+        # linha da lista de Problemas, cada uma resolvendo pelo fluxo da Central (conclusão do modelo de decisão + a ação como justificativa,
+        # quem e quando, pontos da Home), Desfazer pelo erro_desfazer (pontos somem), mover só pela rota de mover de sempre (admin, simulação
+        # antes, volta pela mesma rota), grupos (mesmo projeto + mesmo tipo) com as contagens em problemas, tipos sensíveis sem atalho e a
+        # "Atividade recente" sem código interno.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.home_trabalho import eventos_validados
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F061','Escritório Teste')")
+        for n_ in (81, 82, 83):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F061',?)", (n_,))
+        for cod, n_, tit in (("F061-P0081", 81, "Residência Teresa Martino"), ("F061-P0082", 82, "Sierna 3 Bairro do Limão"), ("F061-P0083", 83, "Estação de Rádio")):
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, "F061", n_, tit))
+        F = lambda n_, p_="F061-P0081": f"{p_}-1970-S01-D{n_:05d}"
+        sinal = "projeto divergente: o carimbo diz 'SIERNA 3 · BAIRRO DO LIMÃO'"
+        for n_ in range(1, 8):
+            pend = _j.dumps({"sinais": [sinal]} if n_ == 1 else {}, ensure_ascii=False)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,pendencias,status_site) VALUES (?,?,?,?,?,'importado','conferida',?,?)",
+                      (F(n_), "F061-P0081", "S01", n_, f"Planta {n_}", pend, "bloqueado" if n_ == 1 else "nao_publicado"))
+        for n_ in range(1, 4):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao) VALUES (?,?,?,?,?,'importado','conferida')",
+                      (F(n_, "F061-P0083"), "F061-P0083", "S01", n_, f"Corte {n_}"))
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (F(6), F(5)))
+        def novo(g, cat, cod, desc, origem="campvision"):
+            return c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,criado_em) VALUES (?,?,?,?,?,datetime('now','-24 days'))", (g, cat, origem, cod, desc)).lastrowid
+        desc = sinal + " — fora da publicação até decisão"
+        e1, e2, e3, e4 = [novo("bloqueia", "projeto_errado", F(n_), desc) for n_ in (1, 2, 3, 4)]
+        e5 = novo("corrigir", "duplicata", F(5), "Registro duplicado")
+        e6 = novo("corrigir", "metadado", F(6), "Documento sem data identificada", "operador")
+        e7 = novo("bloqueia", "autoria_divergente", F(7), "Aflalo & Gasperini ou Pilon & Gasperini?")
+        e8 = novo("aviso", "orientacao", F(2), "Folha de lado")
+        g1, g2, g3 = [novo("bloqueia", "projeto_errado", F(n_, "F061-P0083"), "sem identificação: pasta com várias obras e a folha não diz de qual é") for n_ in (1, 2, 3)]
+        c.commit()
+        auth.criar_usuario("Ana", "ana@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leo", "leo@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        auth.criar_usuario("Ivo", "ivo@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        def cli(email, senha):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": email, "senha": senha}); return x
+        ana, leo, ivo = cli("ana@camp.arq.br", "senha-operador-123"), cli("leo@camp.arq.br", "senha-leitor-1234"), cli("ivo@camp.arq.br", "senha-admin-12345")
+        E = lambda i: c.execute("SELECT * FROM erro WHERE id=?", (i,)).fetchone()
+        pontos = lambda email: {x["ref"] for x in eventos_validados(c) if x["email"] == email}
+        R = lambda cl, **k: cl.post("/api/problemas/rapido", json=k)
+        # 1) agrupar: o mesmo projeto + o mesmo tipo vira UMA linha; as contagens são de problemas, não de linhas
+        L = ana.get("/api/problemas?aba=prioridades&agrupar=1&por_pagina=50").json()
+        Ls = ana.get("/api/problemas?aba=prioridades&por_pagina=50").json()
+        Rs = ana.get("/api/problemas/resumo?aba=prioridades").json()
+        gs = [x for x in L.get("itens", []) if x.get("grupo")]
+        g81 = next((x for x in gs if x.get("projeto_codigo") == "F061-P0081"), {})
+        conta = sum(x["n"] if x.get("grupo") else 1 for x in L.get("itens", []))
+        ver("agrupar: as 4 'folha de outro projeto' da Residência Teresa Martino viram UMA linha com os 4 problemas", g81.get("n") == 4 and sorted(g81.get("ids", [])) == sorted([e1, e2, e3, e4])
+            and g81.get("titulo") == "Folha pode ser de outro projeto", str({k: g81.get(k) for k in ("n", "ids", "titulo")}))
+        ver("agrupar: total = problemas (não linhas), igual sem agrupar e igual à aba Prioridades; a soma dos grupos + soltos fecha",
+            L.get("total") == Ls.get("total") == Rs["abas"]["prioridades"] == conta and L.get("linhas") == len(L.get("itens", [])) < L.get("total"),
+            str({"total": L.get("total"), "sem": Ls.get("total"), "aba": Rs["abas"]["prioridades"], "conta": conta, "linhas": L.get("linhas")}))
+        x1 = next((x for x in Ls["itens"] if x["id"] == e1), {})
+        ver("linha: decisão rápida 'outro projeto' com o que o carimbo diz; operador não tem Mover (é de admin)", (x1.get("rapido") or {}).get("tipo") == "outro_projeto"
+            and x1["rapido"].get("carimbo") == "SIERNA 3 · BAIRRO DO LIMÃO" and x1["rapido"]["acoes"] == ["deste_projeto"], str(x1.get("rapido")))
+        xi = next((x for x in ivo.get("/api/problemas?aba=prioridades&por_pagina=50").json()["itens"] if x["id"] == e1), {})
+        ver("admin: Mover e Escolher outro projeto, com a sugestão do projeto do mesmo fundo que combina com o carimbo", (xi.get("rapido") or {}).get("acoes") == ["deste_projeto", "mover", "escolher"]
+            and (xi["rapido"].get("sugestao") or {}).get("codigo") == "F061-P0082", str(xi.get("rapido")))
+        x7 = next((x for x in Ls["itens"] if x["id"] == e7), {})
+        ver("tipo sensível (autoria): sem atalho na linha, só o painel", (x7.get("rapido") or {}).get("sensivel") is True and not x7["rapido"]["acoes"], str(x7.get("rapido")))
+        # 2) "É deste projeto": resolve com a conclusão do modelo, grava quem, conta ponto, tira o aviso da folha
+        r1 = R(ana, ids=[e1], acao="deste_projeto")
+        e_ = E(e1); it1 = c.execute("SELECT pendencias, status_site FROM item WHERE codigo=?", (F(1),)).fetchone()
+        mod = c.execute("SELECT texto FROM erro_modelo WHERE categoria='projeto_errado' AND titulo='É deste projeto'").fetchone()
+        ver("É deste projeto: Resolvido (situação 'corrigido'), conclusão do modelo de decisão, quem e quando", r1.status_code == 200 and e_["situacao"] == "corrigido" and e_["fase"] == "resolvido"
+            and e_["fechado_por"] == "ana@camp.arq.br" and e_["resolvido_em"] and mod and e_["resolucao"].startswith(mod[0]), r1.text[:200] + str(dict(e_))[:200])
+        ev_j = c.execute("SELECT valor FROM erro_evidencia WHERE erro_id=? AND tipo='justificativa'", (e1,)).fetchone()
+        ver("a justificativa é a própria ação e o modelo (a regra conclusão + justificativa continua valendo)", ev_j and "Ação rápida" in ev_j[0] and "É deste projeto" in ev_j[0], str(ev_j and ev_j[0]))
+        ver("a folha perdeu o aviso de projeto divergente e saiu de 'bloqueado' (o mesmo efeito do botão É deste projeto)", "projeto divergente" not in (it1["pendencias"] or "") and it1["status_site"] == "nao_publicado", str(dict(it1)))
+        ver("pontos: a resolução conta para quem fez (sistema único da Home)", f"erro:{e1}" in pontos("ana@camp.arq.br"), str(pontos("ana@camp.arq.br")))
+        tok = r1.json().get("desfazer")
+        u1 = ana.post(f"/api/problemas/rapido/desfazer/{tok}")
+        e_ = E(e1); it1 = c.execute("SELECT pendencias, status_site FROM item WHERE codigo=?", (F(1),)).fetchone()
+        ver("Desfazer: o problema volta a aberto (fase de antes) e a folha volta a ter o aviso e a situação de antes", u1.status_code == 200 and e_["situacao"] == "aberto" and e_["fase"] is None
+            and "projeto divergente" in (it1["pendencias"] or "") and it1["status_site"] == "bloqueado", u1.text[:200] + str(dict(e_))[:160])
+        ver("Desfazer: o ponto some (recontado do estado) e a próxima leitura do CAMP Vision volta a valer (projeto_confirmado_desfeito)", f"erro:{e1}" not in pontos("ana@camp.arq.br")
+            and c.execute("SELECT 1 FROM evento WHERE entidade='item' AND codigo=? AND tipo='projeto_confirmado_desfeito'", (F(1),)).fetchone() is not None, "")
+        ver("Desfazer só uma vez", ana.post(f"/api/problemas/rapido/desfazer/{tok}").status_code == 409, "")
+        # 3) grupo: "Todas são deste projeto"
+        rg = R(ana, ids=[e1, e2, e3], acao="deste_projeto")
+        ver("grupo: Todas são deste projeto resolve as 3 de uma vez, cada uma com a conclusão do modelo", rg.status_code == 200 and sorted(rg.json().get("resolvidos", [])) == sorted([e1, e2, e3])
+            and all(E(i)["situacao"] == "corrigido" and E(i)["fase"] == "resolvido" for i in (e1, e2, e3)), rg.text[:200])
+        Rg = ana.get("/api/problemas/resumo?aba=prioridades").json()
+        ver("contadores: a aba Prioridades caiu 3 (conta problemas)", Rg["abas"]["prioridades"] == Rs["abas"]["prioridades"] - 3, f"{Rs['abas']['prioridades']} -> {Rg['abas']['prioridades']}")
+        # 4) mover: só admin, pela rota de mover de sempre, simulação antes
+        ra = ana.post("/api/problemas/rapido/mover", json={"ids": [e4], "destino": "F061-P0082", "simular": True})
+        ver("mover sem permissão (operador) é recusado (403), como a rota de mover", ra.status_code == 403, ra.text[:120])
+        rs_ = ivo.post("/api/problemas/rapido/mover", json={"ids": [e4], "destino": "F061-P0082"})
+        ver("mover: o padrão é SIMULAR (mostra o código novo) e nada muda", rs_.status_code == 200 and rs_.json().get("simulado") is True
+            and (rs_.json().get("movidos") or [{}])[0].get("para", "").startswith("F061-P0082-") and c.execute("SELECT 1 FROM item WHERE codigo=?", (F(4),)).fetchone()
+            and E(e4)["situacao"] == "aberto", rs_.text[:200])
+        rm_ = ivo.post("/api/problemas/rapido/mover", json={"ids": [e4], "destino": "F061-P0082", "simular": False})
+        novo4 = ((rm_.json().get("movidos") or [{}])[0]).get("para")
+        e_ = E(e4)
+        ev_m = c.execute("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='folha_movida'", (novo4 or "",)).fetchone()
+        ver("mover de verdade pela rota de sempre (evento folha_movida) e o problema Resolvido com o modelo 'Movida para o projeto certo' por quem moveu",
+            rm_.status_code == 200 and novo4 and ev_m and c.execute("SELECT projeto_codigo FROM item WHERE codigo=?", (novo4,)).fetchone()[0] == "F061-P0082"
+            and e_["situacao"] == "corrigido" and e_["fase"] == "resolvido" and e_["fechado_por"] == "ivo@camp.arq.br" and e_["resolucao"].startswith("A folha foi movida"),
+            rm_.text[:200] + str(dict(e_))[:200])
+        ver("mover: conta ponto para quem moveu", f"erro:{e4}" in pontos("ivo@camp.arq.br"), "")
+        tk = rm_.json().get("desfazer")
+        ver("Desfazer do mover pela rota antiga é recusado (a folha tem de voltar pela rota de mover)", ana.post(f"/api/erros/desfazer/{tk}").status_code in (403, 409), "")
+        ver("Desfazer do mover por operador é recusado (mover é de admin)", ana.post(f"/api/problemas/rapido/desfazer/{tk}", json={"simular": True}).status_code == 403, "")
+        us = ivo.post(f"/api/problemas/rapido/desfazer/{tk}", json={"simular": True})
+        ver("Desfazer do mover: primeiro a simulação (para onde a folha volta) e nada muda", us.status_code == 200 and us.json().get("simulado") is True
+            and (us.json().get("voltam") or [{}])[0].get("para", "").startswith("F061-P0081-") and c.execute("SELECT 1 FROM item WHERE codigo=?", (novo4,)).fetchone(), us.text[:200])
+        uv = ivo.post(f"/api/problemas/rapido/desfazer/{tk}", json={"simular": False})
+        e_ = E(e4)
+        ver("Desfazer do mover: a folha volta para o projeto de origem e o problema reabre seguindo a folha", uv.status_code == 200 and e_["situacao"] == "aberto"
+            and str(e_["codigo"]).startswith("F061-P0081-") and c.execute("SELECT projeto_codigo FROM item WHERE codigo=?", (e_["codigo"],)).fetchone()[0] == "F061-P0081", uv.text[:200] + str(dict(e_))[:200])
+        ana.get("/api/problemas?aba=todos")          # o fechamento automático roda ao listar
+        ver("o problema reaberto não fecha sozinho pelo mover do Desfazer; o ponto sumiu", E(e4)["situacao"] == "aberto" and f"erro:{e4}" not in pontos("ivo@camp.arq.br"), str(dict(E(e4)))[:200])
+        # 5) duplicata: É a mesma folha / São diferentes
+        rd = R(ana, ids=[e5], acao="mesma_folha")
+        it5 = c.execute("SELECT duplicata_de, duplicata_conferida_por FROM item WHERE codigo=?", (F(5),)).fetchone()
+        ver("É a mesma folha: marcada como cópia (conferida por quem fez) e Resolvido com o modelo 'Marcada como cópia'", rd.status_code == 200 and it5["duplicata_de"] == F(6)
+            and it5["duplicata_conferida_por"] == "ana@camp.arq.br" and E(e5)["fase"] == "resolvido" and E(e5)["resolucao"].startswith("A folha foi marcada como cópia"), rd.text[:200])
+        ana.post(f"/api/problemas/rapido/desfazer/{rd.json().get('desfazer')}")
+        it5 = c.execute("SELECT duplicata_conferida_por FROM item WHERE codigo=?", (F(5),)).fetchone()
+        ver("Desfazer da duplicata: a marca de conferida sai e o problema reabre", it5[0] is None and E(e5)["situacao"] == "aberto", str(tuple(it5)))
+        rdf = R(ana, ids=[e5], acao="diferentes")
+        ver("São diferentes: a folha deixa de ser cópia e o problema Resolvido com 'Não é repetida'", rdf.status_code == 200 and c.execute("SELECT duplicata_de FROM item WHERE codigo=?", (F(5),)).fetchone()[0] is None
+            and E(e5)["resolucao"].startswith("Conferido lado a lado"), rdf.text[:200])
+        # 6) dado simples: campo + Salvar pela rota de editar a folha
+        x6 = next((x for x in ana.get("/api/problemas?aba=todos&por_pagina=50").json()["itens"] if x["id"] == e6), {})
+        ver("dado simples: 'sem data' pede o ano da folha na linha", (x6.get("rapido") or {}).get("campo") == "ano_folha", str(x6.get("rapido")))
+        rmd0 = R(ana, ids=[e6], acao="metadado", valor="71")
+        rmd = R(ana, ids=[e6], acao="metadado", valor="1971")
+        ver("dado simples: ano inválido recusado; 1971 grava na folha e resolve com 'Dado corrigido … Ano da folha: 1971'", rmd0.status_code == 400 and rmd.status_code == 200
+            and c.execute("SELECT ano_folha FROM item WHERE codigo=?", (F(6),)).fetchone()[0] == 1971 and "1971" in E(e6)["resolucao"], rmd.text[:200])
+        ana.post(f"/api/problemas/rapido/desfazer/{rmd.json().get('desfazer')}")
+        ver("Desfazer do dado: o ano volta a vazio e o problema reabre", c.execute("SELECT ano_folha FROM item WHERE codigo=?", (F(6),)).fetchone()[0] is None and E(e6)["situacao"] == "aberto", "")
+        # 7) sensível e "Não é problema"
+        rs7 = R(ana, ids=[e7], acao="nao_e_problema", motivo="ja_certo")
+        ver("tipo sensível (autoria) recusa a resolução rápida (409) e nada muda", rs7.status_code == 409 and E(e7)["situacao"] == "aberto", rs7.text[:160])
+        rn = R(ana, ids=[e8], acao="nao_e_problema", motivo="sem_efeito")
+        ver("Não é problema: Inválido com o motivo pronto, sem ponto", rn.status_code == 200 and E(e8)["situacao"] == "ignorado" and E(e8)["fase"] == "invalido"
+            and E(e8)["resolucao"].startswith("Conferido na lista") and f"erro:{e8}" not in pontos("ana@camp.arq.br"), rn.text[:200])
+        ver("leitura não faz ação rápida (403)", R(leo, ids=[g1], acao="deste_projeto").status_code == 403, "")
+        # 8) revisão por outra pessoa ligada: 'folha de outro projeto' passa a ser sensível (sem atalho)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='problemas.revisao_outra_pessoa'"); c.commit()
+        rv = R(ana, ids=[g1], acao="deste_projeto")
+        ver("com a revisão por outra pessoa ligada, 'folha de outro projeto' não se resolve na linha (409)", rv.status_code == 409 and E(g1)["situacao"] == "aberto", rv.text[:160])
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='problemas.revisao_outra_pessoa'"); c.commit()
+        # 9) grupo misto: o que não vale fica de fora, com o porquê
+        rmix = R(ana, ids=[g1, g2, e7], acao="deste_projeto")
+        ver("grupo misto: resolve os que valem e diz por que pulou o resto", rmix.status_code == 200 and sorted(rmix.json()["resolvidos"]) == sorted([g1, g2])
+            and [p["id"] for p in rmix.json()["pulados"]] == [e7], rmix.text[:240])
+        # 10) Atividade recente: nunca o código interno do evento
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('erro', ?, 'fechado_na_conferencia', 'ana@camp.arq.br')", (str(g3),))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('erro', ?, 'tipo_que_ninguem_conhece', 'ana@camp.arq.br')", (str(g3),)); c.commit()
+        at = ana.get("/api/problemas/progresso").json().get("atividade", [])
+        ver("Atividade recente: 'fechado_na_conferencia' vira 'Resolvido na conferência' e nenhum título ou texto tem código interno",
+            any(a["titulo"] == "Resolvido na conferência" for a in at) and not any("_" in (a["titulo"] + a["texto"]) for a in at), str([(a["titulo"], a["texto"]) for a in at])[:300])
+        for l in res: print(l)
     elif modo == "material_novo_filas":
         # Redesenho Material novo (documento do Rafael §5, §7, §12): /api/filas ganha campos OPCIONAIS para a linha — a autoria SÓ a registrada
         # no projeto (nunca o fundo como autor), a miniatura SÓ de folha real do próprio lote (com imagem; nunca retida; sem folha = capa do
@@ -22471,6 +22636,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Central de Problemas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-PROB-RAPIDO: decisões rápidas na lista de Problemas (modelo de decisão, pontos, Desfazer, mover pela rota de sempre, grupos)")
+rc, out = rodar("problemas_rapido", f"{tmp}/problemas_rapido.db")
+if rc != 0: ok(False, f"teste problemas_rapido não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Problemas rápidos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Redesenho Material novo: campos opcionais de /api/filas (autoria registrada, miniatura real, ?leve=1)")
 rc, out = rodar("material_novo_filas", f"{tmp}/material_novo_filas.db")
