@@ -2578,16 +2578,17 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
   .cp-linha .cp-sev-tag{justify-self:start}
   .cp-linha .cp-acoes{justify-content:flex-end}
   .cp-graficos{grid-template-columns:minmax(0,1fr)}
-  .cp-rap{grid-template-columns:56px minmax(0,1fr)}.cp-rap-bts{grid-column:1/-1}.cp-rap-mini{width:56px;height:56px}
+  .cp-rap{grid-template-columns:56px minmax(0,1fr)}.cp-rap>.cp-rap-mini{grid-row:auto}.cp-rap-bts{grid-column:1/-1}.cp-rap-mini{width:56px;height:56px}
 }
 /* CAMP-PROB-RAPIDO (22/11/2026): decisões rápidas na linha, grupos, "Resolver em sequência" */
-.cp-rap{grid-column:1/-1;display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:6px 12px;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;cursor:default}
+.cp-rap{grid-column:1/-1;display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px 12px;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;cursor:default}
+.cp-rap>.cp-rap-mini,.cp-rap>.cp-g-thumbs{grid-row:span 2}
 .cp-rap-mini{width:72px;height:72px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2);display:block}
 .cp-rap-sem{display:grid;place-items:center;color:var(--ink3);font-size:var(--fs-2xs);text-align:center}
 .cp-rap-txt{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-md);min-width:0}
 .cp-rap-txt>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-rap-txt small{color:var(--ink2)}
-.cp-rap-bts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.cp-rap-bts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .cp-rap-bts input{width:110px}
 .cp-rap-conf{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface2);border-radius:var(--r);padding:8px 10px;font-size:var(--fs-md)}
 .cp-rap-conf[hidden]{display:none}
@@ -2595,7 +2596,10 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .cp-rap-busca{display:flex;flex-direction:column;gap:6px;flex:1 1 260px;min-width:0}
 .cp-rap-res{display:flex;flex-wrap:wrap;gap:6px}
 .cp-rap-res .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cp-grupo{cursor:default}
+.cp-linha.cp-grupo{cursor:default;grid-template-columns:16px 38px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo sev" "sel ic acoes acoes"}
+.cp-linha.cp-grupo .cp-sel{grid-area:sel}.cp-linha.cp-grupo .cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo .cp-corpo{grid-area:corpo}.cp-linha.cp-grupo .cp-sev-tag{grid-area:sev;align-self:start}
+.cp-linha.cp-grupo .cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo .cp-meta{flex-wrap:wrap}
+@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo .cp-sel{display:none}.cp-linha.cp-grupo .cp-sev-tag{justify-self:start}}
 .cp-grupo .cp-tit b{overflow-wrap:anywhere}
 .cp-g-thumbs{display:flex;gap:6px;overflow:hidden;margin-top:4px}
 .cp-g-thumbs img,.cp-g-thumbs .cp-rap-sem{width:44px;height:44px;flex:0 0 44px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2)}
@@ -10615,9 +10619,8 @@ function cpGrupoHTML(g){const sev=g.severidade||'medio',r=g.rapido||{},adm=cpAdm
   return `<div class="cp-linha cp-grupo sev-${sev}" role="listitem" data-cp-grupo="${id}">
     <span class="cp-sel"></span><span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(cpProjNome(g))} · <span data-cp-gtit>${escHtml(tit)}</span></b></div>
-      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
+      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}<span>${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span>${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
       <div class="cp-g-thumbs">${thumbs}</div></div>
-    <div class="cp-quando"><span>${cpIc('cal')}${escHtml('até '+cpDias(g.idade_dias))}</span></div>
     <span class="cp-sev-tag"${pr.razao?` title="${escHtml(pr.razao)}"`:''}>${escHtml(g.severidade_rotulo||'')}</span>
     <div class="cp-acoes">${bts}${mov}<button type="button" class="btn sm lnk" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
     <div class="cp-rap-conf" hidden data-no-nav role="group" aria-label="Confirmar"></div>
