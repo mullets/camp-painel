@@ -1,6 +1,7 @@
 // CAMP-HOME-UX (decisões do Rafael, 22/11/2026) no navegador de verdade (Playwright + Chromium):
 //  1. o Ranking da equipe (mês) aparece LIGADO por padrão na Home (coluna da direita) e em Problemas: posição, nome e pontos do mês,
-//     com o "?" dizendo que não serve para avaliar desempenho;
+//     com o "?" dizendo que não serve para avaliar desempenho; em tom sério (Rafael, 22/11/2026: "é algo bem sério"): uma TABELA simples
+//     "Pontos validados no mês · equipe" (Posição · Nome · Pontos), sem medalha, troféu nem cor de pódio;
 //  2. um admin desliga em Configurações (a caixa "Mostrar o Ranking da equipe…") e ele some das duas telas; religa e volta;
 //  3. os cartões da Home mostram folhas E lotes: "folhas para conferir" + "em N lotes" e "folhas esperam um admin" + "em N lotes: …",
 //     com os números da rota (/api/pendencias); "folhas conferidas hoje" continua em folhas.
@@ -46,10 +47,13 @@ if not con.execute("SELECT 1 FROM lista_processamento WHERE nome='[home-decisoes
     chk(Array.isArray(pg.equipe) && pg.equipe.length >= 2 && pg.equipe_periodo === 'mes', `ranking ligado por padrão: o servidor manda o ranking do mês (${JSON.stringify(pg.equipe)})`);
     const rh = await P.evaluate(() => { const r = document.getElementById('ini-ranking'); if (!r) return null; const b = r.getBoundingClientRect();
       return { t: r.querySelector('h3').textContent.replace(/\s+/g, ' ').trim(), vis: b.width > 0 && b.height > 0, col: !!r.closest('.ini-col:not(.ini-col-princ), aside, .ini-lado') || !r.closest('.ini-col-princ'),
-        li: [...r.querySelectorAll('ol.cp-rank li')].map(li => ({ n: li.querySelector('.cp-rank-n').textContent.trim(), nome: li.children[1].textContent.trim(), pts: li.querySelector('b').textContent.trim() })) }; });
-    chk(rh && rh.vis && rh.t === 'Ranking da equipe (mês)', `Home: o cartão "Ranking da equipe (mês)" aparece (${rh && rh.t})`);
+        cab: [...r.querySelectorAll('table.rank-tab thead th')].map(th => th.textContent.trim()), arte: r.querySelectorAll('svg, img, [class*="medal"], [class*="trof"], .cp-rank-n').length,
+        cores: [...new Set([...r.querySelectorAll('table.rank-tab tbody td')].map(td => getComputedStyle(td).backgroundColor + '/' + getComputedStyle(td).color))],
+        li: [...r.querySelectorAll('table.rank-tab tbody tr')].map(tr => ({ n: tr.children[0].textContent.trim(), nome: tr.children[1].textContent.trim(), pts: tr.children[2].textContent.trim() })) }; });
+    chk(rh && rh.vis && rh.t === 'Pontos validados no mês · equipe', `Home: o cartão do ranking aparece com o título "Pontos validados no mês · equipe" (${rh && rh.t})`);
+    chk(rh && JSON.stringify(rh.cab) === '["Posição","Nome","Pontos"]' && rh.arte === 0 && rh.cores.length <= 2, `Home: o ranking é uma tabela simples (Posição · Nome · Pontos), sem medalha nem cor de pódio ${JSON.stringify(rh && { cab: rh.cab, arte: rh.arte, cores: rh.cores })}`);
     chk(rh && rh.col, 'Home: o ranking fica na coluna da direita (fora da coluna principal)');
-    chk(rh && rh.li.length === pg.equipe.length && rh.li.every((x, i) => x.n === String(i + 1) && x.nome === pg.equipe[i].nome && x.pts === `${pg.equipe[i].pontos} ${pg.equipe[i].pontos === 1 ? 'ponto' : 'pontos'}`),
+    chk(rh && rh.li.length === pg.equipe.length && rh.li.every((x, i) => x.n === String(i + 1) && x.nome === pg.equipe[i].nome && x.pts === pg.equipe[i].pontos.toLocaleString('pt-BR')),
       `Home: posição, nome e pontos do mês, na ordem do servidor (${JSON.stringify(rh && rh.li)})`);
     if (await P.$('#ini-ranking .rank-q > summary')) await P.click('#ini-ranking .rank-q > summary');
     const qh = await P.evaluate(() => { const d = document.querySelector('#ini-ranking .rank-q'); const n = d && d.querySelector('[role=note]'); return { open: !!(d && d.open), vis: !!n && n.getBoundingClientRect().height > 0, t: n ? n.textContent : '' }; });
@@ -71,8 +75,8 @@ if not con.execute("SELECT 1 FROM lista_processamento WHERE nome='[home-decisoes
     chk(!ks.decisoes || /decis/.test(ks.decisoes.l), 'Decisões continuam decisões (quando há)');
     // ---------- 1. o mesmo ranking em Problemas ----------
     await problemasTela();
-    const rp = await P.evaluate(() => { const r = document.getElementById('cp-ranking'); if (!r) return null; return { t: r.querySelector('h2').textContent.replace(/\s+/g, ' ').trim(), nomes: [...r.querySelectorAll('ol.cp-rank li')].map(li => li.children[1].textContent.trim()), aviso: !!r.querySelector('.rank-q') }; });
-    chk(rp && /Ranking da equipe \(mês\)$/.test(rp.t) && JSON.stringify(rp.nomes) === JSON.stringify(pg.equipe.map(x => x.nome)), `Problemas: o card "Ranking da equipe (mês)" com as mesmas pessoas, na mesma ordem (${JSON.stringify(rp)})`);
+    const rp = await P.evaluate(() => { const r = document.getElementById('cp-ranking'); if (!r) return null; return { t: r.querySelector('h2').textContent.replace(/\s+/g, ' ').trim(), nomes: [...r.querySelectorAll('table.rank-tab tbody tr')].map(tr => tr.children[1].textContent.trim()), aviso: !!r.querySelector('.rank-q'), arte: r.querySelectorAll('svg:not(.rank-q svg), img, .cp-rank-n').length }; });
+    chk(rp && rp.t === 'Pontos validados no mês · equipe' && rp.arte === 0 && JSON.stringify(rp.nomes) === JSON.stringify(pg.equipe.map(x => x.nome)), `Problemas: a mesma tabela "Pontos validados no mês · equipe" (sem troféu), com as mesmas pessoas, na mesma ordem (${JSON.stringify(rp)})`);
     if (await P.$('#cp-ranking .rank-q > summary')) await P.click('#cp-ranking .rank-q > summary');
     chk(await P.evaluate(() => { const n = document.querySelector('#cp-ranking .rank-q [role=note]'); return !!n && /não serve para avaliar desempenho/.test(n.textContent); }), 'Problemas: o "?" do ranking diz que não serve para avaliar desempenho');
     // ---------- 2. um admin desliga em Configurações ----------

@@ -6,15 +6,18 @@
 //  - cada linha com prioridade + o porquê, miniatura, responsável e UM botão principal;
 //  - gargalo do caminho pela espera acumulada (amarelo, com "aguardando há");
 //  - sistemas: uma linha verde quando tudo está normal; o que falha aparece aberto;
-//  - nível e conquistas com "Ocultar conquistas"; o Ranking da equipe (mês) ligado por padrão (decisão do Rafael, 22/11/2026);
+//  - "Seu trabalho" e "Marcos" com "Ocultar"; o Ranking da equipe (mês) ligado por padrão (decisão do Rafael, 22/11/2026);
 //  - a barra do topo é a MESMA do main (marcação idêntica, mesmos ids); 390 px sem rolagem lateral; nenhum erro de JavaScript.
 // CAMP-HOME-UX maquete (22/11/2026, "tá faltando um monte de elemento"): a mesma Home no desenho da maquete do Rafael — "Entenda esta página"
 //  fechada numa linha; indicadores com ícone; linha da fila curta ("Há 19 dias", a frase da prioridade na dica); caminho em 7 cartões LADO A
-//  LADO com ✓ verde no que está zerado; coluna da direita na ordem da maquete (nível azul-marinho, 3 selos, sistemas com "Online", qualidade,
+//  LADO com ✓ verde no que está zerado; coluna da direita na ordem da maquete (o nível azul-marinho e os 3 selos saíram em 22/11: tom sério; sistemas com "Online", qualidade,
 //  donut do site, melhorias de hoje); visitas sem dados = aviso compacto.
 // CAMP-HOME-UX (Rafael, 22/11/2026: "meta da semana tá meio jogado aí"): a meta da semana da equipe sai do cabeçalho e vira a 2ª seção do
 //  cartão azul-marinho do nível, na coluna da direita (barra verde, legível no claro e no escuro, admin muda a meta ali); o cabeçalho fica só
 //  com a saudação e o "?" na mesma linha; com o jogo desligado, somem a meta e o nível.
+// CAMP-HOME-UX (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): sem nível, XP, título, medalha, selo
+//  nem cor de jogo. A coluna da direita tem o cartão branco "Seu trabalho" (pontos validados na semana e no mês + a meta da equipe na barra
+//  padrão), "Marcos" em texto (com data) e o ranking numa tabela simples; o topo não muda.
 // Uso (servidor PRÓPRIO, porta 8931):
 //   CAMP_DB_PATH=/dev/shm/t/h.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/dev/shm/t/h.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8931)
@@ -79,25 +82,25 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
       const [r, g, b] = v.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
     const contraste = (a, b) => { const [x, y] = [lumi(a), lumi(b)].sort((p, q) => q - p); return (x + .05) / (y + .05); };
     const metaNo = async () => P.evaluate(() => { const r = e => e && e.getBoundingClientRect(), h = document.querySelector('#v-painel .ini-hello'), q = h && h.querySelector('.ini-q'), hp = h && h.querySelector('.ini-hello-p');
-      const m = document.querySelector('#ini-meta'), nc = m && m.closest('.ini-nivel-card'), cor = s => { const e = m && m.querySelector(s); return e ? getComputedStyle(e).color : null; };
-      return { naCartao: !!document.querySelector('.ini-lateral #ini-jogo .ini-nivel-card #ini-meta'), depoisDoXp: !!(nc && nc.querySelector('.ini-nivel-c .ini-nivel-bar') && m.previousElementSibling && m.previousElementSibling.matches('.ini-nivel-c') && !nc.querySelector('.ini-conq-card, .ini-selos') && m.parentElement === nc),
-        txt: m ? m.innerText.replace(/\s+/g, ' ') : '', soltaNoTopo: !!(h && h.querySelector('#ini-meta, .ini-meta, .ini-meta-card')) || [...document.querySelectorAll('#v-painel .ini-meta-card, #v-painel .ini-meta')].some(x => !x.closest('.ini-lateral')),
+      const m = document.querySelector('#ini-meta'), card = m && m.closest('#ini-trabalho'), cor = s => { const e = m && m.querySelector(s); return e ? getComputedStyle(e).color : null; };
+      return { naCartao: !!document.querySelector('.ini-lateral #ini-jogo #ini-trabalho #ini-meta'), depoisDosNumeros: !!(card && card.querySelector('.trab-n') && m.previousElementSibling && m.previousElementSibling.matches('.trab-n')),
+        tit: card ? (card.querySelector('h3') || {}).textContent : null, txt: m ? m.innerText.replace(/\s+/g, ' ') : '', soltaNoTopo: !!(h && h.querySelector('#ini-meta, .ini-meta, .ini-meta-card')) || [...document.querySelectorAll('#v-painel .ini-meta-card, #v-painel .ini-meta')].some(x => !x.closest('.ini-lateral')),
         q: q && hp ? { pai: q.parentElement === h, vizinho: q.previousElementSibling === hp, centro: Math.abs((r(q).top + r(q).bottom) / 2 - (r(hp).top + r(hp).bottom) / 2), dir: Math.round(r(h).right - r(q).right), filhos: h.children.length } : null,
-        barra: m && m.querySelector('.ini-meta-bar i') ? getComputedStyle(m.querySelector('.ini-meta-bar i')).backgroundColor : null, xp: nc && nc.querySelector('.ini-nivel-bar i') ? getComputedStyle(nc.querySelector('.ini-nivel-bar i')).backgroundColor : null,
-        fundo: nc ? getComputedStyle(nc).backgroundColor : null, cores: { t: cor('.ini-meta-t'), n: cor('.ini-meta-n'), pct: cor('.ini-meta-pct'), link: cor('.ini-meta-mais > summary') },
+        barra: m && m.querySelector('.ini-meta-bar i') ? getComputedStyle(m.querySelector('.ini-meta-bar i')).backgroundColor : null, barraPadrao: (() => { const t = document.createElement('div'); t.className = 'ini-bar'; t.innerHTML = '<i></i>'; document.body.appendChild(t); const c = getComputedStyle(t.firstChild).backgroundColor; t.remove(); return c; })(),
+        fundo: card ? getComputedStyle(card).backgroundColor : null, superficie: getComputedStyle(document.body).getPropertyValue('--surface').trim(), cores: { t: cor('.ini-meta-t'), n: cor('.ini-meta-n'), link: cor('.ini-meta-mais > summary') },
         kpiGap: Math.round(r(document.querySelector('#v-painel .ini-kpis')).top - r(h).bottom), form: !!(m && m.querySelector('[data-ini-meta-form]')) }; });
     for (const tema of ['light', 'dark']) {
       await P.emulateMedia({ colorScheme: tema }); await P.waitForTimeout(250);
       const mt = await metaNo();
       if (tema === 'light') {
-        chk(mt.naCartao && mt.depoisDoXp && /Meta da semana · equipe/.test(mt.txt) && /de 100 pontos validados/.test(mt.txt) && /\d+%/.test(mt.txt) && /Como conta\?/.test(mt.txt), `a meta da semana é a 2ª seção do cartão do nível, abaixo do XP, na coluna da direita: ${JSON.stringify(mt.txt)}`);
+        chk(mt.naCartao && mt.depoisDosNumeros && mt.tit === 'Seu trabalho' && /Meta da semana · equipe/.test(mt.txt) && /\d+ de 100 pontos validados \(\d+%\)/.test(mt.txt) && /Como conta\?/.test(mt.txt), `a meta da semana fica no cartão "Seu trabalho", abaixo dos pontos da semana e do mês: ${JSON.stringify([mt.tit, mt.txt])}`);
         chk(!mt.soltaNoTopo, 'nenhum cartão de meta solto no cabeçalho');
         chk(mt.q && mt.q.pai && mt.q.vizinho && mt.q.filhos === 2 && mt.q.centro <= 4 && mt.q.dir <= 2, `cabeçalho = saudação + "?" na mesma linha, o "?" à direita: ${JSON.stringify(mt.q)}`);
         chk(mt.form, 'admin muda a meta ali mesmo (Nova meta / Salvar a meta)');
-        chk(mt.barra && mt.xp && mt.barra !== mt.xp && /^rgb\(\d+, (1[5-9]\d|2\d\d)/.test(mt.barra), `barra da meta verde, diferente da barra do XP: ${mt.barra} × ${mt.xp}`);
+        chk(mt.barra && mt.barra === mt.barraPadrao && mt.fundo === 'rgb(255, 255, 255)', `cartão branco como os outros e a barra da meta na cor padrão do painel (nada de verde ou dourado de jogo): ${mt.barra} × ${mt.barraPadrao}, fundo ${mt.fundo}`);
       }
       const ruins = Object.entries(mt.cores).filter(([, c]) => !c || contraste(c, mt.fundo) < 4.5).map(([k, c]) => `${k}=${c} (${c ? contraste(c, mt.fundo).toFixed(1) : '-'})`);
-      chk(!ruins.length, `${tema}: textos da meta legíveis no azul-marinho (contraste ≥ 4,5) ${ruins.join(', ')} fundo=${mt.fundo}`);
+      chk(!ruins.length, `${tema}: textos da meta legíveis no cartão (contraste ≥ 4,5) ${ruins.join(', ')} fundo=${mt.fundo}`);
     }
     await P.emulateMedia({ colorScheme: 'light' });
     // admin muda a meta no cartão
@@ -107,20 +110,23 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     // jogo desligado: somem a meta e o nível
     py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','0')\")");
     await abrirHome(P);
-    const off = await P.evaluate(() => ({ meta: !!document.querySelector('#ini-meta'), nivel: !!document.querySelector('.ini-nivel-card'), jogoOculto: document.getElementById('ini-jogo').hidden }));
-    chk(!off.meta && !off.nivel && off.jogoOculto, `jogo desligado: sem meta e sem cartão do nível ${JSON.stringify(off)}`);
+    const off = await P.evaluate(() => ({ meta: !!document.querySelector('#ini-meta'), trab: !!document.querySelector('#ini-trabalho'), marcos: !!document.querySelector('#ini-marcos'), jogoOculto: document.getElementById('ini-jogo').hidden }));
+    chk(!off.meta && !off.trab && !off.marcos && off.jogoOculto, `jogo desligado: sem "Seu trabalho", sem meta e sem "Marcos" ${JSON.stringify(off)}`);
     py("con.execute(\"INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('jogo.ligado','1')\")");
     await abrirHome(P);
-    // ---------- maquete: ajuda fechada, ícones, caminho horizontal, donut, selos, nível ----------
+    // ---------- maquete: ajuda fechada, ícones, caminho horizontal, donut, Seu trabalho, Marcos, ranking ----------
     const mq = await P.evaluate(() => { const r = e => e.getBoundingClientRect(), aj = document.querySelector('#v-painel > .ajuda-caixa');
       const passos = [...document.querySelectorAll('#ini-caminho .ini-step')].map(b => { const x = r(b); return [Math.round(x.top), Math.round(x.width)]; });
-      const nc = document.querySelector('#ini-jogo .ini-nivel-card');
       return { aj: aj ? { rec: aj.classList.contains('ajuda-recolhida'), open: aj.open, alt: Math.round(r(aj).height) } : null,
         icones: [...document.querySelectorAll('#v-painel .ini-kpi .ini-kpi-ic svg')].length, kpiTop: [...new Set([...document.querySelectorAll('#v-painel .ini-kpi')].map(k => Math.round(r(k).top)))].length,
         passos, ok: [...document.querySelectorAll('#ini-caminho .ini-passo')].map(l => [l.classList.contains('zero'), !!l.querySelector('.ini-passo-ok svg')]),
         donut: (() => { const d = document.querySelector('#ini-cobertura [data-cob="folhas"].ini-donut-row'); return d ? { pct: +d.dataset.pct, txt: d.querySelector('.ini-cob-pct').textContent, n: d.querySelector('.ini-cob-n').textContent, leg: [...d.querySelectorAll('.ini-donut-leg li')].map(x => x.textContent.trim()), arcos: d.querySelectorAll('circle.ini-donut-s').length } : null; })(),
-        selos: [...document.querySelectorAll('#ini-jogo .ini-selos .ini-selo')].map(x => x.textContent.trim().replace(/\s+/g, ' ')),
-        nivel: nc ? { fundo: getComputedStyle(nc).backgroundColor, txt: nc.innerText } : null,
+        trab: (() => { const t = document.querySelector('#ini-jogo #ini-trabalho'); return t ? { txt: t.innerText.replace(/\s+/g, ' '), dd: [...t.querySelectorAll('.trab-n dd')].map(x => x.textContent.trim()) } : null; })(),
+        marcos: (() => { const m = document.querySelector('#ini-jogo #ini-marcos'); return m ? { tit: m.querySelector('h3').textContent, tot: (m.querySelector('.marcos-tot') || {}).textContent || '', li: [...m.querySelectorAll(':scope > .marcos-l li')].map(x => x.innerText.replace(/\s+/g, ' ')), arte: m.querySelectorAll('svg, img, [class*="selo"], [class*="badge"], [class*="ic"]').length, ocultar: (m.querySelector('[data-ini-conquistas="1"]') || {}).textContent || '' } : null; })(),
+        rank: (() => { const r = document.querySelector('#ini-jogo #ini-ranking'); return r ? { tit: r.querySelector('h3').textContent.replace(/\s+/g, ' ').trim(), tabela: !!r.querySelector('table.rank-tab') || /Ninguém pontuou neste mês ainda/.test(r.textContent), arte: r.querySelectorAll('svg:not(.rank-q svg), img, [class*="medal"], [class*="trof"]').length,
+          cores: [...new Set([...r.querySelectorAll('tbody td')].map(td => getComputedStyle(td).backgroundColor))] } : null; })(),
+        arte: [...document.querySelectorAll('#ini-jogo svg, #ini-jogo img')].filter(x => !x.closest('.ini-meta-mais, .rank-q')).length,
+        jogoTxt: document.getElementById('ini-jogo').innerText,
         mh: document.querySelector('#ini-melhorias #ini-mh-hoje') ? document.querySelector('#ini-melhorias #ini-mh-hoje').innerText : null,
         ordemNaAba: !!document.querySelector('#ini-tarefas .ini-abas-linha #ini-ordem'),
         abaAtiva: getComputedStyle(document.querySelector('#ini-tarefas .ini-abas [aria-pressed="true"]')).backgroundColor,
@@ -134,10 +140,14 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     const pctEsp = 100 * ns0.no_ar / ns0.total;
     chk(mq.donut && Math.abs(mq.donut.pct - pctEsp) < .01 && mq.donut.n.includes(`${ns0.no_ar.toLocaleString('pt-BR')} de ${ns0.total.toLocaleString('pt-BR')} folhas publicadas`) && mq.donut.leg.length === 3 && /^No site/.test(mq.donut.leg[0]) && /^Em preparo/.test(mq.donut.leg[1]) && /^A publicar/.test(mq.donut.leg[2])
       && ns0.no_ar + ns0.a_publicar + ns0.em_preparo === ns0.total, `donut do site com o % e "N de M folhas publicadas" no meio e a legenda No site · Em preparo · A publicar ${JSON.stringify([mq.donut, ns0])}`);
-    const ct = pg0.eu.contagens;
-    chk(mq.selos.length === 3 && mq.selos[0].startsWith(String(ct.folha_conferida)) && mq.selos[1].startsWith(String(ct.lote_aprovado)) && mq.selos[2].startsWith(String(pg0.eu.dias_seguidos)) && /folhas? conferidas?/.test(mq.selos[0]) && /lotes? aprovados?/.test(mq.selos[1]),
-      `3 selos com os números de verdade do progresso ${JSON.stringify([mq.selos, ct, pg0.eu.dias_seguidos])}`);
-    chk(mq.nivel && mq.nivel.fundo !== 'rgba(0, 0, 0, 0)' && mq.nivel.fundo !== 'rgb(255, 255, 255)' && new RegExp(`Faltam ${pg0.eu.ate - pg0.eu.xp} XP para o nível ${pg0.eu.nivel + 1}`).test(mq.nivel.txt), `nível num cartão escuro, com "Faltam N XP para o nível N+1" ${JSON.stringify(mq.nivel)}`);
+    const ct = pg0.eu.contagens, sem0 = pg0.eu.pontos_semana != null ? pg0.eu.pontos_semana : pg0.eu.xp_semana;
+    chk(mq.trab && /Pontos validados nesta semana/.test(mq.trab.txt) && /no mês/.test(mq.trab.txt) && mq.trab.dd.length === 2 && +mq.trab.dd[0].replace(/\D/g, '') === sem0 && +mq.trab.dd[1].replace(/\D/g, '') === pg0.eu.pontos_mes,
+      `"Seu trabalho" mostra os pontos validados da semana e do mês (do servidor) ${JSON.stringify([mq.trab, sem0, pg0.eu.pontos_mes])}`);
+    const marcosEsp = (pg0.eu.conquistas || []).filter(c => c.id !== 'semana_consistente');
+    chk(mq.marcos && mq.marcos.tit === 'Marcos' && mq.marcos.arte === 0 && mq.marcos.ocultar === 'Ocultar' && mq.marcos.tot.startsWith(`${ct.folha_conferida.toLocaleString('pt-BR')} folha`) && new RegExp(`${ct.lote_aprovado} lotes? aprovados?`).test(mq.marcos.tot)
+      && mq.marcos.li.length === Math.min(4, marcosEsp.length) && mq.marcos.li.every(l => /\d{2}\/\d{2}$/.test(l)), `"Marcos" em texto, sem ícone, com os totais e as datas ${JSON.stringify(mq.marcos)}`);
+    chk(mq.rank && mq.rank.tit === 'Pontos validados no mês · equipe' && mq.rank.tabela && mq.rank.arte === 0 && mq.rank.cores.length <= 1, `ranking numa tabela simples, sem medalha nem cor de pódio ${JSON.stringify(mq.rank)}`);
+    chk(mq.arte === 0 && !/\bXP\b|Nível|Guardião|Primeiros passos|conquista|sequência/i.test(mq.jogoTxt), `coluna da direita sem arte de jogo e sem "XP"/"Nível"/"Guardião" (${mq.arte} figuras; ${JSON.stringify(mq.jogoTxt.slice(0, 200))})`);
     const fhoje = (pg0.hoje || {}).folha_conferida || 0;
     chk(mq.mh !== null && (fhoje ? new RegExp(`${fhoje} folhas? conferidas?`).test(mq.mh) : /Nenhuma melhoria registrada hoje|edições? na base/.test(mq.mh)), `melhorias de hoje com o que a equipe fez hoje (${JSON.stringify(mq.mh)}, hoje=${fhoje})`);
     chk(mq.ordemNaAba && mq.abaAtiva !== 'rgba(0, 0, 0, 0)', `"Ordenar" na linha das abas; a aba ativa tem fundo azul-claro (${mq.abaAtiva})`);
@@ -212,13 +222,13 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     chk(saude.r1.vis === 4 && saude.r1.online === 4 && saude.r1.frases === 0 && saude.r1.alt < 170, `tudo normal: uma linha por sistema com ✓ e "Online", sem frase (na dica): ${JSON.stringify(saude.r1)}`);
     chk(JSON.stringify(saude.r2.vis) === '["qnap","site"]' && saude.r2.frase && saude.r2.pill === 'crítico', `com falha: o que falha vem primeiro, com o selo e a frase: ${JSON.stringify(saude.r2)}`);
 
-    // ---------- progresso e conquistas ----------
-    chk(/Meta da semana/.test(await P.innerText('#ini-jogo #ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), 'meta coletiva da semana no cartão do nível ("de 100 pontos validados")');
-    chk(/Nível 1/.test(await P.innerText('#ini-jogo')) && /XP/.test(await P.innerText('#ini-jogo')) && !!(await P.$('#ini-jogo #ini-ranking')), 'nível pessoal com XP; Ranking da equipe (mês) ligado por padrão');
-    await P.click('#ini-jogo .ini-conq-todas > summary'); await P.click('#ini-jogo [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
-    chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !/Nível 1/.test(await P.innerText('#ini-jogo')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), '"Ocultar conquistas" esconde o nível e as conquistas; a meta da equipe continua na coluna');
+    // ---------- seu trabalho e marcos ----------
+    chk(/Meta da semana/.test(await P.innerText('#ini-jogo #ini-meta')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), 'meta coletiva da semana no cartão "Seu trabalho" ("de 100 pontos validados")');
+    chk(!!(await P.$('#ini-jogo #ini-marcos')) && !!(await P.$('#ini-jogo #ini-ranking')), '"Marcos" e o Ranking da equipe (mês) ligados por padrão');
+    await P.click('#ini-jogo #ini-marcos [data-ini-conquistas="1"]'); await P.waitForTimeout(1200);
+    chk(/ocultou/.test(await P.innerText('#ini-jogo')) && !(await P.$('#ini-jogo #ini-marcos')) && !(await P.$('#ini-jogo .trab-n')) && /de 100 pontos validados/.test(await P.innerText('#ini-jogo #ini-meta')), '"Ocultar" esconde os pontos e os marcos da pessoa; a meta da equipe continua na coluna');
     await P.click('#ini-jogo [data-ini-conquistas="0"]'); await P.waitForTimeout(1200);
-    chk(/Nível 1/.test(await P.innerText('#ini-jogo')), '"Mostrar de novo" traz de volta');
+    chk(!!(await P.$('#ini-jogo #ini-marcos')) && !!(await P.$('#ini-jogo .trab-n')), '"Mostrar de novo" traz de volta');
 
     // ---------- Resultados: período comum ----------
     const pedRitmo = []; P.on('request', r => { if (/\/api\/painel\/ritmo\?dias=30/.test(r.url())) pedRitmo.push(1); });
@@ -238,7 +248,7 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     if (le) {
       await abrirHome(le.page);
       chk(!(await le.page.$('#ini-tarefas [data-ini-aba="minha"]')) && !(await le.page.$('#ini-lista .ini-ignorar')) && !(await le.page.$('#ini-lista [data-ini-acao]')), 'leitura: sem "Minha fila", sem "⋯" e sem botão de ação');
-      chk(/de \d+ pontos validados/.test(await le.page.innerText('#ini-jogo .ini-nivel-card #ini-meta').catch(() => '')) && !(await le.page.$('#ini-meta [data-ini-meta-form]')) && !(await le.page.$('#v-painel .ini-hello #ini-meta')), 'leitura: a meta da equipe na coluna da direita, sem o formulário de admin');
+      chk(/de \d+ pontos validados/.test(await le.page.innerText('#ini-jogo #ini-trabalho #ini-meta').catch(() => '')) && !(await le.page.$('#ini-meta [data-ini-meta-form]')) && !(await le.page.$('#v-painel .ini-hello #ini-meta')), 'leitura: a meta da equipe na coluna da direita, sem o formulário de admin');
       await le.ctx.close();
     } else chk(true, '(semente sem usuário de leitura: pulado)');
 
@@ -250,9 +260,9 @@ const api = (P, url, op) => P.evaluate(async ([u, o]) => { const r = await fetch
     chk(ov.doc <= 0 && ov.v <= 0 && !ov.largos.length, `390 px: nenhuma rolagem lateral ${JSON.stringify(ov)}`);
     const pilha = await cel.page.evaluate(() => { const a = document.querySelector('.ini-col-princ').getBoundingClientRect(), b = document.querySelector('.ini-lateral').getBoundingClientRect(); return b.top >= a.bottom - 1; });
     chk(pilha, '390 px: a coluna da direita desce para baixo (tudo empilhado)');
-    const cm = await cel.page.evaluate(() => { const r = s => document.querySelector(s).getBoundingClientRect(), q = r('#v-painel .ini-hello .ini-q'), h = r('#v-painel .ini-hello-p'), m = r('#ini-jogo #ini-meta'), x = r('#ini-jogo .ini-nivel-c');
+    const cm = await cel.page.evaluate(() => { const r = s => document.querySelector(s).getBoundingClientRect(), q = r('#v-painel .ini-hello .ini-q'), h = r('#v-painel .ini-hello-p'), m = r('#ini-jogo #ini-meta'), x = r('#ini-jogo .trab-n');
       return { qLinha: q.top < h.bottom && q.bottom > h.top, metaAbaixoXp: m.top >= x.bottom - 1, dentro: m.left >= 0 && m.right <= innerWidth }; });
-    chk(cm.qLinha && cm.metaAbaixoXp && cm.dentro, `390 px: "?" na linha da saudação; a meta logo abaixo do XP, no cartão ${JSON.stringify(cm)}`);
+    chk(cm.qLinha && cm.metaAbaixoXp && cm.dentro, `390 px: "?" na linha da saudação; a meta logo abaixo dos pontos, no cartão ${JSON.stringify(cm)}`);
     await cel.ctx.close();
     chk(!erros.length, 'nenhum erro de JavaScript: ' + erros.slice(0, 5).join(' | '));
   } catch (e) { chk(false, 'exceção: ' + (e && e.stack || e)); }

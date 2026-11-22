@@ -163,10 +163,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   (o que falhou fica até a pessoa fechar). Tudo fica em **Tarefas e avisos recentes** (menu do avatar), com a seção
   **Avisos desta sessão**.
 - Número que ainda está carregando aparece como esqueleto (barra cinza animada), nunca como "0".
-- Cartão de tarefa (27/10): título ("⏳ Publicando F009-P0092"), depois "**começou 15:08 · Rafael**" (o NOME cadastrado, nunca o
+- Cartão de tarefa (27/10): título ("◷ Publicando F009-P0092"), depois "**começou 15:08 · Rafael**" (o NOME cadastrado, nunca o
   e-mail; só a hora quando é hoje, "26/10, 15:08" de outro dia), a etapa atual numa linha própria em destaque ("**Publicando** · 23 s até
   agora") e a lista de passos com a hora ("15:08 · Projeto liberado para publicação"), sem repetir a etapa atual.
-- Mudar a publicação de um projeto ou fundo (Publicar, Voltar para rascunho, Despublicar) é tarefa (15/11): chip "⏳ Despublicando F002-P0147 · 37 de 120 folhas";
+- Mudar a publicação de um projeto ou fundo (Publicar, Voltar para rascunho, Despublicar) é tarefa (15/11): chip "◷ Despublicando F002-P0147 · 37 de 120 folhas";
   o 2º clique diz "Já está rodando: o andamento fica no topo da página."; as que falharam ficam listadas com **Tentar de novo só estas N**.
   Escrita que passa de 1 min sem resposta nunca diz "Tente novamente": "O painel parou de esperar a resposta (mais de 1 min), mas a ação pode continuar no servidor. Não repita agora…".
 - A sincronização automática com o site é do painel ("O painel (automático)"): não aparece em "Suas tarefas" nem no chip do topo.
@@ -250,15 +250,19 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Mais ⋯**: **Contadores por fundo** ("A proporção é sobre as folhas já avaliadas…"; colunas **Abertos**, **Críticos**, **Folhas
   avaliadas**, **Avaliadas com problema**), **Modelos de decisão**, **Mensagens repetidas…**, **Limpeza geral…**. Lote: **Atribuir a**
   (**Ninguém (tirar)**) + **Atribuir**, **Selecionar os N desta página**.
-- Coluna da direita (começa no topo, ao lado do título): **Seu progresso na resolução** (selo hexagonal, **Ver metas**; o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
-  **Mostrar de novo**, a mesma preferência da Home), **Meta da semana** (da equipe, "N de M pontos validados", a mesma da Home),
-  **Conquistas recentes** (**Ver todas**; selos coloridos; as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
-  **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (mês)** (ligado por padrão,
-  decisão do Rafael de 22/11/2026; o mesmo da Home: posição, nome e "N pontos" validados no mês) com o **?** que diz "Pontos validados de cada pessoa
-  neste mês…" e "Reconhecimento, não avaliação: não serve para avaliar desempenho. Nunca use estes números para avaliar ninguém.",
-  **Atividade recente** (ícones: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
-  pessoas, pelo sistema, novos).
-- Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, ranking sem o aviso de que não serve para avaliar desempenho.
+- Coluna da direita (começa no topo, ao lado do título), em tom sério (22/11/2026): **Seu trabalho** (**Ver na Home**; "Pontos validados nesta
+  semana" e "no mês", a **Meta da semana · equipe** — "N de M pontos validados (N%)", a barra padrão do painel, **Como conta?** — e "Equipe nesta
+  semana (dd – dd mês): N problemas corrigidos · N que bloqueavam"; ocultos: "Você ocultou os seus pontos e marcos (vale também na Home)." +
+  **Mostrar de novo**), **Marcos** (texto, sem ícone; **Ocultar**, a mesma preferência da Home; "N folhas conferidas · N lotes aprovados"; os de
+  qualidade da Central, sem pontos: **Primeira resolução validada**, **5 problemas resolvidos com fonte ou evidência**, **3 resoluções de outras
+  pessoas com evidência sua**, **5 revisões aprovadas**, **Um fundo sem problemas abertos** · marco coletivo; os da Home com a data "· da Home dd/mm";
+  os que faltam em cinza com "N de M"), **Pontos validados no mês · equipe** (o Ranking da equipe do mês, ligado por padrão, decisão do Rafael de
+  22/11/2026; tabela **Posição** · **Nome** · **Pontos**, sem cor de pódio) com o **?** que diz "Pontos validados de cada pessoa neste mês…" e
+  "Reconhecimento, não avaliação: não serve para avaliar desempenho. Nunca use estes números para avaliar ninguém.", **Atividade recente** (ícone
+  pequeno e neutro só para o tipo: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos:
+  **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por pessoas, pelo sistema, novos).
+- Nunca: "streak", "dias seguidos", nível, "XP", título de nível ("Guardião do Acervo", "Catalogador"…), medalha, selo, troféu, estrela,
+  medalha por velocidade, percentual sem base, ranking sem o aviso de que não serve para avaliar desempenho.
 - **Decisões rápidas na linha** (CAMP-PROB-RAPIDO, 22/11/2026): "O carimbo diz: …", "Está em: …", "A folha não diz de qual obra é (pasta com várias obras)",
   **É deste projeto**, **Mover para <projeto>**, **Escolher outro projeto…**, **Abrir**, **É a mesma folha**, **São diferentes**, "Parece cópia de …",
   campo + **Salvar**, **Não é problema…** ("Não é problema porque…": **O aviso não muda nada na folha** · **A folha já está certa** · **É o mesmo caso de
@@ -273,6 +277,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   **Passou a aviso**, **Ação desfeita**, **Mensagem repetida juntada**, **Reaberto sozinho**, **Seguiu a folha**; "resolveu na lista: É deste projeto".
 
 ## Regras de texto
+- **Tom sério e profissional** (Rafael, 22/11/2026: "não quero que fique infantil o sistema, tá? é algo bem sério"): nada de nível,
+  "XP", título de nível, medalha, selo, troféu, estrela de prêmio, confete, emoji, "Parabéns" nem frase com exclamação. Confirmação é discreta e
+  com ponto final ("Ficha completa."). Pontos aparecem como "pontos validados"; conquistas são **Marcos**, em texto. Status usa ✓ ✕ ! ou ícone
+  de traço neutro. `scripts/check_ui.py` falha se algo disso voltar.
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".
@@ -430,8 +438,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Home em três partes: Ação, Operação e Resultados (CAMP-HOME-UX, documento do Rafael de 22/11/2026)
 - A barra do topo (busca, área da página, clima, tarefas, estado das máquinas, menu da pessoa) e a faixa do sistema **não mudam**; o menu lateral também não.
 - **Cabeçalho**: a foto (ou as iniciais), a saudação, "N coisas pedem sua atenção hoje", a data e, na mesma linha à direita, o **?**. A
-  **Meta da semana** fica na coluna da direita, no cartão do nível ("**Meta da semana · equipe**", "**N de M pontos validados**", "**N%**",
-  barra com o valor em texto, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
+  **Meta da semana** fica na coluna da direita, no cartão **Seu trabalho** ("**Meta da semana · equipe**", "**N de M pontos validados (N%)**",
+  a barra padrão do painel, "**Como conta?**"; admin: "**Nova meta (pontos)**" + **Salvar a meta**).
 - **Indicadores**: os mesmos 4; todos são botões; o "**?**" e a dica "**Como conta:** …" dizem a regra da contagem. **folhas conferidas hoje**
   leva ao gráfico de Resultados.
 - **O que fazer agora**: abas **Minha fila** (o que está com você: atribuído, pego por você, ou problema que você relatou) · **Todos** ·
@@ -450,10 +458,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   Passo zerado mostra **✓**.
 - **Resultados**: período **7 dias · 14 dias · 30 dias · 90 dias** para o ritmo (14 = "últimas 2 semanas") e as visitas (7, 30 e 90);
   "**Frente aos N dias anteriores**" só quando o período anterior teve alguma folha conferida; **Ver relatório completo**.
-- **Seu progresso**: "**Nível N · <nome>**" (Primeiros passos · Olhar atento · Mão firme · Guardião do Acervo · Memória viva · Referência do
-  acervo), "**N / M XP**", **Suas conquistas** (marcos pessoais, nunca comparação), "**Próxima: …**", "N dias seguidos com trabalho validado"
-  (fato neutro, sem cobrança), **Como os pontos são contados?**, **Ocultar conquistas** / **Mostrar de novo**. **Ranking da equipe (mês)**
-  (ligado por padrão; "N pontos" validados no mês por pessoa, com a posição; o **?** diz que não serve para avaliar desempenho e que "Um admin desliga
+- **Seu trabalho** (tom sério, 22/11/2026): "**Pontos validados nesta semana**" e "**no mês**", a meta da equipe; **Marcos** (marcos pessoais,
+  nunca comparação, em texto com a data: "Primeira folha conferida · 12/11"; "N folhas conferidas · N lotes aprovados"), "**Próximo marco: …**",
+  **Como os pontos são contados?**, **Ocultar** / **Mostrar de novo** ("Seus pontos e marcos ficam ocultos só para você…"). **Pontos validados no
+  mês · equipe** (o Ranking da equipe do mês, ligado por padrão; tabela **Posição** · **Nome** · **Pontos**; o **?** diz que não serve para avaliar desempenho e que "Um admin desliga
   o ranking em Configurações"; vazio: "Ninguém pontuou neste mês ainda."). Em **Configurações › Progresso e ranking**: a caixa "**Mostrar o Ranking
   da equipe (mês) na Home e em Problemas**" (qualquer admin; avisos "Ranking da equipe ligado" / "Ranking da equipe desligado"). **Pontos validados**: só ações que continuam valendo (desfez, o ponto some); descartar decisão e "não era problema" não contam.
 - **Qualidade da base**: "**O que mais baixa o índice**" com as duas medidas mais baixas, "faltam N folhas" e o caminho (**Registrar os direitos
@@ -476,11 +484,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Visitas ao site**: à esquerda **Visitas no período**, **Média por dia** e a variação "**vs. período anterior**"; à direita o gráfico.
   Sem dados: "**Dados de audiência temporariamente indisponíveis**" numa caixa compacta, com **Tentar de novo**. **Projetos mais visitados**
   é outro cartão ("os 5 primeiros", **Ver análise completa de visitas →**).
-- **Coluna da direita**: cartão azul-marinho "**Nível N · <nome>**", "N / M XP", "**Faltam N XP para o nível N+1**" e, abaixo de uma linha, a
-  2ª seção "**Meta da semana · equipe**" com o alvo, "**N de M pontos validados**", o **N%** e a barra verde, **Como conta?** (leitura e
-  conquistas ocultas: o mesmo cartão só com a meta; jogo desligado: some tudo); **Suas conquistas** com 3
-  selos (**N folhas conferidas** · **N lotes aprovados** · **N dias de sequência**; cinza quando zero) e **Ver todas →** (os marcos, Próxima,
-  Como os pontos são contados?, **Ocultar conquistas**). **Está tudo funcionando?**: uma linha por sistema, ✓ e "**Online**" (cópias:
+- **Coluna da direita**: cartão branco **Seu trabalho** ("Pontos validados nesta semana" · "no mês" e, abaixo de uma linha, "**Meta da semana ·
+  equipe**", "**N de M pontos validados (N%)**", a barra padrão do painel e **Como conta?**; leitura e pontos ocultos: o mesmo cartão só com a
+  meta; jogo desligado: some tudo); **Marcos** (texto, sem ícone: "N folhas conferidas · N lotes aprovados" e os últimos marcos com a data;
+  **Ocultar**; **Como os pontos são contados?**); **Pontos validados no mês · equipe** (tabela). **Está tudo funcionando?**: uma linha por sistema, ✓ e "**Online**" (cópias:
   "**Em dia**"); o que falha vem primeiro com o selo e a frase; **Ver detalhes e histórico →**. **Qualidade da base**: o índice, "**↓ −N p.p.**"
   só com comparação ("sem comparação ainda"), 4 barras, **Como o índice é calculado? →** e **O que mais baixa o índice →**. **Quanto do acervo
   já está no site**: donut com o % e "N de M folhas publicadas"; legenda **No site** · **Em preparo** (ainda não conferida) · **A publicar**

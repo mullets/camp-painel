@@ -682,7 +682,8 @@ def detalhe(con, eid: int, u: dict) -> dict:
 
 # ---------------- reconhecimento (fase 3) ----------------
 def conquistas_qualidade(con, u: dict) -> list[dict]:
-    """Conquistas de qualidade da Central (sem pontos: os pontos são só os da Home). Tiradas do estado atual; reabriu, some."""
+    """Conquistas de qualidade da Central (sem pontos: os pontos são só os da Home). Tiradas do estado atual; reabriu, some.
+    Os títulos são fatos verificáveis, sem apelido nem título honorífico (Rafael, 22/11/2026: "não quero que fique infantil")."""
     from .home_trabalho import eventos_validados
     eu = u.get("email") or ""
     meus = [int(x["ref"][5:]) for x in eventos_validados(con) if x["email"] == eu and x["tipo"].startswith("problema_")]
@@ -698,10 +699,10 @@ def conquistas_qualidade(con, u: dict) -> list[dict]:
     def cq(chave, titulo, desc, feito, meta, coletiva=False):
         return {"chave": chave, "titulo": titulo, "descricao": desc, "obtida": feito >= meta, "feito": min(feito, meta), "meta": meta, "coletiva": coletiva}
     return [cq("primeira", "Primeira resolução validada", "Um problema corrigido com a frase do que foi feito (e, quando pedida, aprovado na revisão).", len(meus), 1),
-            cq("investigador", "Investigador documental", "Problemas resolvidos por você com fonte ou evidência registrada.", com_fonte, 5),
-            cq("colaborador", "Colaborador", "Evidência sua ajudou outra pessoa a resolver.", apoio, 3),
-            cq("revisor", "Revisor cuidadoso", "Revisões aprovadas por você (de resoluções de outra pessoa).", revisoes, 5),
-            cq("fundo", "Fundo organizado", "Marco coletivo: fundo que teve problemas e hoje não tem nenhum aberto.", fundos_ok, 1, True)]
+            cq("investigador", "5 problemas resolvidos com fonte ou evidência", "Problemas resolvidos por você com fonte ou evidência registrada.", com_fonte, 5),
+            cq("colaborador", "3 resoluções de outras pessoas com evidência sua", "Evidência sua ajudou outra pessoa a resolver.", apoio, 3),
+            cq("revisor", "5 revisões aprovadas", "Revisões aprovadas por você (de resoluções de outra pessoa).", revisoes, 5),
+            cq("fundo", "Um fundo sem problemas abertos", "Marco coletivo: fundo que teve problemas e hoje não tem nenhum aberto.", fundos_ok, 1, True)]
 
 
 from .home_trabalho import AVISO_RANKING  # noqa: E402 — o mesmo aviso do Ranking da equipe na Home e aqui
