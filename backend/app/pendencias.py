@@ -577,11 +577,16 @@ FILA_FILTROS = [("todas", "Para fazer"), ("decidir", "Decidir"), ("conferir", "C
 _TIPO_ACAO = {"decisao": "Decisão", "conferir": "Conferir", "importar": "Importar", "destino": "Verificar destino", "aprovar": "Aprovar",
               "publicar": "Publicar", "projeto": "Publicar", "erro": "Problema", "fila_erro": "Problema", "reler": "Leitura interrompida",
               "pedido": "Pedido", "emprestimo": "Empréstimo"}
-FILA_ORDENS = ("urgente", "antigo", "recente", "tipo")
+FILA_ORDENS = ("urgente", "antigo", "recente", "tipo", "prioridade")   # CAMP-HOME-UX: "prioridade" = a nota 0–100 explicável (home_trabalho.prioridade)
 FILA_REGRA = ("Mais urgente primeiro: 1º o que é da sua função (o que outro papel faz vem no fim); 2º o que está marcado Urgente "
               "(o CAMP Vision parado esperando, problema que impede publicar ou já está no site, lote parado com erro, empréstimo vencido há 7 dias ou mais); "
               "3º o resto do trabalho; por último, Melhorar a base. Dentro de cada nível, o que espera há mais tempo vem antes.")
 _RE_ESPERA = re.compile(r"^(chegou agora há pouco|esperando há .+|parado há .+|enviado há .+)$")
+
+
+def _prioridade(i: dict, grupo: str) -> dict:
+    from .home_trabalho import prioridade
+    return prioridade(i, grupo)
 
 
 def _papel_faz(papel: str, quem: str) -> bool:
@@ -621,6 +626,7 @@ def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict
                              if p and not _RE_ESPERA.match(p.strip()) and not (urg and p.strip().lower() in urg))
             nivel = 2 if filtro == "base" else (0 if i.get("urgente") else 1)
             itens.append({**i, "grupo": g["id"], "filtro": filtro, "tipo_tarefa": tipo, "meu": meu, "quem": g.get("quem"), "nivel": nivel, "contexto": ctx,
+                          "prioridade": _prioridade(i, g["id"]),   # CAMP-HOME-UX (campo novo, opcional): nota 0–100, nível e o porquê
                           "_ordem": (gi, ii)})
     esp = lambda x: x.get("espera_h") if x.get("espera_h") is not None else -1  # noqa: E731  (sem tempo conhecido: depois dos que têm)
     ordem_tipo = [k for k, _ in FILA_FILTROS]
@@ -630,6 +636,8 @@ def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict
         chave = lambda x: (not x["meu"], x["nivel"] == 2, x.get("espera_h") is None, esp(x), x["_ordem"])  # noqa: E731
     elif ordem == "tipo":
         chave = lambda x: (not x["meu"], ordem_tipo.index(x["filtro"]), x["nivel"], -esp(x), x["_ordem"])  # noqa: E731
+    elif ordem == "prioridade":                     # CAMP-HOME-UX: a da função primeiro, a base no fim; dentro, a maior nota (empate: a mais antiga)
+        chave = lambda x: (not x["meu"], x["nivel"] == 2, -x["prioridade"]["nota"], -esp(x), x["_ordem"])  # noqa: E731
     else:
         chave = lambda x: (not x["meu"], x["nivel"], -esp(x), x["_ordem"])  # noqa: E731
     itens.sort(key=chave)
@@ -702,6 +710,25 @@ def caminho(con, n: dict) -> list[dict]:
         if not n["lotes_processando"] and not n["decisoes_estacao"]:
             passos[2]["rota"] = "filas/erro"
     passos[4]["folhas"] = n["folhas_conferir"]
+    # CAMP-HOME-UX (§3 "destacar o gargalo por espera acumulada, não só volume bruto"; campos novos, opcionais): para cada passo de gente,
+    # a soma das horas que os lotes estão parados nele (etapa_desde) e a do mais antigo. Gargalo = o passo com a MAIOR espera somada.
+    # Sem a lista de lotes (n sem "_lotes") ou sem a hora de entrada na etapa, nada é afirmado (fica sem "aguardando há").
+    L = n.get("_lotes")
+    if L is not None:
+        fase_de = {"importar": "importar", "conferir": "conferir", "aprovar": "aprovar", "publicar": "publicar"}
+        for p in passos:
+            f = fase_de.get(p["id"])
+            if not f:
+                continue
+            hs = [l.get("parado_h") for l in L if l.get("fase") == f]
+            med = [float(h) for h in hs if isinstance(h, (int, float))]
+            p["espera_total_h"] = round(sum(med), 1) if med else 0
+            p["espera_max_h"] = round(max(med), 1) if med else None
+            p["espera_medida"] = len(med) == len(hs)
+        cand = [p for p in passos if (p.get("espera_total_h") or 0) > 0]
+        g = max(cand, key=lambda p: p["espera_total_h"], default=None)
+        for p in passos:
+            p["gargalo"] = p is g
     return passos
 
 
@@ -827,8 +854,13 @@ def ritmo(con, dias: int = 14) -> dict:
     com_trabalho = [x["conferidas"] for x in serie if x["conferidas"] > 0]
     media = round(sum(com_trabalho) / len(com_trabalho), 1) if com_trabalho else 0
     falta = contar_pendencias(con)["folhas_conferir"]
+    # CAMP-HOME-UX (campo novo, opcional): as folhas conferidas nos N dias ANTERIORES ao período, para a variação. Mesmo critério
+    # (revisado_em de folha conferida/corrigida, dia de São Paulo). A tela só compara quando há base (anterior > 0).
+    ini = serie[0]["dia"] if serie else None
+    ant = con.execute("""SELECT COUNT(*) FROM item WHERE revisado_em IS NOT NULL AND revisao IN ('conferida','corrigida')
+                         AND date(revisado_em,'-3 hours') >= date(?, ?) AND date(revisado_em,'-3 hours') < ?""", (ini, f"-{dias} days", ini)).fetchone()[0] if ini else 0
     return {"dias": serie, "media_conferidas": media, "folhas_a_conferir": falta,
-            "dias_para_zerar": (round(falta / media) if media else None)}
+            "dias_para_zerar": (round(falta / media) if media else None), "anterior_conferidas": ant, "periodo_dias": dias}
 
 
 def alertas_criticos(con) -> list[dict]:
