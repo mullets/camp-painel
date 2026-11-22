@@ -159,3 +159,9 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   importa o lote em "revisao", sem folhas, não aprovado, pelo mesmo importador e com as mesmas condições do botão. Evento `importado_sozinho`.
 - Não importa: decisão pendente de números que colidem; CAMP Vision ainda lendo. Não deu (QNAP fora, pacote faltando ou de outro projeto):
   um problema do projeto com o motivo (chave `importar_sozinho:<lote>`, um só), que fecha sozinho quando a importação der certo.
+
+## 15. Home em Ação, Operação e Resultados (CAMP-HOME-UX, 22/11/2026, documento do Rafael)
+- O menu superior (dados do usuário, estado das coisas, temperatura) e o menu lateral **não mudam** (pedido explícito do Rafael); o teste compara a marcação do topo.
+- Prioridade da fila = nota 0–100 explicável (pesos do §8: gravidade 40, tempo 20 com teto de 14 dias, bloqueio 20, prazo/risco 20); fórmula em `COMO_FUNCIONA.md` D.2.1.3.
+- Gamificação só com eventos validados e recontados do estado atual (desfez, o ponto some); meta coletiva; conquistas não competitivas e ocultáveis; **ranking individual desligado por padrão** (`jogo.ranking_equipe`); nada de cobrança por sequência.
+
