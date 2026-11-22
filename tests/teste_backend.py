@@ -59,6 +59,7 @@ MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doaç�
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
 
+MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking desligado (linha própria)
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -15167,8 +15168,11 @@ def filho(modo):
         ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material, e as visitas (admin) logo abaixo do ritmo",
             i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"', 'id="ini-visitas"'))
             and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in esq)
-        ver("UX-30 (desfeito): coluna da direita completa: saúde, Hoje, qualidade, melhorias e % no site, nessa ordem",
-            i3 > i2 and ordem(dir_, ('id="ini-saude"', 'id="ini-t-hoje"', 'id="ini-qualidade"', 'id="ini-melhorias"', 'id="ini-t-site"')) and 'id="ini-visitas"' not in dir_)
+        # CAMP-HOME-UX (22/11/2026, documento do Rafael §3): a coluna da direita segue a prioridade do documento — alertas reais, progresso
+        # (meta e conquistas), qualidade, publicação, sistemas (compacto) — e depois as melhorias e o "Hoje"; nada métrico some da Home
+        il = html.find('<div class="ini-col ini-lateral">'); lat = html[il:html.find('</div>\n  </div>`;', il)]
+        ver("CAMP-HOME-UX: coluna da direita completa: alertas, progresso, qualidade, % no site, saúde, melhorias e Hoje, nessa ordem",
+            il > 0 and ordem(lat, ('id="ini-alertas"', 'id="ini-jogo"', 'id="ini-qualidade"', 'id="ini-t-site"', 'id="ini-saude"', 'id="ini-melhorias"', 'id="ini-t-hoje"')) and 'id="ini-visitas"' not in lat)
         ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
             'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
         # 04/11 (especificação "Visitas ao site"): a Home não pede /api/analytics nunca; as visitas vêm só do banco (vmMontar → /api/visitas/evolucao e /projetos)
@@ -15184,6 +15188,134 @@ def filho(modo):
             and '<div class="panel"><div class="pb" id="vis-modulo"></div></div>' in html)
         ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
             '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
+        for l in res: print(l)
+    elif modo == "home_trabalho":
+        # CAMP-HOME-UX (22/11/2026, documento do Rafael): prioridade 0–100 explicável (§8), responsável e "Minha fila", meta da semana,
+        # pontos SÓ de eventos validados (e que somem quando desfeitos), conquistas ocultáveis, ranking desligado por padrão, gargalo do caminho
+        # pela espera acumulada e a comparação do ritmo com o período anterior.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, pendencias as pd, home_trabalho as ht
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        P = ht.prioridade
+        cv = P({"acao": {"tipo": "decisao"}, "urgente": "o CAMP Vision está parado nesta pasta, esperando a resposta", "espera_h": 2})
+        ver("§8: decisão que segura o CAMP Vision = crítica, com o porquê", cv["nivel"] == "critico" and "o CAMP Vision está parado esperando" in cv["motivo"] and cv["motivo"].startswith("Prioridade crítica porque"), str(cv))
+        e3 = P({"acao": {"tipo": "erro"}, "urgente": "impede publicar o projeto", "espera_h": 72})
+        ver("§8: problema que bloqueia, 3 dias: 'Prioridade alta porque impede a publicação e aguarda há 3 dias' (40%·0,8 + tempo + 20 de bloqueio)",
+            e3["motivo"] == "Prioridade alta porque impede a publicação e aguarda há 3 dias" and e3["partes"] == {"gravidade": 32, "tempo": 4, "bloqueio": 20, "risco": 0} and e3["nota"] == 56, str(e3))
+        ns = P({"acao": {"tipo": "erro"}, "urgente": "o projeto está no site com este problema", "espera_h": 1})
+        ver("§8: problema já no site soma o risco público (20) e passa a crítico", ns["partes"]["risco"] == 20 and ns["nivel"] == "critico" and "já está no site" in ns["motivo"], str(ns))
+        t30, t14 = P({"acao": {"tipo": "conferir"}, "espera_h": 30 * 24}), P({"acao": {"tipo": "conferir"}, "espera_h": 14 * 24})
+        ver("§8: tempo parado com teto (30 dias vale o mesmo que 14: 20 pontos)", t30["partes"]["tempo"] == 20 == t14["partes"]["tempo"] and t30["nota"] == t14["nota"], f"{t30} {t14}")
+        emp = P({"acao": {"tipo": "emprestimo"}, "espera_h": 10 * 24})
+        ver("§8: empréstimo vencido conta no prazo/risco, com os dias", emp["partes"]["risco"] > 0 and "venceu há 10 dias" in emp["motivo"], str(emp))
+        bs = P({"acao": {"tipo": "rota"}, "filtro": "base"}, "base")
+        ver("§8: Melhorar a base fica baixa", bs["nivel"] == "baixo", str(bs))
+        G = [{"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": 2, "itens": [
+                {"sev": "a", "titulo": "novo", "detalhe": "", "espera_h": 1, "acao": {"tipo": "conferir"}},
+                {"sev": "a", "titulo": "velho", "detalhe": "", "espera_h": 20 * 24, "acao": {"tipo": "conferir"}}]},
+             {"id": "pedidos", "titulo": "Pedidos", "quem": "operador", "total": 1, "itens": [{"sev": "a", "titulo": "pedido", "detalhe": "", "espera_h": 2, "acao": {"tipo": "pedido"}}]}]
+        fp = pd.fila_da_home(G, "admin", "prioridade")
+        ver("§8: ?fila=prioridade ordena pela nota (maior primeiro) e cada linha traz nota, nível e motivo",
+            [x["titulo"] for x in fp["itens"]] == ["velho", "novo", "pedido"] and all({"nota", "nivel", "motivo", "partes"} <= set(x["prioridade"]) for x in fp["itens"]), str([(x["titulo"], x["prioridade"]["nota"]) for x in fp["itens"]]))
+        # ----- dados -----
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001','/x','revisao')").lastrowid
+        for n_ in range(1, 4):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,lote_id,revisao,origem) VALUES (?,?,?,?,?,?,'pendente','campvision')",
+                      (f"F026-P0001-1972-S01-D0000{n_}", "F026-P0001", "S01", n_, f"Planta {n_}", lote))
+        eid = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','outro','operador','F026-P0001','Título trocado')").lastrowid
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Ana Admin", "admin"), ("op@camp.arq.br", "Otto Operador", "operador"), ("le@camp.arq.br", "Lia Leitura", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        uid = {r[0]: r[1] for r in c.execute("SELECT email, id FROM usuario")}
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        # ----- responsável / Minha fila -----
+        f0 = op.get("/api/painel?fila=prioridade").json()["fila"]
+        ver("abas da fila: Minha fila 0, Sem responsável = todas, Críticos contados pela nota", f0.get("abas", {}).get("minha") == 0 and f0["abas"]["sem_responsavel"] == f0["abas"]["todos"] > 0, str(f0.get("abas")))
+        kc = next((i["adiar"] for i in f0["itens"] if (i.get("acao") or {}).get("tipo") == "conferir"), None)
+        ke = f"erro:{eid}"
+        r1 = op.put(f"/api/painel/tarefas/{kc}/responsavel", json={"usuario_id": uid["op@camp.arq.br"], "titulo": "Tarumã"})
+        f1 = op.get("/api/painel?fila=prioridade").json()["fila"]
+        lin = next(i for i in f1["itens"] if i.get("adiar") == kc)
+        ver("operador pega a tarefa para si: vira 'Minha fila' (minha=1) e sai de Sem responsável", r1.status_code == 200 and lin["minha"] and lin["responsavel"]["nome"] == "Otto Operador"
+            and f1["abas"]["minha"] == 1 and f1["abas"]["sem_responsavel"] == f0["abas"]["sem_responsavel"] - 1, f"{r1.status_code} {f1['abas']}")
+        r2 = op.put(f"/api/painel/tarefas/{ke}/responsavel", json={"usuario_id": uid["adm@camp.arq.br"]})
+        r3 = le.put(f"/api/painel/tarefas/{ke}/responsavel", json={"usuario_id": uid["le@camp.arq.br"]})
+        r4 = adm.put(f"/api/painel/tarefas/{kc}/responsavel", json={"usuario_id": uid["le@camp.arq.br"]})
+        ver("operador não atribui a outra pessoa (403); leitura não atribui (403); ninguém recebe tarefa de leitura (400)", (r2.status_code, r3.status_code, r4.status_code) == (403, 403, 400), f"{r2.status_code} {r3.status_code} {r4.status_code}")
+        r5 = adm.put(f"/api/painel/tarefas/{ke}/responsavel", json={"usuario_id": uid["op@camp.arq.br"], "titulo": "Título trocado"})
+        ev = c.execute("SELECT tipo, ator, detalhe FROM evento WHERE entidade='tarefa' ORDER BY id").fetchall()
+        ver("admin atribui a outra pessoa; cada atribuição fica no Histórico (evento tarefa_atribuida com quem e para quem)", r5.status_code == 200 and len(ev) == 2
+            and ev[1][0] == "tarefa_atribuida" and ev[1][1] == "adm@camp.arq.br" and "Otto Operador" in ev[1][2], str([tuple(x) for x in ev]))
+        r6 = op.put(f"/api/painel/tarefas/{kc}/responsavel", json={"usuario_id": None})
+        f2 = op.get("/api/painel").json()["fila"]
+        ver("devolver tira o nome (evento tarefa_devolvida) e a tarefa volta para Sem responsável", r6.status_code == 200 and not next(i for i in f2["itens"] if i.get("adiar") == kc)["responsavel"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='tarefa_devolvida'").fetchone()[0] == 1)
+        ver("rota inventada é recusada (só chaves da fila)", op.put("/api/painel/tarefas/qualquer/responsavel", json={"usuario_id": uid["op@camp.arq.br"]}).status_code == 400)
+        pes = op.get("/api/painel/pessoas").json()
+        ver("pessoas para atribuir: só quem edita, só id e nome", {p["nome"] for p in pes} == {"Ana Admin", "Otto Operador"} and set(pes[0]) == {"id", "nome", "eu"} and le.get("/api/painel/pessoas").status_code == 403, str(pes))
+        # ----- pontos validados e reversíveis -----
+        xp = lambda x: (x.get_json() if hasattr(x, "get_json") else x.json()).get("eu", {}).get("xp")  # noqa: E731
+        pg0 = op.get("/api/painel/progresso").json()
+        ver("progresso: meta padrão 100, nada feito, ranking AUSENTE por padrão", pg0["semana"]["meta"] == 100 and pg0["semana"]["feito"] == 0 and "equipe" not in pg0 and pg0["eu"]["xp"] == 0, str(pg0.get("semana")))
+        cod = "F026-P0001-1972-S01-D00001"
+        op.post(f"/api/itens/{cod}/revisao", json={"estado": "conferida"})
+        p1 = op.get("/api/painel/progresso").json()
+        op.post(f"/api/itens/{cod}/revisao", json={"estado": "pendente"})
+        p2 = op.get("/api/painel/progresso").json()
+        ver("folha conferida = 1 ponto (e a conquista 'Primeira folha conferida'); a revisão desfeita tira o ponto",
+            p1["eu"]["xp"] == 1 and p1["semana"]["feito"] == 1 and any(x["id"] == "folha_1" for x in p1["eu"]["conquistas"]) and p2["eu"]["xp"] == 0 and p2["semana"]["feito"] == 0, f"{p1['eu']['xp']} -> {p2['eu']['xp']}")
+        c.execute("UPDATE item SET revisao='conferida', revisado_por='op@camp.arq.br', revisado_em=datetime('now') WHERE lote_id=?", (lote,))
+        c.execute("UPDATE lista_processamento SET aprovado_por='adm@camp.arq.br', aprovado_em=datetime('now') WHERE id=?", (lote,)); c.commit()
+        pa1 = adm.get("/api/painel/progresso").json()["eu"]["xp"]
+        c.execute("UPDATE lista_processamento SET aprovado_por=NULL, aprovado_em=NULL WHERE id=?", (lote,)); c.commit()   # o mesmo que "Reabrir a revisão do lote"
+        pa2 = adm.get("/api/painel/progresso").json()["eu"]["xp"]
+        ver("lote aprovado = 10 pontos para quem aprovou; reaberto, os pontos somem", pa1 == 10 and pa2 == 0, f"{pa1} -> {pa2}")
+        rp = op.patch(f"/api/erros/{eid}", json={"situacao": "corrigido", "resolucao": "título corrigido conforme o carimbo"})
+        pe1 = op.get("/api/painel/progresso").json()
+        op.patch(f"/api/erros/{eid}", json={"situacao": "aberto"})
+        pe2 = op.get("/api/painel/progresso").json()
+        ver("problema que bloqueava, corrigido com a frase = 30 pontos; reaberto, some", rp.status_code == 200 and pe1["eu"]["contagens"]["problema_critico_resolvido"] == 1
+            and pe1["eu"]["xp"] - 3 == 30 and pe2["eu"]["contagens"]["problema_critico_resolvido"] == 0, f"{pe1['eu']['contagens']} {pe1['eu']['xp']} -> {pe2['eu']['xp']}")
+        op.patch(f"/api/erros/{eid}", json={"situacao": "ignorado", "resolucao": "não era problema"})
+        pe3 = op.get("/api/painel/progresso").json()
+        did = c.execute("INSERT INTO decisao (tipo, chave, titulo, situacao, fundo_codigo, origem, contexto, escolha, resolvida_por, resolvida_em) VALUES ('lote_colide','k1','x','resolvida','F026','painel','{}','descartar','adm@camp.arq.br',datetime('now'))").lastrowid
+        c.execute("INSERT INTO decisao (tipo, chave, titulo, situacao, fundo_codigo, origem, contexto, escolha, resolvida_por, resolvida_em) VALUES ('lote_colide','k2','x','resolvida','F026','painel','{}','adicionar_ao_fim','adm@camp.arq.br',datetime('now'))"); c.commit()
+        pd1 = adm.get("/api/painel/progresso").json()["eu"]["contagens"]["decisao_resolvida"]
+        ver("'não era problema' e decisão descartada NÃO contam ponto; decisão respondida conta", pe3["eu"]["contagens"]["problema_resolvido"] == 0 and pe3["eu"]["contagens"]["problema_critico_resolvido"] == 0 and pd1 == 1, f"{pe3['eu']['contagens']} decisões={pd1}")
+        c.execute("UPDATE item SET revisado_por='campvision' WHERE codigo=?", ("F026-P0001-1972-S01-D00002",)); c.commit()
+        ver("o que não foi feito por uma pessoa do painel (CAMP Vision, regra automática) não conta", op.get("/api/painel/progresso").json()["eu"]["contagens"]["folha_conferida"] == 2)
+        # ----- meta, ocultar, ranking, tabela de pontos -----
+        m1, m2 = op.put("/api/painel/meta", json={"valor": 50}), adm.put("/api/painel/meta", json={"valor": 50})
+        ver("meta da semana: só admin muda (operador 403), fica no Histórico e o progresso usa o novo valor", m1.status_code == 403 and m2.status_code == 200
+            and op.get("/api/painel/progresso").json()["semana"]["meta"] == 50 and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='config' AND codigo='meta.semana'").fetchone()[0] == 1)
+        op.put("/api/auth/eu/preferencias", json={"chave": "conquistas.ocultar", "valor": "1"})
+        po, pa_ = op.get("/api/painel/progresso").json(), adm.get("/api/painel/progresso").json()
+        ver("'Ocultar conquistas' vale só para quem ocultou: sem nível e conquistas, a meta coletiva continua", po["oculto"] and "eu" not in po and "semana" in po and not pa_["oculto"] and "eu" in pa_)
+        op.put("/api/auth/eu/preferencias", json={"chave": "conquistas.ocultar", "valor": None})
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='jogo.ranking_equipe'"); c.commit()
+        pr = op.get("/api/painel/progresso").json()
+        ver("quadro da equipe só com jogo.ranking_equipe=1 (um admin liga); leitura nunca vê", "equipe" in pr and "equipe" not in le.get("/api/painel/progresso").json() and "eu" not in le.get("/api/painel/progresso").json(), str(pr.get("equipe")))
+        c.execute("UPDATE configuracao SET valor='{\"folha_conferida\":5}' WHERE chave='jogo.pontos'"); c.commit()
+        ver("a tabela de pontos vem da configuração jogo.pontos (folha conferida = 5)", op.get("/api/painel/progresso").json()["eu"]["xp"] == 10)
+        # ----- gargalo pela espera acumulada -----
+        n = pd.contar_pendencias(c, com_listas=True)
+        n["_lotes"] = [{"fase": "conferir", "parado_h": 5}, {"fase": "conferir", "parado_h": 5}, {"fase": "conferir", "parado_h": 5}, {"fase": "aprovar", "parado_h": 19 * 24}]
+        n.update(lotes_conferir=3, lotes_aprovar=1, lotes_importar=0, lotes_publicar=0, prontos_publicar=0, folhas_conferir=9)
+        cam = {p["id"]: p for p in pd.caminho(c, n)}
+        ver("gargalo = MAIOR espera somada (Aprovar: 1 lote há 19 dias), não o maior volume (Conferir: 3 lotes há 5 h)",
+            cam["aprovar"]["gargalo"] and not cam["conferir"]["gargalo"] and cam["conferir"]["estado"] == "acumula" and cam["aprovar"]["espera_max_h"] == 456, str({k: (v.get("espera_total_h"), v.get("gargalo")) for k, v in cam.items()}))
+        # ----- ritmo: comparação com o período anterior -----
+        c.execute("UPDATE item SET revisao='conferida', revisado_por='op@camp.arq.br', revisado_em=datetime('now','-20 days') WHERE codigo='F026-P0001-1972-S01-D00003'"); c.commit()
+        rt = pd.ritmo(c, 14)
+        ver("ritmo: folhas conferidas nos 14 dias anteriores (para a variação; a tela só compara com base)", rt["anterior_conferidas"] == 1 and rt["periodo_dias"] == 14, str(rt.get("anterior_conferidas")))
         for l in res: print(l)
     elif modo == "ux12_desempenho":
         # UX-12 (26/10, logs técnicos): /api/estacoes alternava 20 ms e 3–10 s (ping às estações desligadas DENTRO da requisição quando
@@ -22083,6 +22215,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-HOME-UX: prioridade 0–100, responsável, meta da semana, pontos validados e reversíveis, gargalo")
+rc, out = rodar("home_trabalho", f"{tmp}/home_trabalho.db")
+if rc != 0: ok(False, f"teste home_trabalho não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home UX: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("166) UX-24: Máquinas — logs, alertas e configurações só para admin/master no servidor; resumo do dia por interruptor")
 rc, out = rodar("ux24_maquinas", f"{tmp}/ux24_maquinas.db")

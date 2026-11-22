@@ -134,8 +134,9 @@ const CONTRASTE = () => {
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     const focos = [];
     for (const sel of ['#nav button[data-v="fundos"]', '#q', '#machine-status .sis-btn', '#v-painel .btn']) {
-      await page.evaluate(s => { document.querySelector(s).focus() }, sel); await page.keyboard.press('Shift');
-      const f = await page.evaluate(s => { const e = document.querySelector(s), cs = getComputedStyle(e); return { ow: parseFloat(cs.outlineWidth), os: cs.outlineStyle, sh: cs.boxShadow } }, sel);
+      // CAMP-HOME-UX: o 1º botão VISÍVEL (o "Salvar a meta" fica num menu fechado e não recebe foco)
+      await page.evaluate(s => { ([...document.querySelectorAll(s)].find(x => x.checkVisibility()) || document.querySelector(s)).focus() }, sel); await page.keyboard.press('Shift');
+      const f = await page.evaluate(s => { const e = [...document.querySelectorAll(s)].find(x => x.checkVisibility()) || document.querySelector(s), cs = getComputedStyle(e); return { ow: parseFloat(cs.outlineWidth), os: cs.outlineStyle, sh: cs.boxShadow } }, sel);
       focos.push([sel, f]); }
     await page.keyboard.press('Tab');
     chk(focos.every(([, f]) => (f.os !== 'none' && f.ow >= 2) || /px/.test(f.sh)), '§18 foco visível (anel ≥ 2 px) em menu, busca, Estado dos sistemas e botões: ' + JSON.stringify(focos.map(([s, f]) => s.split(' ').pop() + ' ' + f.ow + 'px ' + f.os)));

@@ -3836,6 +3836,64 @@ Blocos da tela, na ordem:
 4. Rotas: `GET /api/qualidade-base` (visão geral), `GET /api/qualidade-base/fundo/{codigo}` (usado no quadro "Qualidade das folhas" da página do fundo, com histórico de 30 dias), `GET /api/melhorias`.
 5. Além disso, a tarefa `_retrato_qualidade_periodico` (iniciada em `_startup()` de `backend/app/main.py`) grava o retrato a cada hora, mesmo que ninguém abra o painel (corrigido em 14/10/2026, a0ad7f7; antes ela não era iniciada).
 
+#### 2.1.3 Ação, Operação e Resultados (CAMP-HOME-UX, 22/11/2026, `backend/app/home_trabalho.py`)
+
+Documento do Rafael "Redesenho do painel inicial / Precisa de você". A barra do topo, a faixa do sistema e o menu lateral **não mudam** (o teste
+`tests/navegador_home_redesenho.js` compara a marcação de `<div class="top">` com a do main de 22/11/2026). A Home fica em três partes:
+
+1. **Ação** (acima da dobra): saudação com a foto, a meta da semana (`#ini-meta`), os 4 indicadores (cada um abre a lista que conta e diz a
+   regra no "?" e no rótulo acessível; "folhas conferidas hoje" leva ao gráfico) e **O que fazer agora**.
+2. **Operação**: o caminho do material com o **gargalo** pela espera acumulada.
+3. **Resultados**: período comum (7/14/30/90 dias), ritmo (`/api/painel/ritmo?dias=N`, agora com `anterior_conferidas`) e visitas (7/30/90).
+
+Coluna da direita, na prioridade do documento: alertas reais (`#ini-alertas`, só quando há), **Seu progresso**, Qualidade da base (com as duas
+maiores causas e o caminho), Quanto está no site, **Está tudo funcionando?** (uma linha verde quando tudo é normal; o que falha abre sozinho),
+Melhorias de hoje e Hoje. Até 1279 px a coluna desce para baixo da principal; no celular tudo empilha.
+
+**Prioridade (§8 do documento), `home_trabalho.prioridade(item, grupo)`** — função pura, chamada por `pendencias.fila_da_home` em cada linha
+(campo `prioridade`: `nota`, `nivel`, `rotulo`, `motivo`, `partes`). `?fila=prioridade` (o padrão da tela) ordena: o que é da função da pessoa
+primeiro, Melhorar a base no fim e, dentro, a maior nota (empate: quem espera há mais tempo).
+
+    nota = 40·gravidade + 20·min(horas paradas, 336)/336 + 20·bloqueio + 20·risco        (cada fator de 0 a 1; 336 h = 14 dias, o teto)
+
+| Sinal | De onde vem | Valor |
+|---|---|---|
+| gravidade | tipo da ação da linha | decisão 0,6 · problema que bloqueia 0,8 · lote parado com erro 0,9 · leitura interrompida 0,6 · verificar destino 0,5 · importar 0,4 · conferir 0,5 · aprovar 0,5 · publicar 0,5 · travado 0,4 · pedido 0,5 · empréstimo 0,6 · Melhorar a base 0,15. O CAMP Vision parado esperando a decisão e problema com o projeto já no site: 1,0 |
+| tempo | `espera_h` da linha (lote: `etapa_desde`; decisão, problema, pedido: criação) | até 14 dias |
+| bloqueio | a linha segura a etapa seguinte | importar, verificar destino, conferir, aprovar, problema que bloqueia, lote com erro, leitura interrompida, o CAMP Vision parado: 1 · decisão comum, publicar, travado: 0,5 · pedido, empréstimo, base: 0 |
+| risco/prazo | prazo e exposição pública | problema já no site: 1 · empréstimo vencido: 0,5 + dias/14 (até 1) · pedido sem resposta há 7 dias: 0,5, há 14: 1 · aviso de lote incompleto do CAMP Vision: 0,5 |
+
+Níveis: **crítico** ≥ 60, **alto** ≥ 45, **médio** ≥ 25, **baixo** abaixo. A frase junta o risco, o bloqueio e o tempo ("Prioridade alta porque
+impede a publicação e aguarda há 3 dias"). Prioridade manual justificada ainda não existe (decisão do Rafael).
+
+**Responsável** (migração 241, `tarefa_responsavel (tarefa_id, usuario_id, atribuido_por, atribuido_em)`): a chave é a do "Agora não"
+(`decisao:3`, `lote:12`, `erro:5`, `pedido:2`…). `PUT /api/painel/tarefas/{tarefa_id}/responsavel` `{usuario_id|null, titulo}` (operador:
+pega para si ou devolve a sua; admin/master: qualquer pessoa ativa que edita; evento `tarefa_atribuida`/`tarefa_devolvida`, entidade `tarefa`).
+`GET /api/painel/pessoas` (operador) só com id e nome. Pedido (`solicitacao.responsavel`) e empréstimo (`responsavel_id`) usam o responsável que
+já tinham enquanto ninguém atribuir outro. `anotar_fila` acrescenta a cada linha `responsavel`, `minha` (atribuída a mim, ou problema que eu
+relatei: evento `criado` do erro) e `miniatura` (capa ou 1ª folha com imagem do projeto), e à fila `abas` = `{minha, todos, criticos, sem_responsavel}`.
+
+**Progresso (§6, piloto)** — `GET /api/painel/progresso` (leitura). Os pontos são recontados do **estado atual** a cada pedido
+(`eventos_validados`), por isso o que é desfeito some sozinho:
+
+| Ação validada (`jogo.pontos`) | Pontos | Conta quando | Some quando |
+|---|---:|---|---|
+| `folha_conferida` | 1 | `item.revisao` conferida/corrigida e `revisado_por` é usuário | a revisão volta a pendente ou outra pessoa reconfere |
+| `lote_aprovado` | 10 | `aprovado_em` com `aprovado_por` usuário, lote não descartado | "Reabrir a revisão" do lote |
+| `decisao_resolvida` | 5 | decisão resolvida por usuário, **exceto** "descartar" | — |
+| `problema_resolvido` | 20 | erro `corrigido` com a frase (≥ 3 letras), pelo último evento `editado` → corrigido | o problema é reaberto |
+| `problema_critico_resolvido` | 30 | o mesmo, gravidade `bloqueia` | o problema é reaberto |
+
+"Não era problema" (`ignorado`), descartar decisão e o que foi feito pelo CAMP Vision, pelo site ou por regra automática não contam. Semana =
+segunda 00:00 a domingo (São Paulo). Resposta: `semana` (meta, feito em pontos, %, ações por tipo), `eu` (nível — 0, 100, 300, 700, 1.600 e
+3.000 XP —, XP total e da semana, conquistas, próxima, dias seguidos como fato neutro), `oculto` e, só com `jogo.ranking_equipe=1`, `equipe`.
+Quem só lê vê só a meta coletiva. "Ocultar conquistas" = preferência `conquistas.ocultar` (`PUT /api/auth/eu/preferencias`). A meta muda em
+`PUT /api/painel/meta {valor}` (admin; evento `config/meta.semana/alterada`). Configurações: `meta.semana` (100), `jogo.ligado` (1),
+`jogo.pontos` (JSON acima), `jogo.ranking_equipe` (0, desligado).
+
+**Gargalo** (`pendencias.caminho`, campos opcionais): em Importar, Conferir, Aprovar e Publicar, `espera_total_h` (soma das horas paradas dos
+lotes na etapa), `espera_max_h` e `espera_medida`; `gargalo` = o passo com a maior soma. O antigo `estado: acumula` (maior volume) continua.
+
 ### D.2.2 Decisões (`#decisoes`, tecla 2)
 
 **O que é**: a fila de perguntas que o painel faz antes de agir (`docs/padroes.md` §9). Tabela `decisao` (+ `decisao_chave` para pedidos repetidos que caíram na mesma decisão). Tipos (`backend/app/decisoes.py`, `TIPOS`):
