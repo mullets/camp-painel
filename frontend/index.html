@@ -2416,7 +2416,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-linha:hover{border-color:var(--blue)}
 .cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
 .cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.cp-linha.sev-critico{border-left-color:var(--red);background:var(--red-soft)}
+.cp-linha.sev-critico{border-left-color:var(--red)}   /* CAMP-PROB-RAPIDO: a linha fica branca; só a borda e a pílula têm a cor da severidade */
 .cp-linha.sev-medio{border-left-color:var(--amber)}
 .cp-linha.sev-baixo{border-left-color:var(--blue)}
 .cp-sev-ic{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;font-weight:800;font-size:var(--fs-lg)}
@@ -2428,6 +2428,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
 .cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-ctx .lnk{color:var(--ink2)}
+#d-body .cp-ctx,.cp-tri .cp-ctx{white-space:normal}   /* no painel o contexto quebra a linha; na lista fica numa linha só, com reticências */
 .cp-desc{overflow-wrap:anywhere}
 .cp-sep{color:var(--ink3);margin:0 2px}
 .cp-meta{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2)}
@@ -2574,9 +2575,55 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
   .cp-linha .cp-quando{flex-wrap:wrap}
   .cp-linha .cp-sev-tag{justify-self:start}
   .cp-linha .cp-acoes{justify-content:flex-end}
-  .cp-ctx{white-space:normal}
   .cp-graficos{grid-template-columns:minmax(0,1fr)}
+  .cp-rap{grid-template-columns:56px minmax(0,1fr)}.cp-rap>.cp-rap-mini{grid-row:auto}.cp-rap-bts{grid-column:1/-1}.cp-rap-mini{width:56px;height:56px}
 }
+/* CAMP-PROB-RAPIDO (22/11/2026): decisões rápidas na linha, grupos, "Resolver em sequência" */
+.cp-rap{grid-column:1/-1;display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px 12px;align-items:center;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;cursor:default}
+.cp-rap>.cp-rap-mini,.cp-rap>.cp-g-thumbs{grid-row:span 2}
+.cp-rap-mini{width:72px;height:72px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2);display:block}
+.cp-rap-sem{display:grid;place-items:center;color:var(--ink3);font-size:var(--fs-2xs);text-align:center}
+.cp-rap-txt{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-md);min-width:0}
+.cp-rap-txt>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-rap-txt small{color:var(--ink2)}
+.cp-rap-bts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cp-rap-bts input{width:110px}
+.cp-rap-conf{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface2);border-radius:var(--r);padding:8px 10px;font-size:var(--fs-md)}
+.cp-rap-conf[hidden]{display:none}
+.cp-rap-conf ul{margin:0;padding-left:18px;flex-basis:100%;max-height:160px;overflow:auto;font-size:var(--fs-2xs)}
+.cp-rap-busca{display:flex;flex-direction:column;gap:6px;flex:1 1 260px;min-width:0}
+.cp-rap-res{display:flex;flex-wrap:wrap;gap:6px}
+.cp-rap-res .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-linha.cp-grupo{cursor:default;grid-template-columns:16px 38px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo sev" "sel ic acoes acoes"}
+.cp-linha.cp-grupo .cp-sel{grid-area:sel}.cp-linha.cp-grupo .cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo .cp-corpo{grid-area:corpo}.cp-linha.cp-grupo .cp-sev-tag{grid-area:sev;align-self:start}
+.cp-linha.cp-grupo .cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo .cp-meta{flex-wrap:wrap}
+@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo .cp-sel{display:none}.cp-linha.cp-grupo .cp-sev-tag{justify-self:start}}
+.cp-grupo .cp-tit b{overflow-wrap:anywhere}
+.cp-g-thumbs{display:flex;gap:6px;overflow:hidden;margin-top:4px}
+.cp-g-thumbs img,.cp-g-thumbs .cp-rap-sem{width:44px;height:44px;flex:0 0 44px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2)}
+.cp-g-mais{align-self:center;font-size:var(--fs-2xs);color:var(--ink2);white-space:nowrap}
+.cp-g-membros{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding:6px 0 0 18px;border-top:1px dashed var(--line)}
+.cp-g-membros[hidden]{display:none}
+.cp-agrupar{display:inline-flex;gap:6px;align-items:center;font-size:var(--fs-2xs);color:var(--ink2);margin-right:10px;white-space:nowrap}
+.cp-seq-bt{margin-left:auto}
+.cp-tri{position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.cp-tri-box{background:var(--surface);color:var(--ink);border-radius:var(--r-lg);width:min(1040px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:16px 18px}
+.cp-tri-top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.cp-tri-prog{font-size:var(--fs-md);color:var(--ink2)}
+.cp-tri-prog b{color:var(--ink)}
+.cp-tri-corpo{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+.cp-tri-img{width:100%;max-height:62vh;object-fit:contain;border:1px solid var(--line);border-radius:var(--r);background:var(--surface2);display:block}
+.cp-tri-img.cp-rap-sem{height:240px}
+.cp-tri-info{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cp-tri-info h2{margin:0;font-size:var(--fs-lg)}
+.cp-tri-car{font-size:var(--fs-lg);background:var(--surface2);border-radius:var(--r);padding:8px 10px;overflow-wrap:anywhere}
+.cp-tri-ops{display:flex;flex-direction:column;gap:8px}
+.cp-tri-ops .btn{justify-content:flex-start;text-align:left}
+.cp-tri-ops kbd,.cp-tri-teclas kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:var(--r-sm);padding:0 6px;font-size:var(--fs-2xs);background:var(--surface);color:var(--ink)}
+.cp-tri-teclas{font-size:var(--fs-2xs);color:var(--ink2)}
+.cp-tri-fim{text-align:center;padding:30px 10px}
+@media (max-width:720px){.cp-tri{padding:0}.cp-tri-box{border-radius:0;height:100%}.cp-tri-corpo{grid-template-columns:minmax(0,1fr)}.cp-tri-img{max-height:40vh}}
+.cp-secao-exp{font-weight:400;color:var(--ink2);font-size:var(--fs-2xs);display:block}
 @media (max-width:1279px){.cp-layout{grid-template-columns:minmax(0,1fr)}.cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}}
 .with-drawer .cp-layout{grid-template-columns:minmax(0,1fr)}
 .with-drawer .cp-lateral{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
@@ -2732,7 +2779,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
         <div class="cp-cartoes" id="cp-cartoes" role="group" aria-label="Resumo dos problemas"></div>
         
         <div class="panel cp-lista-painel">
-          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div>
+          <div class="cp-abas-linha"><div class="abas-sit cp-abas" id="err-abas" role="group" aria-label="Modo de trabalho"></div><button type="button" class="btn sm cp-seq-bt" data-cp-seq title="Um problema por vez, com a imagem grande e as teclas 1, 2 e 3">Resolver em sequência</button><label class="cp-agrupar" title="O mesmo projeto e o mesmo tipo numa linha só (os números continuam contando problemas)"><input type="checkbox" id="cp-agrupar"> Agrupar</label><label class="cp-ordem">Ordenar por: <select id="cp-ordem" aria-label="Ordenar por"><option value="prioridade">Prioridade</option><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="atualizados">Mexidos por último</option></select></label></div>
           <div class="filterbar cp-filtros"><input type="search" id="err-q" placeholder="Buscar título, nº, arquiteto, obra, fundo ou palavra… (tecla /)" aria-label="Buscar problemas" autocomplete="off">
             <button type="button" class="btn sm" id="cp-filtros-btn" aria-expanded="false" aria-controls="cp-filtros-mais">Filtros</button>
             <select id="cp-visoes" aria-label="Visões salvas" hidden></select><span class="cnt" id="err-cnt"></span></div>
@@ -2758,7 +2805,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
           <div class="panel cp-graf" id="cp-graf-tipo" role="region" aria-label="Problemas por tipo"></div>
           <div class="panel cp-graf" id="cp-graf-sem" role="region" aria-label="Evolução de resolução"></div>
         </div>
-        <details class="err-ignorados panel" id="err-ignorados" hidden><summary>Ignorados <b id="err-ign-n"></b></summary><div id="err-ign-corpo"></div></details>
+        <details class="err-ignorados panel" id="err-ignorados" hidden><summary>Ignorados <b id="err-ign-n"></b><span class="cp-secao-exp">Escondidos por você por 7 dias e os fechados como “não era problema” nos últimos 30 dias. Não entram nos números de cima.</span></summary><div id="err-ign-corpo"></div></details>
         <div class="panel" id="err-dup-proj" role="region" aria-label="Possíveis projetos duplicados" hidden></div>
       </div>
       <aside class="cp-lateral" id="cp-lateral" aria-label="Progresso e atividade"></aside>
@@ -10378,7 +10425,7 @@ async function errVerRepetidos(){let s;try{s=await API('/api/erros/mesclar-repet
    lista: J desce, K sobe, Enter abre o item escolhido, I ignora o item escolhido (esconder por 7 dias, com Desfazer). Sem item
    escolhido com J/K, o I continua abrindo Arquitetos; conferindo uma folha (outra tela) R/K/Enter seguem sendo da revisão. */
 let KB_ATUAL=null;
-function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body [data-err-linha]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
+function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body [data-err-linha],#err-body [data-cp-grupo]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
 function kbMarcar(el){document.querySelectorAll('.kb-atual').forEach(x=>{if(x!==el)x.classList.remove('kb-atual')});KB_ATUAL=el;if(!el)return;el.classList.add('kb-atual');if(!el.hasAttribute('tabindex'))el.tabIndex=-1;el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'})}
 async function kbIgnorar(v,el){if(v==='painel'){const b=el.querySelector('[data-ini-adiar]');if(b)b.click();else toast('Este item não tem "Ignorar"');return}
   const id=+el.dataset.errLinha,e=ERR_LISTA.find(x=>x.id===id);if(!e)return;if(!ERR_ABERTO(e)){toast('Este problema já está fechado');return}
@@ -10391,8 +10438,8 @@ document.addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey||/INPU
   const L=kbLinhas(v),atual=KB_ATUAL&&L.includes(KB_ATUAL)?KB_ATUAL:null;
   if(k==='j'||k==='k'){if(!L.length)return;e.preventDefault();e.stopPropagation();const i=atual?L.indexOf(atual):-1;kbMarcar(L[k==='j'?Math.min(L.length-1,i+1):Math.max(0,i<0?0:i-1)]);return}
   if(!atual)return;   /* Enter/I sem item escolhido: o comportamento de sempre */
-  if(k==='Enter'){if(e.target!==atual&&e.target!==document.body)return;e.preventDefault();e.stopPropagation();if(v==='erros')abrirErro(+atual.dataset.errLinha);else{const b=atual.querySelector('[data-ini-acao]')||atual;b.click()}return}
-  if(k==='i'){e.preventDefault();e.stopPropagation();if(EU&&EU.papel==='leitura'){toast('Quem só vê não ignora itens');return}const prox=L[L.indexOf(atual)+1]||L[L.indexOf(atual)-1]||null;kbIgnorar(v,atual);KB_ATUAL=null;setTimeout(()=>{const L2=kbLinhas(v);if(L2.length)kbMarcar(prox&&L2.includes(prox)?prox:L2[Math.min(L2.length-1,Math.max(0,L.indexOf(atual)))])},900)}},true);
+  if(k==='Enter'){if(e.target!==atual&&e.target!==document.body)return;e.preventDefault();e.stopPropagation();if(v==='erros'){if(atual.dataset.cpGrupo)atual.querySelector('[data-cp-g="ver"]')?.click();else abrirErro(+atual.dataset.errLinha)}else{const b=atual.querySelector('[data-ini-acao]')||atual;b.click()}return}
+  if(k==='i'){e.preventDefault();e.stopPropagation();if(EU&&EU.papel==='leitura'){toast('Quem só vê não ignora itens');return}if(atual.dataset.cpGrupo){toast('Abra o grupo (Enter) e ignore um a um');return}const prox=L[L.indexOf(atual)+1]||L[L.indexOf(atual)-1]||null;kbIgnorar(v,atual);KB_ATUAL=null;setTimeout(()=>{const L2=kbLinhas(v);if(L2.length)kbMarcar(prox&&L2.includes(prox)?prox:L2[Math.min(L2.length-1,Math.max(0,L.indexOf(atual)))])},900)}},true);
 /* UX-03: Problemas › Ignorados (n): o que você escondeu por 7 dias (volta sozinho; "Mostrar de novo") e o que foi fechado como
    "não era problema" pelo Ignorar nos últimos 30 dias (quem, quando e por quê; "Reabrir"). Recolhido. */
 async function errCarregarIgnorados(){const el=document.getElementById('err-ignorados');if(!el)return;let d;try{d=await API('/api/erros/ignorados')}catch(_){el.hidden=true;return}
@@ -10408,9 +10455,9 @@ document.addEventListener('click',async e=>{const m=e.target.closest('[data-err-
 async function carregarDupProjetos(){const el=document.getElementById('err-dup-proj');if(!el||el.dataset.carregando)return;el.dataset.carregando='1';
   try{const r=await API('/api/duplicados/projetos?limite=50');if(r.calculando)setTimeout(()=>{if(/^#erros/.test(location.hash))carregarDupProjetos()},20000);const aberto=!!el.querySelector('details[open]'),op=EU&&EU.papel!=='leitura';
     const lado=p=>{const u=decCapaURL(p,120);return `<div class="dup-lado">${u?`<img class="dec-mini" src="${escHtml(u)}" alt="" loading="lazy" onerror="this.remove()">`:''}<span class="code">${escHtml(p.codigo)}</span> <b>${escHtml(tituloExibicao(p.titulo))}</b><small>${escHtml([p.ano||'sem data',p.cidade].filter(Boolean).join(' · '))} · ${escHtml(qtd(p.folhas||0,'folha','folhas'))}</small></div>`};
-    el.hidden=!r.total;el.innerHTML=r.total?`<details${aberto?' open':''}><summary class="ph"><h2>Possíveis projetos duplicados <span class="n" id="err-dup-n">${escHtml(r.total)}</span></h2></summary><div class="pb"><p class="help">Projetos do mesmo fundo com nome parecido. Abra os dois e confira; se são o mesmo, use “Mesclar” no projeto. “Não é duplicata” tira o par desta lista de vez.</p>${r.pares.map(x=>`<div class="dup-par"><div class="dup-lados">${lado(x.a)}<span class="dup-x" aria-hidden="true">×</span>${lado(x.b)}</div><small class="help"><span class="tag ${x.nivel==='forte'?'r':'a'}">${x.nivel==='forte'?'muito parecido':'parecido'} · ${escHtml(Math.round(x.score*100))}%</span> ${escHtml((x.motivos||[]).join(' · '))}</small><div class="act"><button class="btn sm" data-np-abrir="${escHtml(x.a.codigo)}">Abrir ${escHtml(x.a.codigo)}</button><button class="btn sm" data-np-abrir="${escHtml(x.b.codigo)}">Abrir ${escHtml(x.b.codigo)}</button>${op?`<button class="btn sm" data-dup-nao="${escHtml(x.a.codigo)}" data-dup-outro="${escHtml(x.b.codigo)}" data-dup-f="${escHtml(x.fundo)}">Não é duplicata</button>`:''}</div></div>`).join('')}${r.total>r.pares.length?`<p class="help">Mostrando ${escHtml(r.pares.length)} de ${escHtml(r.total)}: os mais parecidos primeiro.</p>`:''}</div></details>`:''}
+    el.hidden=!r.total;el.innerHTML=r.total?`<details${aberto?' open':''}><summary class="ph"><h2>Possíveis projetos duplicados <small class="cp-secao-exp"><span id="err-dup-n">${escHtml(fmtN(r.total))}</span> pares de projetos do mesmo fundo com nome parecido, para conferir sem pressa. Não são problemas desta lista nem entram nos números de cima.</small></h2></summary><div class="pb"><p class="help">Projetos do mesmo fundo com nome parecido. Abra os dois e confira; se são o mesmo, use “Mesclar” no projeto. “Não é duplicata” tira o par desta lista de vez.</p>${r.pares.map(x=>`<div class="dup-par"><div class="dup-lados">${lado(x.a)}<span class="dup-x" aria-hidden="true">×</span>${lado(x.b)}</div><small class="help"><span class="tag ${x.nivel==='forte'?'r':'a'}">${x.nivel==='forte'?'muito parecido':'parecido'} · ${escHtml(Math.round(x.score*100))}%</span> ${escHtml((x.motivos||[]).join(' · '))}</small><div class="act"><button class="btn sm" data-np-abrir="${escHtml(x.a.codigo)}">Abrir ${escHtml(x.a.codigo)}</button><button class="btn sm" data-np-abrir="${escHtml(x.b.codigo)}">Abrir ${escHtml(x.b.codigo)}</button>${op?`<button class="btn sm" data-dup-nao="${escHtml(x.a.codigo)}" data-dup-outro="${escHtml(x.b.codigo)}" data-dup-f="${escHtml(x.fundo)}">Não é duplicata</button>`:''}</div></div>`).join('')}${r.total>r.pares.length?`<p class="help">Mostrando ${escHtml(r.pares.length)} de ${escHtml(r.total)}: os mais parecidos primeiro.</p>`:''}</div></details>`:''}
   catch(_){el.hidden=true}finally{delete el.dataset.carregando}}
-function errDupContar(){const n=document.getElementById('err-dup-n'),el=document.getElementById('err-dup-proj');if(!n||!el)return;const v=Math.max(0,(+n.textContent||0)-1);n.textContent=v;if(!el.querySelector('.dup-par'))el.hidden=true}
+function errDupContar(){const n=document.getElementById('err-dup-n'),el=document.getElementById('err-dup-proj');if(!n||!el)return;const v=Math.max(0,(+n.textContent.replace(/\D/g,'')||0)-1);n.textContent=fmtN(v);if(!el.querySelector('.dup-par'))el.hidden=true}
 async function errExecutar(acao,e){const proj=e.projeto_codigo,f=e.folha;
   if(acao==='devolver'){abrirErro(e.id,{devolver:true});return}
   if(acao==='duplicata'){await marcarDuplicata(f);closeDrawer(true);carregarErros();return}
@@ -10464,7 +10511,7 @@ const CP_IDADES={'0-7':'até 7 dias','8-30':'8 a 30 dias','31-90':'31 a 90 dias'
 const CP_SEV_IC={critico:'!',medio:'▲',baixo:'i'};
 const CP_SEV_TAG={critico:'r',medio:'a',baixo:'b'};
 const CP_FILTROS=['q','fase','gravidade','categoria','origem','responsavel','fundo','projeto','de','ate','idade','chip'];
-const CP_PADRAO={aba:'prioridades',ordem:'prioridade',pagina:1,por:25};
+const CP_PADRAO={aba:'prioridades',ordem:'prioridade',pagina:1,por:25,agrupar:''};
 /* ícones (traço com currentColor: claro e escuro) */
 const CP_IC={alerta:'<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>',exclama:'<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/>',ampulheta:'<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',camadas:'<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',ok:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',pessoa:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',alvo:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',trofeu:'<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 21h6M10 17h4"/>',relogio:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',lapis:'<path d="M4 20h4L19 9l-4-4L4 16v4z"/>',mais:'<path d="M12 5v14M5 12h14"/>',seta:'<path d="M5 12h14M13 6l6 6-6 6"/>',estrela:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/>'};
 function cpIc(n,cls=''){return `<svg class="cp-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${CP_IC[n]||''}</svg>`}
@@ -10475,8 +10522,8 @@ const ERR_ABERTO=e=>['aberto','em_correcao'].includes(e.situacao);
 function cpChips(){return new Set(String(CP.chip||'').split(',').filter(Boolean))}
 function cpTemFiltro(){return CP_FILTROS.some(k=>CP[k])}
 /* o endereço guarda aba, filtros, ordem, página e o problema aberto: link permanente, Voltar e F5 voltam ao mesmo lugar */
-function cpQS(o=CP,comAberto=true){const p=new URLSearchParams();['aba',...CP_FILTROS,'ordem','pagina','por'].forEach(k=>{const v=o[k];if(v!==''&&v!=null&&String(v)!==String(CP_PADRAO[k]??''))p.set(k,v)});if(comAberto&&CP_ABERTO)p.set('p',CP_ABERTO);return p.toString()}
-function cpLerQS(s){const p=new URLSearchParams(s||''),o=cpVazio();['aba',...CP_FILTROS,'ordem','pagina','por'].forEach(k=>{if(p.has(k))o[k]=p.get(k)});
+function cpQS(o=CP,comAberto=true){const p=new URLSearchParams();['aba',...CP_FILTROS,'ordem','pagina','por','agrupar'].forEach(k=>{const v=o[k];if(v!==''&&v!=null&&String(v)!==String(CP_PADRAO[k]??''))p.set(k,v)});if(comAberto&&CP_ABERTO)p.set('p',CP_ABERTO);return p.toString()}
+function cpLerQS(s){const p=new URLSearchParams(s||''),o=cpVazio();['aba',...CP_FILTROS,'ordem','pagina','por','agrupar'].forEach(k=>{if(p.has(k))o[k]=p.get(k)});
   o.pagina=Math.max(1,parseInt(o.pagina,10)||1);o.por=[25,50,100].includes(+o.por)?+o.por:25;if(!CP_ABAS.some(a=>a[0]===o.aba))o.aba='prioridades';if(!['prioridade','recentes','antigos','atualizados'].includes(o.ordem))o.ordem='prioridade';
   return {f:o,p:parseInt(p.get('p'),10)||null}}
 function cpGravarURL(){if(rotaAtual().split('/')[0]!=='erros')return;const qs=cpQS(),r='erros'+(qs?'/~'+qs:'');LISTA_MEM.set('erros.central',cpQS(CP,false));LISTA_MEM.set('erros.filtros_em',Date.now());
@@ -10514,6 +10561,7 @@ function cpRenderAtivos(){const fa=document.getElementById('err-filtro-ativo');i
   fa.innerHTML=L.length?`${L.map(([k,t])=>`<span class="cp-ativo">${escHtml(t)}<button type="button" class="cp-ativo-x" data-cp-tirar="${escHtml(k)}" aria-label="${escHtml('Tirar o filtro '+t)}">×</button></span>`).join('')}<button type="button" class="btn sm lnk" data-err-limpar-tudo>Limpar filtros</button><span class="cp-visao-salvar"><button type="button" class="btn sm" data-cp-visao>Salvar visão</button></span>`:''}
 function cpSincronizarCampos(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};
   v('err-q',CP.q);v('cp-fase',CP.fase.includes(',')?'':CP.fase);v('err-grav',CP.gravidade);v('err-cat',CP.categoria);v('err-orig',CP.origem);v('cp-resp',CP.responsavel);v('cp-fundo',CP.fundo);v('cp-de',CP.de);v('cp-ate',CP.ate);v('cp-idade',CP.idade);v('cp-ordem',CP.ordem);
+  const ag=document.getElementById('cp-agrupar');if(ag){ag.checked=cpAgrupa();ag.closest('label').hidden=CP.aba==='concluidos'}const sq=document.querySelector('[data-cp-seq]');if(sq)sq.hidden=CP.aba==='concluidos'||!pode('problema.resolver');
   const fb=document.getElementById('cp-filtros-btn');if(fb){const n=['fase','gravidade','categoria','origem','responsavel','fundo','de','ate','idade'].filter(k=>CP[k]).length;fb.textContent=n?`Filtros (${n})`:'Filtros'}}
 /* ---- linha compacta ---- */
 function cpOndeHTML(e){const p=[];if(e.fundo_codigo)p.push(`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair title="${escHtml(e.fundo_titulo||'')}">${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`);
@@ -10522,7 +10570,8 @@ function cpOndeHTML(e){const p=[];if(e.fundo_codigo)p.push(`<a class="lnk" href=
   return p.join(' <span class="cp-sep" aria-hidden="true">›</span> ')||`<span class="code">${escHtml(e.codigo)}</span>`}
 function cpCodigoCurto(e){const c=String(e.projeto_codigo||e.fundo_codigo||e.codigo).replace('-',' · '),d=e.folha?(String(e.folha).match(/-(D\d+)$/)||[])[1]:'';return d?`${c} · ${d}${e.tipo==='retirada'?' (fora do painel)':''}`:c}   /* F026 · P0001 · D00012, como no mockup */
 function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.severidade||'medio',pr=e.prioridade||{};
-  const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?'<span class="cp-resp cp-sem">Sem responsável</span>':'<span class="cp-resp cp-sem">—</span>');
+  const semFiltro=CP.responsavel==='ninguem'||cpChips().has('sem_responsavel');   /* CAMP-PROB-RAPIDO: filtrando por "sem responsável", a linha não repete */
+  const resp=e.responsavel_id?`<span class="cp-resp" data-cp-pessoa="${escHtml(e.responsavel_id)}">${escHtml(e.responsavel_nome||'')}</span>`:(ab?(semFiltro?'':'<span class="cp-resp cp-sem">Sem responsável</span>'):'<span class="cp-resp cp-sem">—</span>');
   const ctxTit=e.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo)}</a>`:e.fundo_codigo?`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair>${escHtml(e.fundo_titulo||e.fundo_codigo)}</a>`:'';
   const cod=e.folha&&e.folha_existe&&e.tipo==='comum'?`<a class="cp-chip-cod code" href="#item/${escHtml(e.folha)}" data-err-sair title="Abrir a folha ${escHtml(e.folha)}">${escHtml(cpCodigoCurto(e))}</a>`:`<span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span>`;
   const pri=ab&&!e.responsavel_id||e.fase==='aguardando_revisao';   /* o botão cheio (azul) é para o que ninguém pegou ou espera revisão; o resto, contorno */
@@ -10530,13 +10579,178 @@ function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.se
     <span class="cp-sel">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.id)}">`:''}</span>
     <span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(e.titulo)}</b> <small class="cp-id">nº ${escHtml(e.id)}</small></div>
-      <div class="cp-ctx">${ctxTit}${ctxTit?' · ':''}<span class="cp-desc">${escHtml(e.descricao)}</span></div>
+      <div class="cp-ctx" title="${escHtml(e.descricao)}">${ctxTit}${ctxTit?' · ':''}<span class="cp-desc">${escHtml(e.descricao)}</span></div>
       ${e.resolvido_sozinho&&ab?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}
-      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml(pr.razao+' (nota '+pr.nota+' de 100)')}">${escHtml(pr.razao)}</span>`:''}</div></div>
+      <div class="cp-meta">${cod}<span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span>${e.fase!=='novo'?`<span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span>`:''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div></div>
     <div class="cp-quando"><span>${cpIc('cal')}${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span><span>${cpIc('pessoa')}${resp}</span></div>
-    <span class="cp-sev-tag">${escHtml(e.severidade_rotulo)}</span>
+    <span class="cp-sev-tag"${ab&&pr.razao?` title="${escHtml(pr.razao+' (nota '+pr.nota+' de 100)')}"`:''}>${escHtml(e.severidade_rotulo)}</span>
     <div class="cp-acoes"><button type="button" class="btn sm ${pri?'pri ':''}cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
-      <details class="mais-menu cp-linha-mais"><summary class="btn sm" aria-haspopup="menu" aria-label="Mais ações do problema ${escHtml(e.id)}">⋯</summary><div class="mais-lista" role="menu">${res&&ab&&!e.responsavel_id?`<button type="button" role="menuitem" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}<button type="button" role="menuitem" data-cp-link="${escHtml(e.id)}">Copiar link</button>${e.projeto_codigo?`<button type="button" role="menuitem" data-cp-proj="${escHtml(e.projeto_codigo)}">Só este projeto</button>`:''}</div></details></div></div>`}
+      <details class="mais-menu cp-linha-mais"><summary class="btn sm" aria-haspopup="menu" aria-label="Mais ações do problema ${escHtml(e.id)}">⋯</summary><div class="mais-lista" role="menu">${res&&ab&&!e.responsavel_id?`<button type="button" role="menuitem" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}<button type="button" role="menuitem" data-cp-link="${escHtml(e.id)}">Copiar link</button>${e.projeto_codigo?`<button type="button" role="menuitem" data-cp-proj="${escHtml(e.projeto_codigo)}">Só este projeto</button>`:''}${e.rapido&&e.rapido.nao_e_problema?`<button type="button" role="menuitem" data-cp-r="nao" data-cp-id="${escHtml(e.id)}">Não é problema…</button>`:''}</div></details></div>${cpRapHTML(e)}</div>`}
+/* ===== CAMP-PROB-RAPIDO (22/11/2026). Rafael: "Decisões simples e rápidas podem ser clicks aí mesmo para resolver, não?"
+   Na linha: "Folha pode ser de outro projeto" (É deste projeto · Mover para <sugerido> · Escolher outro projeto… · Abrir), duplicata (É a mesma
+   folha · São diferentes), dado simples (campo + Salvar) e "Não é problema…" (motivo pronto). Cada uma resolve pelo fluxo da Central (conclusão do
+   modelo de decisão, a ação como justificativa, quem e quando, pontos da Home) e deixa o Desfazer no aviso (8 s, o teto do UX-22); a linha sai e os números se acertam
+   sem recarregar a lista. Mover vai pela rota de mover de sempre (admin), com simulação antes. Grupos: o mesmo projeto + o mesmo tipo numa linha.
+   "Resolver em sequência": um por vez, teclas 1/2/3, J/K pula, Esc sai. Servidor: backend/app/problemas_rapido.py. */
+const CP_NAO_MOTIVOS=[['sem_efeito','O aviso não muda nada na folha'],['ja_certo','A folha já está certa'],['repetido','É o mesmo caso de outro problema já tratado']];
+const CP_GRUPO_TIT={projeto_errado:n=>`${fmtN(n)} folhas podem ser de outro projeto`,duplicata:n=>`${fmtN(n)} folhas parecem repetidas`,metadado:n=>`${fmtN(n)} folhas com informação errada ou faltando`,orientacao:n=>`${fmtN(n)} folhas viradas`,espelhado:n=>`${fmtN(n)} folhas digitalizadas pelo verso`,autoria_divergente:n=>`${fmtN(n)} folhas com autoria não confirmada`};
+function cpAgrupa(){return CP.aba!=='concluidos'&&(CP.agrupar==='1'||(CP.agrupar!=='0'&&(CP.aba==='prioridades'||cpChips().has('critico'))))}
+function cpProjNome(e){return tituloExibicao(e.projeto_titulo||'')||e.projeto_codigo||''}
+function cpMiniHTML(url,alt,cls='cp-rap-mini'){return url?`<img class="${cls}" src="${escHtml(url)}" alt="${escHtml(alt)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls} cp-rap-sem',textContent:'sem imagem'}))">`:`<span class="${cls} cp-rap-sem">sem imagem</span>`}
+function cpRapHTML(e){const r=e.rapido;if(!e.aberto||!r||r.sensivel||!r.tipo)return '';const id=escHtml(e.id),f=e.folha?String(e.folha).slice(11):'';
+  const abrir=`<button type="button" class="btn sm lnk" data-cp-abrir="${id}">Abrir</button>`;let txt='',bts='',mini=cpMiniHTML(e.miniatura,'Folha '+f);
+  if(r.tipo==='outro_projeto'){
+    txt=`<span>${r.carimbo?`O carimbo diz: <b>${escHtml(r.carimbo)}</b>`:r.sem_identificacao?'<b>A folha não diz de qual obra é</b> (pasta com várias obras)':'<b>O CAMP Vision acha que é de outro projeto</b>'}</span><span><small>Está em:</small> <b>${escHtml(cpProjNome(e))}</b> <small class="code">${escHtml(e.projeto_codigo||'')}</small></span>`;
+    bts=(r.acoes.includes('deste_projeto')?`<button type="button" class="btn sm" data-cp-r="deste_projeto" data-cp-id="${id}">É deste projeto</button>`:'')
+      +(r.acoes.includes('mover')&&r.sugestao?`<button type="button" class="btn sm" data-cp-r="mover" data-cp-id="${id}" data-cp-destino="${escHtml(r.sugestao.codigo)}" title="${escHtml(r.sugestao.codigo+' · '+(r.sugestao.titulo||''))}">Mover para ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</button>`:'')
+      +(r.acoes.includes('escolher')?`<button type="button" class="btn sm lnk" data-cp-r="escolher" data-cp-id="${id}" data-cp-fundo="${escHtml(e.fundo_codigo||'')}">Escolher outro projeto…</button>`:'')}
+  else if(r.tipo==='duplicata'){mini=`<span class="cp-g-thumbs">${cpMiniHTML(e.miniatura,'Folha '+f,'')}${r.original?cpMiniHTML(r.original_miniatura,'Original '+String(r.original).slice(11),''):''}</span>`;
+    txt=`<span>${r.original?`Parece cópia de <b class="code">${escHtml(String(r.original).slice(11))}</b>`:'<b>Parece repetida</b> (a original não foi indicada)'}</span><span><small>${escHtml(cpProjNome(e))}</small></span>`;
+    bts=(r.acoes.includes('mesma_folha')?`<button type="button" class="btn sm" data-cp-r="mesma_folha" data-cp-id="${id}">É a mesma folha</button>`:'')+(r.acoes.includes('diferentes')?`<button type="button" class="btn sm" data-cp-r="diferentes" data-cp-id="${id}">São diferentes</button>`:'')}
+  else if(r.tipo==='metadado'){txt=`<span><b>${escHtml(r.campo_rotulo)}</b> <small>falta ou está errado</small></span>`;
+    bts=r.acoes.includes('metadado')?`<input type="text" class="cp-rap-valor" data-cp-id="${id}" ${r.campo==='ano_folha'?'inputmode="numeric" maxlength="4" placeholder="ex.: 1971"':'maxlength="200" placeholder="Título da folha"'} aria-label="${escHtml(r.campo_rotulo)}"><button type="button" class="btn sm" data-cp-r="metadado" data-cp-id="${id}">Salvar</button>`:''}
+  if(!bts&&!r.nao_e_problema)return '';
+  return `<div class="cp-rap" data-no-nav data-cp-rap="${id}">${mini}<div class="cp-rap-txt">${txt}</div><div class="cp-rap-bts">${bts}${abrir}</div><div class="cp-rap-conf" hidden role="group" aria-label="Confirmar"></div></div>`}
+function cpGrupoHTML(g){const sev=g.severidade||'medio',r=g.rapido||{},adm=cpAdmin(),id=escHtml(g.chave),tit=(CP_GRUPO_TIT[g.categoria]||(n=>`${fmtN(n)} problemas: ${g.titulo}`))(g.n);
+  const thumbs=g.membros.slice(0,8).map(m=>cpMiniHTML(m.miniatura,'Folha '+String(m.folha||'').slice(11),'')).join('')+(g.n>8?`<span class="cp-g-mais">+${fmtN(g.n-8)}</span>`:'');
+  const pr=g.prioridade||{};
+  const bts=(r.acoes||[]).includes('deste_projeto')?`<button type="button" class="btn sm" data-cp-g="deste_projeto" data-cp-gid="${id}">Todas são deste projeto</button>`:'';
+  const mov=(r.acoes||[]).includes('mover')&&adm?`<button type="button" class="btn sm" data-cp-g="mover" data-cp-gid="${id}"${r.sugestao?` data-cp-destino="${escHtml(r.sugestao.codigo)}"`:''} data-cp-fundo="${escHtml(g.fundo_codigo||'')}">Mover todas para…</button>`:'';
+  return `<div class="cp-linha cp-grupo sev-${sev}" role="listitem" data-cp-grupo="${id}">
+    <span class="cp-sel"></span><span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
+    <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(cpProjNome(g))} · <span data-cp-gtit>${escHtml(tit)}</span></b></div>
+      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}<span>${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span>${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
+      <div class="cp-g-thumbs">${thumbs}</div></div>
+    <span class="cp-sev-tag"${pr.razao?` title="${escHtml(pr.razao)}"`:''}>${escHtml(g.severidade_rotulo||'')}</span>
+    <div class="cp-acoes">${bts}${mov}<button type="button" class="btn sm lnk" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
+    <div class="cp-rap-conf" hidden data-no-nav role="group" aria-label="Confirmar"></div>
+    <div class="cp-g-membros" hidden>${g.membros.map(cpLinhaHTML).join('')}</div></div>`}
+let CP_LINHAS=[];   /* as linhas desenhadas (problema solto ou grupo); ERR_LISTA continua sendo a lista de problemas (os do grupo, um a um) */
+function cpItemPorId(id){return ERR_LISTA.find(x=>x.id===+id)||null}
+function cpGrupoPorId(gid){return CP_LINHAS.find(x=>x.grupo&&x.chave===gid)}
+/* tira da tela os problemas resolvidos (linha solta ou dentro do grupo) e acerta os números sem recarregar a lista */
+function cpTirarLinhas(ids){const S=new Set(ids.map(Number));let n=0;
+  const a0=ERR_LISTA.length;ERR_LISTA=ERR_LISTA.filter(x=>!S.has(x.id));n=a0-ERR_LISTA.length;
+  CP_LINHAS=CP_LINHAS.filter(x=>{if(x.grupo){x.membros=x.membros.filter(m=>!S.has(m.id));x.ids=x.membros.map(m=>m.id);x.n=x.membros.length;
+      const el=document.querySelector(`[data-cp-grupo="${CSS.escape(x.chave)}"]`);if(x.n<1){el&&el.remove();return false}
+      if(el){const t=el.querySelector('[data-cp-gtit]');if(t)t.textContent=(CP_GRUPO_TIT[x.categoria]||(k=>`${fmtN(k)} problemas: ${x.titulo}`))(x.n)}return true}
+    return !S.has(x.id)});
+  S.forEach(i=>{document.querySelectorAll(`#err-body [data-err-linha="${i}"]`).forEach(el=>el.remove());ERR_SEL.delete(i)});
+  CP_TOTAL=Math.max(0,CP_TOTAL-n);const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=CP_TOTAL?qtd(CP_TOTAL,'problema','problemas'):'';
+  const pi=document.querySelector('#err-mais .pg-info');if(pi)pi.textContent=`${fmtN(CP_TOTAL)} problemas nesta lista`;
+  const tb=document.getElementById('err-body');if(tb&&!tb.querySelector('[data-err-linha],[data-cp-grupo]'))carregarErros();
+  errAtualizarSelecao();cpAtualizarNumeros()}
+let CP_NUM_T=null;
+function cpAtualizarNumeros(){clearTimeout(CP_NUM_T);CP_NUM_T=setTimeout(async()=>{try{CP_RES=await API('/api/problemas/resumo?'+cpParams());
+  document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
+  const sub=document.getElementById('cp-sub');if(sub&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${fmtN(c.em_aberto)} ${c.em_aberto===1?'item que precisa':'itens que precisam'} de análise, conferência ou decisão.`}}catch(_){}
+  atualizarPendencias();cpCarregarLateral()},150)}
+function cpToastRapido(r,mover){const pul=(r.pulados||[]).length?` ${qtd(r.pulados.length,'ficou','ficaram')} de fora: ${r.pulados[0].motivo}`:'';
+  toast((r.mensagem||'Feito.')+pul,r.desfazer?{acao:{rotulo:'Desfazer',fn:()=>cpDesfazerRapido(r.desfazer,mover)}}:{ms:6000})}
+async function cpRapida(ids,acao,extra={},b){if(b)b.disabled=true;
+  try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:ids.map(Number),acao,...extra})});cpTirarLinhas(r.resolvidos||[]);cpToastRapido(r,false);return r}
+  catch(err){toast(err.message);if(b)b.disabled=false;return null}}
+async function cpDesfazerRapido(tok,mover){try{
+    if(mover){const s=await API('/api/problemas/rapido/desfazer/'+tok,{method:'POST',body:JSON.stringify({simular:true})});
+      const ok_=await confirmar({titulo:'Voltar a folha para o projeto de antes?',html:`<p>A folha volta pela mesma rota de mover e o problema reabre.</p><ul class="conf-lista">${(s.voltam||[]).map(v=>`<li><span class="code">${escHtml(v.de)}</span> → <span class="code">${escHtml(v.para)}</span></li>`).join('')}</ul>${s.ficaram?`<p class="help">${escHtml(qtd(s.ficaram,'folha mudou','folhas mudaram'))} depois e fica como está.</p>`:''}`,botao:'Voltar a folha'});if(!ok_)return}
+    const r=await API('/api/problemas/rapido/desfazer/'+tok,{method:'POST',body:JSON.stringify({simular:false})});
+    toast(r.ficaram?`Desfeito. ${qtd(r.ficaram,'foi mexido','foram mexidos')} depois e ficou como está.`:'Desfeito.');
+    if(CP_TRI)cpTriRecarregar();else carregarErros();atualizarPendencias()}catch(err){toast(err.message)}}
+function cpConfBox(el){const box=el.closest('[data-cp-rap],[data-cp-grupo]');return box?box.querySelector(':scope>.cp-rap-conf'):null}
+function cpConfMostrar(el,html){const c=cpConfBox(el);if(!c)return null;c.innerHTML=html;c.hidden=false;const f=c.querySelector('input,button.pri');if(f)setTimeout(()=>f.focus(),0);return c}
+async function cpMoverSimular(ids,destino,el){const c=cpConfMostrar(el,'<span class="help">Simulando o mover…</span>');
+  try{const s=await API('/api/problemas/rapido/mover',{method:'POST',body:JSON.stringify({ids:ids.map(Number),destino,simular:true})});const d=s.destino||{};
+    const li=(s.movidos||[]).slice(0,30).map(m=>`<li><span class="code">${escHtml(String(m.de).slice(11))}</span> → <span class="code">${escHtml(m.para)}</span></li>`).join('')+((s.duplicatas||[]).length?`<li>${escHtml(qtd(s.duplicatas.length,'folha já existe','folhas já existem'))} no destino: vira cópia</li>`:'');
+    c.innerHTML=`<span>Mover ${ids.length===1?'a folha':escHtml(qtd(ids.length,'folha','folhas'))} para <b>${escHtml(d.codigo||destino)}</b>${d.titulo?' · '+escHtml(tituloExibicao(d.titulo)):''}? (simulação: nada mudou ainda)</span><ul>${li}</ul>${(s.pulados||[]).length?`<small class="help">${escHtml(qtd(s.pulados.length,'fica','ficam'))} de fora: ${escHtml(s.pulados[0].motivo)}</small>`:''}<button type="button" class="btn sm pri" data-cp-mover-ok="${escHtml(destino)}" data-cp-ids="${escHtml(ids.join(','))}">Mover ${ids.length===1?'':fmtN((s.problemas||ids).length)+' '}agora</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`;
+    c.querySelector('[data-cp-mover-ok]').focus()}
+  catch(err){c.innerHTML=`<span class="erro-txt">${escHtml(err.message)}</span><button type="button" class="btn sm" data-cp-conf-x>Fechar</button>`}}
+async function cpMoverAgora(ids,destino,b){b.disabled=true;
+  try{const r=await API('/api/problemas/rapido/mover',{method:'POST',body:JSON.stringify({ids:ids.map(Number),destino,simular:false})});cpTirarLinhas(r.resolvidos||[]);cpToastRapido(r,true);return r}
+  catch(err){toast(err.message);b.disabled=false;return null}}
+function cpEscolherHTML(fundo){return `<div class="cp-rap-busca"><input type="search" class="cp-rap-q" data-cp-fundo="${escHtml(fundo)}" placeholder="Código ou nome do projeto (fundo ${escHtml(fundo)})" aria-label="Procurar o projeto certo" autocomplete="off"><div class="cp-rap-res" role="list"></div></div><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`}
+let CP_BUSCA_T=null;
+document.addEventListener('input',e=>{const i=e.target.closest&&e.target.closest('.cp-rap-q');if(!i)return;clearTimeout(CP_BUSCA_T);CP_BUSCA_T=setTimeout(async()=>{const res=i.parentElement.querySelector('.cp-rap-res');
+  try{const L=await API(`/api/problemas/rapido/projetos?fundo=${encodeURIComponent(i.dataset.cpFundo)}&q=${encodeURIComponent(i.value.trim())}`);
+    res.innerHTML=L.length?L.map(p=>`<button type="button" class="btn sm" role="listitem" data-cp-escolhido="${escHtml(p.codigo)}">${escHtml(p.codigo+' · '+(tituloExibicao(p.titulo||'')||''))}</button>`).join(''):'<small class="help">Nenhum projeto com esse nome neste fundo.</small>'}catch(err){res.innerHTML=`<small class="erro-txt">${escHtml(err.message)}</small>`}},220)});
+function cpIdsDoBotao(b){const gid=b.closest('[data-cp-grupo]')&&!b.closest('[data-cp-rap]')?b.closest('[data-cp-grupo]').dataset.cpGrupo:null;if(gid){const g=cpGrupoPorId(gid);return g?g.ids:[]}const r=b.closest('[data-cp-rap],[data-err-linha]');const id=b.dataset.cpId||(r&&(r.dataset.cpRap||r.dataset.errLinha));return id?[+id]:[]}
+document.addEventListener('click',async e=>{const t=e.target;
+  const x=t.closest('[data-cp-conf-x]');if(x){const c=x.closest('.cp-rap-conf');if(c){c.hidden=true;c.innerHTML=''}return}
+  const r=t.closest('[data-cp-r]');
+  if(r){e.preventDefault();const a=r.dataset.cpR,id=+r.dataset.cpId,it=cpItemPorId(id);
+    if(a==='nao'){r.closest('details')?.removeAttribute('open');const lin=document.querySelector(`#err-body [data-err-linha="${id}"]`);const alvo=lin&&lin.querySelector('[data-cp-rap]');
+      const html=`<span>Não é problema porque…</span>${CP_NAO_MOTIVOS.map(([k,t])=>`<button type="button" class="btn sm" data-cp-nao="${k}" data-cp-id="${id}">${escHtml(t)}</button>`).join('')}<button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`;
+      if(alvo)cpConfMostrar(alvo,html);else{const ok_=await confirmar({titulo:'Não é problema?',opcoes:CP_NAO_MOTIVOS.map(([k,t])=>({valor:k,rotulo:t})),botao:'Fechar: não é problema'});if(ok_)cpRapida([id],'nao_e_problema',{motivo:ok_.valor})}return}
+    if(a==='deste_projeto'||a==='mesma_folha'||a==='diferentes'){cpRapida([id],a,{},r);return}
+    if(a==='metadado'){const v=(r.parentElement.querySelector('.cp-rap-valor')||{}).value||'';if(!v.trim()){toast('Preencha o dado antes de salvar');return}cpRapida([id],'metadado',{valor:v.trim()},r);return}
+    if(a==='mover'){cpMoverSimular([id],r.dataset.cpDestino,r);return}
+    if(a==='escolher'){cpConfMostrar(r,cpEscolherHTML(r.dataset.cpFundo||(it&&it.fundo_codigo)||''));const i=cpConfBox(r).querySelector('.cp-rap-q');if(i)i.dispatchEvent(new Event('input',{bubbles:true}));return}
+    return}
+  const nao=t.closest('[data-cp-nao]');if(nao){cpRapida([+nao.dataset.cpId],'nao_e_problema',{motivo:nao.dataset.cpNao},nao);return}
+  const esc=t.closest('[data-cp-escolhido]');if(esc){cpMoverSimular(cpIdsDoBotao(esc),esc.dataset.cpEscolhido,esc);return}
+  const mok=t.closest('[data-cp-mover-ok]');if(mok){cpMoverAgora(mok.dataset.cpIds.split(',').map(Number),mok.dataset.cpMoverOk,mok);return}
+  const dok=t.closest('[data-cp-deste-ok]');if(dok){cpRapida(dok.dataset.cpIds.split(',').map(Number),'deste_projeto',{},dok);return}
+  const g=t.closest('[data-cp-g]');
+  if(g){const gr=cpGrupoPorId(g.dataset.cpGid);if(!gr)return;const a=g.dataset.cpG;
+    if(a==='ver'){const m=g.closest('[data-cp-grupo]').querySelector('.cp-g-membros');m.hidden=!m.hidden;g.setAttribute('aria-expanded',String(!m.hidden));g.textContent=m.hidden?'Ver uma a uma':'Recolher';return}
+    if(a==='deste_projeto'){cpConfMostrar(g,`<span>As ${escHtml(qtd(gr.n,'folha','folhas'))} são de <b>${escHtml(cpProjNome(gr))}</b>? Cada problema fica resolvido com a conclusão do modelo de decisão.</span><button type="button" class="btn sm pri" data-cp-deste-ok data-cp-ids="${escHtml(gr.ids.join(','))}">Sim, todas são deste projeto</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`);return}
+    if(a==='mover'){if(g.dataset.cpDestino)cpConfMostrar(g,`<span>O carimbo combina com <b>${escHtml(g.dataset.cpDestino)}</b>.</span><button type="button" class="btn sm" data-cp-escolhido="${escHtml(g.dataset.cpDestino)}">Simular o mover para ${escHtml(g.dataset.cpDestino)}</button>`+cpEscolherHTML(g.dataset.cpFundo));else cpConfMostrar(g,cpEscolherHTML(g.dataset.cpFundo));
+      const i=cpConfBox(g).querySelector('.cp-rap-q');if(i)i.dispatchEvent(new Event('input',{bubbles:true}));return}}
+  const tri=t.closest('[data-cp-seq]');if(tri){cpTriAbrir();return}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('.cp-rap-valor')){e.preventDefault();e.target.parentElement.querySelector('[data-cp-r="metadado"]')?.click()}});
+document.addEventListener('change',e=>{if(e.target.id==='cp-agrupar'){CP.agrupar=e.target.checked?'1':'0';CP.pagina=1;carregarErros()}});
+/* ---- Resolver em sequência (triagem): um problema por vez ---- */
+let CP_TRI=null;
+async function cpTriCarregarMais(){const T=CP_TRI;if(!T||T.fim||T.carregando)return;T.carregando=true;
+  try{const L=await API('/api/problemas?'+cpParams({ordem:CP.ordem,pagina:T.pagina,por_pagina:50}));T.total=T.total||L.total;T.itens.push(...L.itens.filter(x=>!T.itens.some(y=>y.id===x.id)));T.pagina++;if(T.pagina>L.paginas)T.fim=true}
+  finally{T.carregando=false}}
+async function cpTriAbrir(){if(CP_TRI)return;CP_TRI={itens:[],i:0,pagina:1,total:0,feitos:0,fim:false};
+  const ov=document.createElement('div');ov.id='cp-tri';ov.className='cp-tri';ov.setAttribute('role','dialog');ov.setAttribute('aria-modal','true');ov.setAttribute('aria-label','Resolver em sequência');ov.innerHTML='<div class="cp-tri-box"><p class="help">Carregando…</p></div>';document.body.appendChild(ov);
+  window.addEventListener('keydown',cpTriTecla,true);
+  try{await cpTriCarregarMais()}catch(err){toast(err.message)}cpTriDesenhar()}
+function cpTriFechar(){window.removeEventListener('keydown',cpTriTecla,true);document.getElementById('cp-tri')?.remove();const mudou=CP_TRI&&CP_TRI.feitos;CP_TRI=null;if(mudou)carregarErros()}
+async function cpTriRecarregar(){if(!CP_TRI)return;const i=CP_TRI.i;CP_TRI.itens=[];CP_TRI.pagina=1;CP_TRI.fim=false;CP_TRI.total=0;await cpTriCarregarMais();CP_TRI.i=Math.min(i,Math.max(0,CP_TRI.itens.length-1));cpTriDesenhar()}
+function cpTriOpcoes(e){const r=e.rapido||{},o=[];if(!e.aberto)return o;
+  if(r.tipo==='outro_projeto'){if(r.acoes.includes('deste_projeto'))o.push({k:'1',rot:'É deste projeto',fn:()=>cpTriFazer(e,'deste_projeto')});if(r.acoes.includes('mover')&&r.sugestao)o.push({k:'2',rot:`Mover para ${tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo} (${r.sugestao.codigo})`,fn:()=>cpTriMover(e,r.sugestao.codigo)})}
+  else if(r.tipo==='duplicata'){if(r.acoes.includes('mesma_folha'))o.push({k:'1',rot:'É a mesma folha',fn:()=>cpTriFazer(e,'mesma_folha')});if(r.acoes.includes('diferentes'))o.push({k:'2',rot:'São diferentes',fn:()=>cpTriFazer(e,'diferentes')})}
+  else if(r.tipo==='metadado'&&r.acoes.includes('metadado'))o.push({k:'1',rot:'Salvar o dado (escreva e aperte Enter)',campo:true,fn:()=>{const v=(document.getElementById('cp-tri-valor')||{}).value||'';if(v.trim())cpTriFazer(e,'metadado',{valor:v.trim()});else document.getElementById('cp-tri-valor')?.focus()}});
+  if(r.nao_e_problema)o.push({k:'3',rot:'Não é problema (o aviso não muda nada na folha)',fn:()=>cpTriFazer(e,'nao_e_problema',{motivo:'sem_efeito'})});
+  return o}
+function cpTriDesenhar(){const T=CP_TRI,ov=document.getElementById('cp-tri');if(!T||!ov)return;const box=ov.querySelector('.cp-tri-box');const e=T.itens[T.i];
+  const teclas='<p class="cp-tri-teclas"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> escolhem · <kbd>J</kbd> próxima · <kbd>K</kbd> anterior · <kbd>Enter</kbd> abre o painel · <kbd>Esc</kbd> sai</p>';
+  const topo=`<div class="cp-tri-top"><b>Resolver em sequência</b><span class="cp-tri-prog" id="cp-tri-prog">${e?`<b>${fmtN(T.i+1)}</b> de ${fmtN(T.total)}`:''}</span><button type="button" class="btn sm" data-cp-tri-sair>Sair (Esc)</button></div>`;
+  if(!e){box.innerHTML=topo+`<div class="cp-tri-fim"><h2>Fim da lista</h2><p>${escHtml(T.feitos?qtd(T.feitos,'resolvido','resolvidos')+'.':'Nada mais nesta lista.')}</p><button type="button" class="btn pri" data-cp-tri-sair>Voltar à lista</button></div>`;return}
+  const r=e.rapido||{},ops=cpTriOpcoes(e);
+  const img=e.miniatura?`<img class="cp-tri-img" src="${escHtml(e.miniatura)}" alt="${escHtml('Folha '+String(e.folha||'').slice(11))}">`:'<span class="cp-tri-img cp-rap-sem">sem imagem desta folha</span>';
+  box.innerHTML=topo+`<div class="cp-tri-corpo" data-cp-tri-id="${escHtml(e.id)}">${img}<div class="cp-tri-info"><h2>${escHtml(e.titulo)} <small class="cp-id">nº ${escHtml(e.id)}</small></h2>
+    <p><span class="tag ${CP_SEV_TAG[e.severidade]||''}">${escHtml(e.severidade_rotulo||'')}</span> <b>${escHtml(cpProjNome(e))}</b> <span class="code">${escHtml(cpCodigoCurto(e))}</span></p>
+    ${r.carimbo?`<div class="cp-tri-car">O carimbo diz: <b>${escHtml(r.carimbo)}</b></div>`:''}<p class="help">${escHtml(e.descricao||'')}</p>
+    ${r.sensivel?`<p class="cp-pend">${escHtml(r.motivo)}</p>`:''}
+    <div class="cp-tri-ops">${ops.map(o=>o.campo?`<label class="field">${escHtml(r.campo_rotulo||'Dado')}<input id="cp-tri-valor" ${r.campo==='ano_folha'?'inputmode="numeric" maxlength="4" placeholder="ex.: 1971"':'maxlength="200"'}></label><button type="button" class="btn" data-cp-tri-op="${o.k}"><kbd>${o.k}</kbd> ${escHtml(o.rot)}</button>`:`<button type="button" class="btn" data-cp-tri-op="${o.k}"><kbd>${o.k}</kbd> ${escHtml(o.rot)}</button>`).join('')}
+      <button type="button" class="btn lnk" data-cp-tri-abrir><kbd>Enter</kbd> Abrir no painel (resolver com evidência)</button></div>
+    <div class="cp-rap-conf" id="cp-tri-conf" hidden></div>${teclas}</div></div>`;
+  box.tabIndex=-1;box.focus({preventScroll:true})}   /* o foco fica na caixa (não num botão): Enter abre o painel, 1/2/3 escolhem */
+async function cpTriFazer(e,acao,extra={}){try{const r=await API('/api/problemas/rapido',{method:'POST',body:JSON.stringify({ids:[e.id],acao,...extra})});
+    cpToastRapido(r,false);cpTriAvancar(r.resolvidos||[])}catch(err){toast(err.message)}}
+async function cpTriMover(e,destino){const c=document.getElementById('cp-tri-conf');c.hidden=false;c.innerHTML='<span class="help">Simulando o mover…</span>';
+  try{const s=await API('/api/problemas/rapido/mover',{method:'POST',body:JSON.stringify({ids:[e.id],destino,simular:true})});const m=(s.movidos||[])[0];
+    c.innerHTML=`<span>Mover para <b>${escHtml(destino)}</b>${s.destino&&s.destino.titulo?' · '+escHtml(tituloExibicao(s.destino.titulo)):''}?${m?` Vira <span class="code">${escHtml(m.para)}</span>.`:''} (simulação)</span><button type="button" class="btn sm pri" data-cp-tri-mover="${escHtml(destino)}">Mover agora (Enter)</button><button type="button" class="btn sm" data-cp-conf-x>Cancelar</button>`;
+    c.querySelector('[data-cp-tri-mover]').focus()}catch(err){c.innerHTML=`<span class="erro-txt">${escHtml(err.message)}</span>`}}
+function cpTriAvancar(resolvidos){const T=CP_TRI;if(!T)return;const S=new Set(resolvidos);const antes=T.itens.length;T.itens=T.itens.filter(x=>!S.has(x.id));const n=antes-T.itens.length;T.feitos+=n;
+  cpAtualizarNumeros();if(T.i>=T.itens.length&&!T.fim)cpTriCarregarMais().then(cpTriDesenhar);else cpTriDesenhar()}
+function cpTriIr(d){const T=CP_TRI;if(!T)return;T.i=Math.max(0,T.i+d);if(T.i>=T.itens.length){if(!T.fim){cpTriCarregarMais().then(()=>{T.i=Math.min(T.i,T.itens.length);cpTriDesenhar()});return}T.i=T.itens.length}cpTriDesenhar()}
+function cpTriTecla(e){if(!CP_TRI||document.getElementById('conf-ov'))return;const typing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||'');
+  if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();const c=document.getElementById('cp-tri-conf');if(c&&!c.hidden){c.hidden=true;c.innerHTML='';return}if(typing){e.target.blur();return}cpTriFechar();return}
+  if(typing){if(e.key==='Enter'&&e.target.id==='cp-tri-valor'){e.preventDefault();e.stopImmediatePropagation();document.querySelector('[data-cp-tri-op="1"]')?.click()}return}
+  if(e.metaKey||e.ctrlKey||e.altKey)return;const k=e.key.toLowerCase();
+  if(['1','2','3','j','k','enter','arrowright','arrowleft'].includes(k)||/^[a-z0-9]$/.test(k))e.stopImmediatePropagation();   /* as teclas do menu não valem aqui */
+  if(k==='enter'){const mv=document.querySelector('[data-cp-tri-mover]');if(mv){e.preventDefault();mv.click();return}if(e.target.closest&&e.target.closest('#cp-tri button'))return;e.preventDefault();document.querySelector('[data-cp-tri-abrir]')?.click();return}
+  if(k==='j'||k==='arrowright'){e.preventDefault();cpTriIr(1);return}if(k==='k'||k==='arrowleft'){e.preventDefault();cpTriIr(-1);return}
+  if(['1','2','3'].includes(k)){const b=document.querySelector(`[data-cp-tri-op="${k}"]`);if(b){e.preventDefault();b.click()}}}
+document.addEventListener('click',e=>{if(!CP_TRI)return;const t=e.target;
+  if(t.closest('[data-cp-tri-sair]')){cpTriFechar();return}
+  const op=t.closest('[data-cp-tri-op]');if(op){const it=CP_TRI.itens[CP_TRI.i];const o=it&&cpTriOpcoes(it).find(x=>x.k===op.dataset.cpTriOp);if(o)o.fn();return}
+  const mv=t.closest('[data-cp-tri-mover]');if(mv){const it=CP_TRI.itens[CP_TRI.i];mv.disabled=true;API('/api/problemas/rapido/mover',{method:'POST',body:JSON.stringify({ids:[it.id],destino:mv.dataset.cpTriMover,simular:false})}).then(r=>{cpToastRapido(r,true);cpTriAvancar(r.resolvidos||[])}).catch(err=>{toast(err.message);mv.disabled=false});return}
+  if(t.closest('[data-cp-tri-abrir]')){const it=CP_TRI.itens[CP_TRI.i];cpTriFechar();if(it)abrirErro(it.id);return}});
 function cpEsqueleto(n=5){return Array.from({length:n},()=>'<div class="cp-linha cp-esq" aria-hidden="true"><span></span><span class="cp-sev-ic"></span><div class="cp-corpo"><div class="cp-esq-l"></div><div class="cp-esq-l curto"></div></div></div>').join('')}
 function cpPaginasHTML(){const n=CP_PAGINAS,a=CP.pagina;if(!CP_TOTAL)return '';const ini=(a-1)*CP.por+1,fim=Math.min(CP_TOTAL,a*CP.por);
   const ps=new Set([1,2,3,4,5].filter(x=>x<=n));[a-1,a,a+1,n].forEach(x=>{if(x>=1&&x<=n)ps.add(x)});const L=[...ps].sort((x,y)=>x-y);let h='',ult=0;
@@ -10546,7 +10760,7 @@ function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
   document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
   cpRenderAtivos();cpSincronizarCampos();
   CP_POR_FOLHA={};ERR_LISTA.forEach(e=>{if(e.folha&&e.aberto)CP_POR_FOLHA[e.folha]=(CP_POR_FOLHA[e.folha]||0)+1});   /* UX-64: a mesma folha com vários problemas fica marcada ("N problemas nesta folha") */
-  tb.innerHTML=ERR_LISTA.length?ERR_LISTA.map(cpLinhaHTML).join(''):(cpTemFiltro()?vazioHTML('Nenhum problema encontrado.','Limpe os filtros ou tente outra busca.','<button class="btn sm pri" data-err-limpar-tudo>Limpar filtros</button>')
+  tb.innerHTML=CP_LINHAS.length?CP_LINHAS.map(x=>x.grupo?cpGrupoHTML(x):cpLinhaHTML(x)).join(''):(cpTemFiltro()?vazioHTML('Nenhum problema encontrado.','Limpe os filtros ou tente outra busca.','<button class="btn sm pri" data-err-limpar-tudo>Limpar filtros</button>')
     :CP.aba==='minha_fila'?vazioHTML('Nada na sua fila.','Quando alguém atribuir um problema a você (ou você assumir um), ele aparece aqui.','<button class="btn sm" data-err-sit="prioridades">Ver as prioridades</button>')
     :CP.aba==='prioridades'&&CP_RES&&CP_RES.cartoes&&CP_RES.cartoes.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(CP_RES.cartoes.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-cp-ver-avisos>Ver os avisos</button>')
     :vazioHTML('Nenhum problema nesta lista.','Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':''));
@@ -10578,9 +10792,9 @@ async function carregarErros(aba){
   const volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;
   sec.querySelector('.aviso-exemplo')?.remove();const seq=++ERR_SEQ;tb.setAttribute('aria-busy','true');if(!tb.querySelector('[data-err-linha]'))tb.innerHTML=cpEsqueleto();
   cpCarregarPessoas();cpSincronizarCampos();
-  try{const [L,R]=await Promise.all([API('/api/problemas?'+cpParams({ordem:CP.ordem,pagina:CP.pagina,por_pagina:CP.por})),API('/api/problemas/resumo?'+cpParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
+  try{const [L,R]=await Promise.all([API('/api/problemas?'+cpParams({ordem:CP.ordem,pagina:CP.pagina,por_pagina:CP.por,agrupar:cpAgrupa()?1:0})),API('/api/problemas/resumo?'+cpParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
     if(L.pagina>L.paginas&&CP.pagina>1){CP.pagina=L.paginas;return carregarErros()}
-    ERR_LISTA=L.itens;CP_TOTAL=L.total;CP_PAGINAS=L.paginas;CP_RES=R;cpRender();if(naTela)cpGravarURL();atualizarPendencias();errCarregarIgnorados();
+    CP_LINHAS=L.itens;ERR_LISTA=L.itens.flatMap(x=>x.grupo?x.membros:[x]);CP_TOTAL=L.total;CP_PAGINAS=L.paginas;CP_RES=R;cpRender();if(naTela)cpGravarURL();atualizarPendencias();errCarregarIgnorados();
     if(naTela){cpCarregarLateral();cpCarregarGraficos();cpCarregarVisoes()}
     if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
   catch(e){if(e.status!==401&&e.status!==428){tb.setAttribute('aria-busy','false');tb.innerHTML=e.status===403?estadoHTML('sem-permissao',{titulo:'Você não pode ver os problemas.',texto:'O seu papel neste painel não abre esta lista.',quem:'um administrador (o Rafael)'}):estadoErroHTML({titulo:'Não consegui carregar os problemas.',texto:e.message,retry:'carregarErros()'})}}}
@@ -10619,8 +10833,8 @@ function cpDiasHoras(ts){const t=Date.parse(String(ts||'').replace(' ','T')+'Z')
 async function cpCarregarVisoes(){const s=document.getElementById('cp-visoes');if(!s)return;try{CP_VISOES=await API('/api/problemas/visoes')}catch(_){CP_VISOES=[]}
   s.hidden=!CP_VISOES.length;const atual=cpQS(CP,false);s.innerHTML=`<option value="">Visões salvas (${fmtN(CP_VISOES.length)})</option>`+CP_VISOES.map(v=>`<option value="${escHtml(v.id)}"${v.params===atual?' selected':''}>${escHtml(v.nome)}</option>`).join('')+(CP_VISOES.some(v=>v.params===atual)?'<option value="apagar">Apagar esta visão</option>':'')}
 /* ---- painel lateral de resolução ---- */
-const CP_EVT={criado:'registrou o problema',evidencia:'adicionou evidência',atribuido:'mudou o responsável',duplicado_juntado:'juntou como duplicado',recebeu_duplicado:'recebeu um duplicado',fechado_automatico:'fechou sozinho (o painel conferiu)',editado:'mudou a situação',ignorado:'fechou: não era problema',mesclado:'mesclou mensagem repetida',desfeito:'desfez uma ação',pontos_estornados:'os pontos da resolução foram estornados',reaberto_automatico:'reabriu sozinho',problema_seguiu_folha:'o problema seguiu a folha (código novo)'};
-function cpEventoTexto(h){const d=h.detalhe||{};let t=h.tipo==='fase'?'moveu para '+(CP_FASES[d.para]||d.para):(CP_EVT[h.tipo]||h.tipo);
+const CP_EVT={criado:'registrou o problema',evidencia:'adicionou evidência',atribuido:'mudou o responsável',duplicado_juntado:'juntou como duplicado',recebeu_duplicado:'recebeu um duplicado',fechado_automatico:'fechou sozinho (o painel conferiu)',editado:'mudou a situação',ignorado:'fechou: não era problema',mesclado:'mesclou mensagem repetida',desfeito:'desfez uma ação',pontos_estornados:'os pontos da resolução foram estornados',reaberto_automatico:'reabriu sozinho',problema_seguiu_folha:'o problema seguiu a folha (código novo)',fechado_na_conferencia:'resolveu na conferência',problema_reclassificado:'passou a aviso (aviso técnico menor)'};   /* CAMP-PROB-RAPIDO: todo código de evento tem rótulo; o que não tiver vira "registrou uma mudança", nunca o código */
+function cpEventoTexto(h){const d=h.detalhe||{};let t=h.tipo==='fase'?'moveu para '+(CP_FASES[d.para]||d.para):(CP_EVT[h.tipo]||'registrou uma mudança');
   if(h.tipo==='tarefa_atribuida')t='atribuiu a '+(d.para||'alguém');if(h.tipo==='tarefa_devolvida')t='devolveu (sem responsável)';
   const extra=d.conclusao||d.motivo||d.justificativa||(h.tipo==='duplicado_juntado'&&d.fica?'fica o nº '+d.fica:'')||(h.tipo==='recebeu_duplicado'&&d.duplicado?'nº '+d.duplicado:'')||d.motivo;
   return t+(extra?': '+extra:'')}

@@ -474,34 +474,40 @@ def mover_lote(lid: int, d: MoverLote, tarefas: BackgroundTasks, u: dict = Depen
 @router.post("/itens/{codigo}/duplicata-de")
 def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Marca a folha como duplicata de outra (nada é apagado; só a original vai ao site)."""
-    if d.tipo not in ("exata", "perceptual", "mesma_folha"):
-        raise HTTPException(400, "Tipo de duplicata inválido.")
-    if codigo == d.codigo_original:
-        raise HTTPException(400, "Uma folha não pode ser duplicata dela mesma.")
     con = connect()
     try:
-        a = con.execute("SELECT codigo, status_site FROM item WHERE codigo=?", (codigo,)).fetchone()
-        o = con.execute("SELECT codigo, duplicata_de FROM item WHERE codigo=?", (d.codigo_original,)).fetchone()
-        if not a or not o:
-            raise HTTPException(404, "Folha não existe.")
-        troca = o["duplicata_de"] == codigo                      # "qual publica": a original passa a ser a cópia e vice-versa
-        if o["duplicata_de"] and not troca:
-            raise HTTPException(409, f"{d.codigo_original} já é duplicata de {o['duplicata_de']}: aponte para a original.")
-        if a["status_site"] == "no_ar" and con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (codigo,)).fetchone()[0]:
-            raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
-        if troca:
-            con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original,))
-        con.execute("""UPDATE item SET duplicata_de=?, tipo_duplicata=?, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
-                       atualizado_em=datetime('now') WHERE codigo=?""", (d.codigo_original, d.tipo, u["email"], d.codigo_original, codigo))   # foi uma pessoa: já conta como conferida (tela Duplicatas)
-        con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
-                    (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo, "trocou": troca}, ensure_ascii=False)))
-        from .problemas import fechar_resolvidos
-        fechados = fechar_resolvidos(con, u["email"])                  # 19/10: o problema de duplicata desta folha fecha (com registro)
+        out = marcar_duplicata_em(con, codigo, d.codigo_original, d.tipo, u)
         con.commit()
-        return {"ok": True, "trocou": troca, **({"problemas_fechados": len(fechados)} if fechados else {})}
+        return out
     finally:
         con.close()
+
+
+def marcar_duplicata_em(con, codigo: str, original: str, tipo: str, u: dict) -> dict:
+    """O corpo do "marcar como cópia" (a rota acima e a ação rápida "É a mesma folha" da tela Problemas, CAMP-PROB-RAPIDO). NÃO faz commit."""
+    if tipo not in ("exata", "perceptual", "mesma_folha"):
+        raise HTTPException(400, "Tipo de duplicata inválido.")
+    if codigo == original:
+        raise HTTPException(400, "Uma folha não pode ser duplicata dela mesma.")
+    a = con.execute("SELECT codigo, status_site FROM item WHERE codigo=?", (codigo,)).fetchone()
+    o = con.execute("SELECT codigo, duplicata_de FROM item WHERE codigo=?", (original,)).fetchone()
+    if not a or not o:
+        raise HTTPException(404, "Folha não existe.")
+    troca = o["duplicata_de"] == codigo                      # "qual publica": a original passa a ser a cópia e vice-versa
+    if o["duplicata_de"] and not troca:
+        raise HTTPException(409, f"{original} já é duplicata de {o['duplicata_de']}: aponte para a original.")
+    if a["status_site"] == "no_ar" and con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (codigo,)).fetchone()[0]:
+        raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
+    if troca:
+        con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (original,))
+    con.execute("""UPDATE item SET duplicata_de=?, tipo_duplicata=?, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
+                   atualizado_em=datetime('now') WHERE codigo=?""", (original, tipo, u["email"], original, codigo))   # foi uma pessoa: já conta como conferida (tela Duplicatas)
+    con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (original, codigo))   # quem apontava para esta passa a apontar para a original
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
+                (codigo, u["email"], _json.dumps({"original": original, "tipo": tipo, "trocou": troca}, ensure_ascii=False)))
+    from .problemas import fechar_resolvidos
+    fechados = fechar_resolvidos(con, u["email"])                  # 19/10: o problema de duplicata desta folha fecha (com registro)
+    return {"ok": True, "trocou": troca, **({"problemas_fechados": len(fechados)} if fechados else {})}
 
 
 @router.delete("/itens/{codigo}/duplicata-de")

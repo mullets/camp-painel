@@ -119,6 +119,7 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Prioridades" (antes "Abertos"
 
     // ================= UX-20 =================
     await page.click('#err-abas [data-err-sit="prioridades"]'); await pronto();
+    if (await page.$eval('#cp-agrupar', c => c.checked)) { await page.click('#cp-agrupar'); await pronto(); }   // CAMP-PROB-RAPIDO: Prioridades agrupa por padrão; a seleção em massa é um a um
     await page.locator('#err-body [data-err-linha] .err-sel').first().check(); await page.waitForTimeout(200);
     chk(await page.isVisible('#err-bulk [data-err-sel-mesmo="tipo"]') && await page.isVisible('#err-bulk [data-err-sel-mesmo="projeto"]'), 'UX-20: escolhido um problema, a barra oferece "Todos deste tipo" e "Todos deste projeto"');
     const esperadoTipo = await page.evaluate(() => errMesmos('tipo', ERR_LISTA.find(e => e.id === ERR_SEL_ULT)).length);

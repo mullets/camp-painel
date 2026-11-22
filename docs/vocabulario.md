@@ -259,6 +259,18 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   **Atividade recente** (ícones: resolvido, evidência, atribuído, registrado; **Ver histórico de atividades** só para admin). Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
   pessoas, pelo sistema, novos).
 - Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, ranking sem o aviso de que não serve para avaliar desempenho.
+- **Decisões rápidas na linha** (CAMP-PROB-RAPIDO, 22/11/2026): "O carimbo diz: …", "Está em: …", "A folha não diz de qual obra é (pasta com várias obras)",
+  **É deste projeto**, **Mover para <projeto>**, **Escolher outro projeto…**, **Abrir**, **É a mesma folha**, **São diferentes**, "Parece cópia de …",
+  campo + **Salvar**, **Não é problema…** ("Não é problema porque…": **O aviso não muda nada na folha** · **A folha já está certa** · **É o mesmo caso de
+  outro problema já tratado**). Mover: "Mover a folha para F0xx-P0yyy · nome? (simulação: nada mudou ainda)", **Mover agora**, **Cancelar**. Avisos:
+  curtos e neutros (Rafael: "não quero que fique infantil o sistema, é algo bem sério"): "Resolvido." / "N resolvidos.", "Movida para F0xx-P0yyy.
+  Resolvido.", "Fechado: não é problema.", com **Desfazer** (8 s, o teto dos avisos); "N ficaram de fora: <motivo>"; "Desfeito."; nunca emoji, confete ou "Parabéns"; desfazer o mover: **Voltar a folha para o projeto de antes?**,
+  **Voltar a folha**. Grupo: "<projeto> · N folhas podem ser de outro projeto" (ou "N folhas parecem repetidas", "N problemas: <título>"), "o carimbo combina
+  com …", "o mais antigo há N dias", **Todas são deste projeto** ("Sim, todas são deste projeto"), **Mover todas para…**, **Ver uma a uma** / **Recolher**;
+  caixa **Agrupar**. **Resolver em sequência**: só "N de M" (sem enfeite), **Sair (Esc)**, "Abrir no painel (resolver com evidência)", "Fim da lista".
+  Embaixo: **Ignorados** ("Escondidos por você por 7 dias e os fechados como “não era problema” nos últimos 30 dias…") e **Possíveis projetos
+  duplicados** ("N pares de projetos do mesmo fundo com nome parecido, para conferir sem pressa…"). Atividade: **Resolvido na conferência**,
+  **Passou a aviso**, **Ação desfeita**, **Mensagem repetida juntada**, **Reaberto sozinho**, **Seguiu a folha**; "resolveu na lista: É deste projeto".
 
 ## Regras de texto
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
