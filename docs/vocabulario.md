@@ -233,8 +233,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Fases: **Novo** → **Em triagem** → **Em análise** → **Aguardando revisão** → **Resolvido**, e **Aguardando informação**, **Devolvido**,
   **Reaberto**, **Duplicado**, **Inválido**. Na linha: **Não atribuído**, "há N dias", o motivo da prioridade ("Crítico: bloqueia a
   publicação · autoria conflitante", "aguardando revisão há N dias", "avisado por visitante do site", "projeto no site com este
-  problema"), **resolução rápida**, **pelo sistema**. UMA ação: **Analisar** / **Continuar** / **Revisar** / **Ver**, e **⋯** (**Assumir**,
-  **Copiar link**, **Só este projeto**).
+  problema"), **resolução rápida**, **pelo sistema**. UMA ação: **Analisar** / **Continuar** / **Revisar** / **Ver**, e **⋯** (**Pegar para mim**,
+  **Copiar link**, **Só este projeto**). O motivo é a frase da Home ("Prioridade alta porque impede a publicação e aguarda há N dias")
+  mais o impacto ("· autoria conflitante").
 - Títulos curtos (o que está errado): **Autoria não confirmada**, **Folha pode ser de outro projeto**, **Registro duplicado no acervo**,
   **Folha virada**, **Folha digitalizada pelo verso**, **Código errado**, **Informação errada ou faltando**, **Crédito errado ou faltando**,
   **Arquivo da imagem danificado**, **Problema relatado**, **Folha retirada pelo CAMP Vision**, **Folha recusada na importação**.
@@ -243,18 +244,20 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   (**Modelo de decisão**, **Salvar o texto como modelo**, **Conclusão / parecer**, **Evidência**, **Hipótese a que se refere**,
   **Justificativa ou motivo**, **Adicionar evidência**), botões **Resolver**, **Enviar para revisão**, **Aprovar e resolver**, **Devolver**,
   **Começar análise**, **Retomar a análise**, **Em triagem**, **Suspender: aguardando informação**, **Não é problema**, **Duplicado do nº**
-  + **Juntar como duplicado**, **Reabrir** (com **Justificativa para reabrir**), **Assumir**, **Atribuir a…**, **Histórico**. Confirmações
+  + **Juntar como duplicado**, **Reabrir** (com **Justificativa para reabrir**), **Pegar para mim**, **Devolver**, **Atribuir a…** (só
+  admin; a regra da Home), **Histórico**. Confirmações
   discretas: "Resolução validada", "Problema enviado para revisão", "Devolvido para quem resolveu", "Problema reaberto", "Fechado: não é
   problema", "Juntado como duplicado". Rascunho: "O rascunho é salvo sozinho enquanto você escreve" / "Rascunho salvo às HH:MM (UTC)".
 - **Mais ⋯**: **Contadores por fundo** ("A proporção é sobre as folhas já avaliadas…"; colunas **Abertos**, **Críticos**, **Folhas
   avaliadas**, **Avaliadas com problema**), **Modelos de decisão**, **Mensagens repetidas…**, **Limpeza geral…**. Lote: **Atribuir a**
   (**Ninguém (tirar)**) + **Atribuir**, **Selecionar os N desta página**.
-- Coluna da direita: **Seu progresso na resolução** (**Nível N** · Iniciante / Assistente de acervo / Conferente / Catalogador /
-  Pesquisador / Arquivista, **pontos**, "N até o nível N"; **Esconder meu progresso** / **Mostrar de novo**), **Meta da semana** (da equipe;
-  "Sem meta definida"), **Conquistas** (**Primeira resolução validada**, **Investigador documental**, **Colaborador**, **Revisor
-  cuidadoso**, **Fundo organizado** — coletiva), **Ranking da equipe (mês)** só com a configuração ligada e sempre com "Reconhecimento, não
-  avaliação: nunca use estes números para avaliar o desempenho de ninguém.", **Atividade recente**. Gráficos: **Problemas por tipo**
-  ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por pessoas, pelo sistema, novos).
+- Coluna da direita: **Seu progresso na resolução** (o nível e os pontos da **Home**, "N até o nível N"; **Ocultar minhas conquistas** /
+  **Mostrar de novo**, a mesma preferência da Home), **Meta da semana** (da equipe, "N de M pontos validados", a mesma da Home),
+  **Conquistas** (as de qualidade da Central, sem pontos: **Primeira resolução validada**, **Investigador documental**, **Colaborador**,
+  **Revisor cuidadoso**, **Fundo organizado** — coletiva; e as da Home, "da Home"), **Ranking da equipe (semana)** só com
+  `jogo.ranking_equipe` ligado e sempre com "Reconhecimento, não avaliação: nunca use estes números para avaliar o desempenho de ninguém.",
+  **Atividade recente**. Gráficos: **Problemas por tipo** ("abertos agora") e **Evolução de resolução** ("últimas 4 semanas": resolvidos por
+  pessoas, pelo sistema, novos).
 - Nunca: "streak", "dias seguidos", medalha por velocidade, percentual sem base, "ranking" ligado por padrão.
 
 ## Regras de texto
