@@ -1709,7 +1709,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 #v-painel .rt-kpis .ini-rt-comp.sobe{background:var(--green-soft)}#v-painel .rt-kpis .ini-rt-comp.desce{background:var(--red-soft)}
 #v-painel .rt-kpis .ini-rt-comp .v.vm-sobe{color:var(--green)}#v-painel .rt-kpis .ini-rt-comp .v.vm-desce{color:var(--red)}
 #v-painel .rt-bar{background:var(--blue);opacity:.75;border-radius:var(--r-sm) var(--r-sm) 0 0}#v-painel .rt-col.hoje .rt-bar{opacity:1}
-#v-painel .rt-num>summary{font-size:var(--fs-sm)}
+#v-painel .rt-num>summary{font-size:var(--fs-sm)}#v-painel .rt-area{height:120px}#v-painel .ini-chart{gap:10px}
 /* visitas ao site e projetos mais visitados */
 #v-painel .ini-vis{display:grid;gap:18px}
 #v-painel .ini-vis .vm-per{margin-left:auto}#v-painel .ini-vis .ph #ini-vis-tag:empty{display:none}
@@ -1742,11 +1742,13 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 /* coluna da direita: nível (azul-marinho) e conquistas */
 #v-painel .ini-jogo-p{display:grid;gap:18px}#v-painel .ini-jogo-corpo{display:grid;gap:18px}
 #v-painel .ini-jogo{display:grid;gap:18px}
-.ini-nivel-card{display:grid;grid-template-columns:58px minmax(0,1fr);gap:14px;align-items:center;padding:16px 18px;border-radius:var(--r-lg);background:var(--ini-marinho);color:var(--on-blue);box-shadow:var(--ini-sombra)}
+.ini-nivel-card{display:grid;grid-template-columns:58px minmax(0,1fr);gap:14px;align-items:center;padding:16px 18px;border-radius:var(--r-lg);background:var(--ini-marinho);color:#fff;box-shadow:var(--ini-sombra);border:1px solid rgba(255,255,255,.08)}
+:root[data-theme="dark"] .ini-nivel-card{background:color-mix(in srgb,var(--side-bg,#0A1628) 75%,var(--blue) 25%)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ini-nivel-card{background:color-mix(in srgb,var(--side-bg,#0A1628) 75%,var(--blue) 25%)}}
 .ini-medalha svg{width:58px;height:58px;display:block}.ini-medalha .fita.a{fill:var(--blue-soft)}.ini-medalha .fita.b{fill:var(--red)}.ini-medalha .ouro{fill:var(--ini-ouro)}.ini-medalha .ouro2{fill:var(--ini-ouro2)}.ini-medalha .estrela{fill:var(--ini-ouro)}
 .ini-nivel-c{min-width:0;display:grid;gap:4px}.ini-nivel-t{margin:0;font-size:var(--fs-base)}.ini-nivel-t b{font-weight:700}
-.ini-nivel-card .ini-bar{height:10px;border:0;border-radius:var(--r-pill);background:rgba(255,255,255,.22);margin:2px 0}.ini-nivel-card .ini-bar i{background:var(--ini-ouro2);border-radius:var(--r-pill)}
-.ini-nivel-card .ini-nivel-xp{margin:0;color:var(--on-blue);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}.ini-nivel-falta{margin:0;font-size:var(--fs-xs);color:rgba(255,255,255,.82)}.ini-nivel-falta b{color:var(--on-blue)}
+#v-painel .ini-nivel-card .ini-bar{height:10px;border:0;border-radius:var(--r-pill);background:rgba(255,255,255,.22);margin:2px 0}#v-painel .ini-nivel-card .ini-bar i{background:var(--ini-ouro2);border-radius:var(--r-pill)}
+.ini-nivel-card .ini-nivel-xp{margin:0;color:#fff;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}.ini-nivel-falta{margin:0;font-size:var(--fs-xs);color:rgba(255,255,255,.82)}.ini-nivel-falta b{color:#fff}
 #v-painel .ini-conq-card{padding:14px 18px 16px}
 .ini-conq-h{display:flex;align-items:center;justify-content:space-between;gap:8px}.ini-conq-h .ini-jogo-h{margin:0;font-size:var(--fs-sec);font-weight:700}
 .ini-conq-todas>summary{list-style:none;cursor:pointer}.ini-conq-todas>summary::-webkit-details-marker{display:none}.ini-conq-todas .mais-lista{right:0;left:auto;min-width:280px}
