@@ -694,17 +694,40 @@ ROTULO_EVENTO = {"criado": "registrou", "fase": "mudou a fase", "evidencia": "ad
 
 
 def atividade(con, limite: int = 12) -> list[dict]:
+    """O que aconteceu por último nos problemas (do histórico `evento`): quem, o quê (frase curta + ícone), o problema (nº, código) e quando."""
     nomes = _nomes(con)
     out = []
-    for r in con.execute("SELECT quando, tipo, ator, detalhe, codigo FROM evento WHERE entidade='erro' ORDER BY id DESC LIMIT ?", (limite,)):
+    rows = con.execute("""SELECT quando, tipo, ator, detalhe, CASE WHEN entidade='tarefa' THEN substr(codigo,6) ELSE codigo END AS codigo FROM evento
+                          WHERE entidade='erro' OR (entidade='tarefa' AND codigo LIKE 'erro:%') ORDER BY id DESC LIMIT ?""", (limite,)).fetchall()
+    ids = [int(r["codigo"]) for r in rows if str(r["codigo"]).isdigit()]
+    cods = {}
+    if ids:
+        cods = {r[0]: r[1] for r in con.execute(f"SELECT id, codigo FROM erro WHERE id IN ({','.join('?' * len(ids))})", ids)}
+    for r in rows:
         try:
             det = json.loads(r["detalhe"] or "{}")
         except ValueError:
             det = {}
         txt = ROTULO_EVENTO.get(r["tipo"], r["tipo"])
+        icone, titulo = "relogio", None
         if r["tipo"] == "fase" and det.get("para") in ROTULO_FASE:
             txt = "moveu para " + ROTULO_FASE[det["para"]]
-        out.append({"quando": r["quando"], "ator": nomes.get(r["ator"]) or r["ator"], "texto": txt, "erro_id": int(r["codigo"]) if str(r["codigo"]).isdigit() else None})
+            titulo = {"resolvido": "Problema resolvido", "aguardando_revisao": "Enviado para revisão", "reaberto": "Problema reaberto",
+                      "devolvido": "Devolvido pela revisão", "duplicado": "Juntado como duplicado", "invalido": "Fechado: não é problema"}.get(det["para"], "Em " + ROTULO_FASE[det["para"]].lower().replace("em ", ""))
+            icone = "ok" if det["para"] == "resolvido" else "relogio"
+        elif r["tipo"] in ("fechado_automatico",):
+            titulo, icone = "Resolvido pelo sistema", "ok"
+        elif r["tipo"] == "evidencia":
+            titulo, icone = "Evidência adicionada", "lapis"
+        elif r["tipo"] in ("tarefa_atribuida", "tarefa_devolvida"):
+            titulo, icone = ("Atribuído a " + (det.get("para") or "alguém")) if r["tipo"] == "tarefa_atribuida" else "Devolvido (sem responsável)", "pessoa"
+        elif r["tipo"] == "criado":
+            titulo, icone = "Problema registrado", "mais"
+        elif r["tipo"] == "editado" and det.get("situacao") in ("corrigido", "fechado"):
+            titulo, icone = "Problema resolvido", "ok"
+        eid = int(r["codigo"]) if str(r["codigo"]).isdigit() else None
+        out.append({"quando": r["quando"], "ator": nomes.get(r["ator"]) or r["ator"], "texto": txt, "titulo": titulo or txt[:1].upper() + txt[1:],
+                    "icone": icone, "erro_id": eid, "codigo": cods.get(eid)})
     return out
 
 

@@ -2177,6 +2177,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-sem{color:var(--ink3);font-style:italic}
 .cp-razao{color:var(--ink)}
 .cp-rapida{color:var(--green)}
+.cp-mesma-folha{color:var(--amber);font-weight:600}
 .cp-acoes{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 .cp-acoes .cp-cta{border-color:var(--blue);color:var(--blue);min-width:92px}
 .cp-acoes .mais-menu summary{padding:2px 10px}
@@ -8628,7 +8629,7 @@ function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{cons
   pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true);pr('n-ins',A.inscricoes);
   /* UX-70: o menu diz o que o número conta, e é o mesmo número da tela que ele abre */
   const dica=(v,t)=>{const b=document.querySelector(`#nav button[data-v="${v}"]`);if(b)b.title=t};
-  if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Abertos” de Problemas.')}
+  if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Prioridades” de Problemas.')}
   if(p.lotes_precisam_de_voce!=null)dica('filas','Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro. É o número da aba “Precisam de você” de Material novo.')}
 async function atualizarPendencias(){try{const p=await API('/api/pendencias');window.PEND_ULT=p;window.PEND_ERRO=false;atualizarContadoresMenu(p)}catch(_){window.PEND_ERRO=true}if(typeof desenharCardsFila==='function'&&rotaAtual().startsWith('filas'))desenharCardsFila()}   /* redesenho Material novo: o cartão "projetos no site" usa a mesma contagem (contagens.py) */
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
@@ -10047,7 +10048,7 @@ const CP_FILTROS=['q','fase','gravidade','categoria','origem','responsavel','fun
 const CP_PADRAO={aba:'prioridades',ordem:'prioridade',pagina:1,por:25};
 function cpVazio(){return Object.assign({},CP_PADRAO,Object.fromEntries(CP_FILTROS.map(k=>[k,''])))}
 let CP=cpVazio();
-var ERR_LISTA=[];let ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_SEQ=0,ERR_SEL_ULT=null,CP_RES=null,CP_TOTAL=0,CP_PAGINAS=1,CP_PESSOAS=null,CP_ABERTO=null,CP_PER='mes',CP_GRAF_EM=0,CP_VISOES=[];
+var ERR_LISTA=[];let CP_POR_FOLHA={};let ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_SEQ=0,ERR_SEL_ULT=null,CP_RES=null,CP_TOTAL=0,CP_PAGINAS=1,CP_PESSOAS=null,CP_ABERTO=null,CP_PER='mes',CP_GRAF_EM=0,CP_VISOES=[];
 const ERR_ABERTO=e=>['aberto','em_correcao'].includes(e.situacao);
 function cpChips(){return new Set(String(CP.chip||'').split(',').filter(Boolean))}
 function cpTemFiltro(){return CP_FILTROS.some(k=>CP[k])}
@@ -10106,7 +10107,7 @@ function cpLinhaHTML(e){const res=pode('problema.resolver'),ab=e.aberto,sev=e.se
       <div class="cp-ctx">${cpOndeHTML(e)}</div>
       <p class="cp-desc">${escHtml(e.descricao)}</p>
       ${e.resolvido_sozinho&&ab?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}
-      <div class="cp-meta"><span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span><span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span><span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span><span class="cp-idade">${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span>${resp}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml((pr.motivos||[]).join(' · '))}">${escHtml(pr.razao)}</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div></div>
+      <div class="cp-meta"><span class="cp-chip-cod code">${escHtml(cpCodigoCurto(e))}</span><span class="cp-chip-tipo">${escHtml(e.tipo_rotulo)}</span><span class="tag ${CP_FASE_TAG[e.fase]||''}">${escHtml(e.fase_rotulo)}</span><span class="cp-idade">${ab?escHtml(cpDias(e.idade_dias)):escHtml('resolvido '+fmtData(e.resolvido_em||e.criado_em))}</span>${resp}${ab&&pr.razao?`<span class="cp-razao" title="${escHtml((pr.motivos||[]).join(' · '))}">${escHtml(pr.razao)}</span>`:''}${pr.rapida&&ab?'<span class="cp-rapida">resolução rápida</span>':''}${ab&&e.folha&&(CP_POR_FOLHA[e.folha]||0)>1?`<span class="cp-mesma-folha" title="A mesma folha tem outros problemas nesta página: cada um tem a própria linha, a caixa e o botão">${fmtN(CP_POR_FOLHA[e.folha])} problemas nesta folha</span>`:''}${!ab&&e.resolvido_pelo_sistema?'<span class="cp-rapida">pelo sistema</span>':''}</div></div>
     <div class="cp-acoes"><span class="tag ${CP_SEV_TAG[sev]} cp-sev-tag">${escHtml(e.severidade_rotulo)}</span><button type="button" class="btn sm cp-cta" data-cp-abrir="${escHtml(e.id)}">${escHtml(e.cta)}</button>
       <details class="mais-menu cp-linha-mais"><summary class="btn sm" aria-haspopup="menu" aria-label="Mais ações do problema ${escHtml(e.id)}">⋯</summary><div class="mais-lista" role="menu">${res&&ab&&!e.responsavel_id?`<button type="button" role="menuitem" data-cp-assumir="${escHtml(e.id)}">Pegar para mim</button>`:''}<button type="button" role="menuitem" data-cp-link="${escHtml(e.id)}">Copiar link</button>${e.projeto_codigo?`<button type="button" role="menuitem" data-cp-proj="${escHtml(e.projeto_codigo)}">Só este projeto</button>`:''}</div></details></div></div>`}
 function cpEsqueleto(n=5){return Array.from({length:n},()=>'<div class="cp-linha cp-esq" aria-hidden="true"><span></span><span class="cp-sev-ic"></span><div class="cp-corpo"><div class="cp-esq-l"></div><div class="cp-esq-l curto"></div></div></div>').join('')}
@@ -10117,6 +10118,7 @@ function cpPaginasHTML(){const n=CP_PAGINAS,a=CP.pagina,ini=CP_TOTAL?(a-1)*CP.po
 function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
   document.getElementById('cp-cartoes').innerHTML=cpCartoesHTML(CP_RES);document.getElementById('err-abas').innerHTML=cpAbasHTML(CP_RES);document.getElementById('cp-chips').innerHTML=cpChipsHTML(CP_RES);
   cpRenderAtivos();cpSincronizarCampos();
+  CP_POR_FOLHA={};ERR_LISTA.forEach(e=>{if(e.folha&&e.aberto)CP_POR_FOLHA[e.folha]=(CP_POR_FOLHA[e.folha]||0)+1});   /* UX-64: a mesma folha com vários problemas fica marcada ("N problemas nesta folha") */
   tb.innerHTML=ERR_LISTA.length?ERR_LISTA.map(cpLinhaHTML).join(''):(cpTemFiltro()?vazioHTML('Nenhum problema encontrado.','Limpe os filtros ou tente outra busca.','<button class="btn sm pri" data-err-limpar-tudo>Limpar filtros</button>')
     :CP.aba==='minha_fila'?vazioHTML('Nada na sua fila.','Quando alguém atribuir um problema a você (ou você assumir um), ele aparece aqui.','<button class="btn sm" data-err-sit="prioridades">Ver as prioridades</button>')
     :CP.aba==='prioridades'&&CP_RES&&CP_RES.cartoes&&CP_RES.cartoes.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(CP_RES.cartoes.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-cp-ver-avisos>Ver os avisos</button>')
@@ -10129,7 +10131,11 @@ function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
 function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).map(e=>e.id));[...ERR_SEL].forEach(i=>{if(!ids.has(i))ERR_SEL.delete(i)});
   const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);
   const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
-  const bm=document.getElementById('err-bulk-mais');if(bm)bm.innerHTML=n&&n<ids.size?`<button type="button" class="btn sm" data-cp-sel-pagina>Selecionar os ${fmtN(ids.size)} desta página</button>`:''}
+  /* UX-20: a partir do último escolhido, "Todos deste tipo" / "Todos deste projeto" (na página); e a página inteira */
+  const bm=document.getElementById('err-bulk-mais'),x=n&&ERR_SEL.has(ERR_SEL_ULT)?ERR_LISTA.find(e=>e.id===ERR_SEL_ULT):null,tp=x?errMesmos('tipo',x):[],pj=x?errMesmos('projeto',x):[];
+  if(bm)bm.innerHTML=(tp.length>1&&!tp.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="tipo" title="${escHtml(rotuloErro(x)+' · '+x.gravidade)}">Todos deste tipo (${fmtN(tp.length)})</button>`:'')
+    +(pj.length>1&&!pj.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="projeto" title="${escHtml(errProjChave(x))}">Todos deste projeto (${fmtN(pj.length)})</button>`:'')
+    +(n&&n<ids.size?`<button type="button" class="btn sm" data-cp-sel-pagina>Selecionar os ${fmtN(ids.size)} desta página</button>`:'')}
 async function cpCarregarPessoas(){if(CP_PESSOAS)return CP_PESSOAS;try{CP_PESSOAS=EU&&EU.papel!=='leitura'?await API('/api/painel/pessoas'):[]}catch(_){CP_PESSOAS=[]}   /* a mesma lista da Home (id e nome) */
   const opts=CP_PESSOAS.map(p=>`<option value="${escHtml(p.id)}">${escHtml(p.nome)}</option>`).join('');
   const r=document.getElementById('cp-resp');if(r&&r.options.length<=3)r.insertAdjacentHTML('beforeend',opts);
@@ -10246,7 +10252,8 @@ async function cpModelos(){let L;try{L=await API('/api/problemas/modelos')}catch
 document.addEventListener('input',e=>{if(e.target.id==='err-q'){clearTimeout(window._errQ);window._errQ=setTimeout(()=>{CP.q=e.target.value.trim();errMudouFiltro()},300);return}
   if(e.target.id==='cp-conclusao')cpRascunhoAgendar()});
 document.addEventListener('change',async e=>{const t=e.target;const m={'cp-fase':'fase','err-grav':'gravidade','err-cat':'categoria','err-orig':'origem','cp-resp':'responsavel','cp-fundo':'fundo','cp-de':'de','cp-ate':'ate','cp-idade':'idade'}[t.id];
-  if(m){CP[m]=t.value;errMudouFiltro();return}
+  if(m){CP[m]=t.value;if(m==='gravidade'&&t.value==='aviso'&&CP.aba==='prioridades')CP.aba='todos';   /* UX-19: aviso não está em Prioridades: vai para Todos (não para uma lista vazia) */
+    errMudouFiltro();return}
   if(t.id==='cp-ordem'){CP.ordem=t.value;errMudouFiltro();return}
   if(t.id==='cp-por'){CP.por=+t.value||25;errMudouFiltro();return}
   if(t.id==='cp-visoes'){if(t.value==='apagar'){const v=CP_VISOES.find(x=>x.params===cpQS(CP,false));if(v){try{await API('/api/problemas/visoes/'+v.id,{method:'DELETE'});toast('Visão apagada')}catch(err){toast(err.message)}}cpCarregarVisoes();return}
@@ -10279,6 +10286,7 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   const oc=t.closest('[data-cp-ocultar]');if(oc){try{await API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'conquistas.ocultar',valor:oc.dataset.cpOcultar==='1'?'1':'0'})});cpCarregarLateral()}catch(err){toast(err.message)}return}   /* a mesma preferência da Home */
   if(t.closest('[data-cp-visao]')){const box=t.closest('.cp-visao-salvar');box.innerHTML='<input id="cp-visao-nome" maxlength="60" placeholder="Nome da visão" aria-label="Nome da visão"><button type="button" class="btn sm pri" data-cp-visao-ok>Salvar</button>';document.getElementById('cp-visao-nome').focus();return}
   if(t.closest('[data-cp-visao-ok]')){const n=(document.getElementById('cp-visao-nome')||{}).value||'';try{await API('/api/problemas/visoes',{method:'POST',body:JSON.stringify({nome:n,params:cpQS(CP,false)})});toast('Visão salva: '+n);cpRenderAtivos();cpCarregarVisoes()}catch(err){toast(err.message)}return}
+  const smm=t.closest('[data-err-sel-mesmo]');if(smm){const x=ERR_LISTA.find(e=>e.id===ERR_SEL_ULT);if(x){errMesmos(smm.dataset.errSelMesmo,x).forEach(e=>ERR_SEL.add(e.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=ERR_SEL.has(+c.value));errAtualizarSelecao()}return}
   if(t.closest('[data-cp-sel-pagina]')){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>ERR_SEL.add(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=true);errAtualizarSelecao();return}
   if(t.closest('[data-cp-atribuir]')){const ids=[...ERR_SEL];if(!ids.length)return;const r=await cpAtribuir(ids,(document.getElementById('cp-bulk-resp')||{}).value||null);if(r){ERR_SEL.clear();carregarErros()}return}
   const fz=t.closest('[data-cp-fase]');if(fz){cpMudarFase(fz.dataset.cpFase,fz);return}

@@ -50,40 +50,48 @@ const espera = async (f, ms = 10000) => { const t = Date.now(); while (Date.now(
   chk(await pg.$$eval(`#pj-probs [data-fp-box="${D(5)}"]`, l => l.length).catch(() => 0) === 1, 'uma linha por folha (os 2 problemas da mesma folha não repetem a imagem)');
   chk(await pg.$eval(`#pj-probs [data-fp-folha="${D(5)}"]`, a => a.target === '_blank' && /\/api\/itens\/.+\/previa$/.test(a.getAttribute('href'))).catch(() => false), 'um clique abre a imagem grande em outra aba');
   chk(await espera(() => pg.$eval(`#pj-probs [data-fp-box="${D(6)}"]`, b => /Não há imagem desta folha/.test(b.textContent)).catch(() => false)), 'folha sem imagem em lugar nenhum: diz isso no lugar da imagem');
-  // 2) tela Problemas do projeto: a mesma folha com imagem e as decisões; clicar na imagem abre a aba e NÃO abre a gaveta da linha
+  // 2) tela Problemas do projeto (CAMP-PROB-UX: Central de Problemas): a linha é compacta; a imagem e as decisões ficam no painel ao lado,
+  //    que abre sem perder a lista; clicar em "Ver a folha" abre a aba e NÃO fecha o painel
   await pg.goto(BASE + '/#erros/' + P);
-  if (!(await pg.waitForSelector(`#err-body [data-fp-box="${D(5)}"]`, { timeout: 15000 }).then(() => true, () => false))) { chk(false, 'Problemas: a folha "de outro projeto" aparece com a imagem e as decisões'); console.log(linhas.join('\n')); console.log(`\n${problemas.length} FALHA(S)`); await br.close(); process.exit(1); }
-  const [popup] = await Promise.all([ctx.waitForEvent('page', { timeout: 8000 }).catch(() => null), pg.click(`#err-body [data-fp-folha="${D(5)}"]`)]);
-  chk(!!popup && /\/previa$/.test(popup.url()), 'Problemas: "Ver a folha" abre a imagem grande em outra aba (um clique)', popup ? popup.url() : 'nenhuma aba');
-  chk(!(await pg.$('#err-body img.fp-mini')), 'a linha da lista não carrega miniaturas (a lista continua leve; a imagem fica na gaveta)');
-  if (popup) await popup.close();
-  chk(!(await pg.isVisible('#drawer.on, #d-body:not(:empty)').catch(() => false)) || !/Folha retirada|Folha de outro/.test(await pg.textContent('#d-title').catch(() => '')), '"Ver a folha" não abre a gaveta da linha');
+  const abrirD = async n => { await pg.waitForSelector(`#err-body [data-err-folha="${D(n)}"]`, { timeout: 15000 }); await pg.click(`#err-body [data-err-folha="${D(n)}"] .cp-cta`); return pg.waitForSelector(`#d-body [data-fp-box="${D(n)}"]`, { timeout: 10000 }).then(() => true, () => false); };
+  if (!(await abrirD(5))) { chk(false, 'Problemas: a folha "de outro projeto" aparece com a imagem e as decisões'); console.log(linhas.join('\n')); console.log(`\n${problemas.length} FALHA(S)`); await br.close(); process.exit(1); }
+  chk(true, 'Problemas: o painel da folha "de outro projeto" mostra a imagem e as decisões');
+  chk(!(await pg.$('#err-body img.fp-mini')), 'a linha da lista não carrega miniaturas (a lista continua leve; a imagem fica no painel)');
+  const fpLink = await pg.$(`#d-body [data-fp-folha="${D(5)}"]`);
+  if (fpLink) {
+    const [popup] = await Promise.all([ctx.waitForEvent('page', { timeout: 8000 }).catch(() => null), fpLink.click()]);
+    chk(!!popup && /\/previa$/.test(popup.url()), 'Problemas: a imagem abre grande em outra aba (um clique)', popup ? popup.url() : 'nenhuma aba');
+    if (popup) await popup.close();
+  }
   // 3) "É deste projeto" na folha fora do painel: devolve, importa o lote e a folha entra liberada
-  await pg.click(`#err-body [data-fp-box="${D(5)}"] [data-deste-projeto]`); await pg.click('#conf-ov [data-conf="sim"]');
+  await pg.click(`#d-body [data-fp-box="${D(5)}"] [data-deste-projeto]`); await pg.click('#conf-ov [data-conf="sim"]');
   const entrou = await espera(() => JSON.parse(q(`SELECT status_site FROM item WHERE codigo='${D(5)}'`)).length === 1, 15000);
   chk(entrou && JSON.parse(q(`SELECT status_site FROM item WHERE codigo='${D(5)}'`))[0][0] === 'nao_publicado', '"É deste projeto": a folha entra no painel (o lote é lido de novo) e não fica bloqueada', q(`SELECT status_site, pendencias FROM item WHERE codigo='${D(5)}'`));
   chk(JSON.parse(q(`SELECT COUNT(*) FROM erro WHERE codigo='${D(5)}' AND situacao IN ('aberto','em_correcao')`))[0][0] === 0, 'os 2 problemas da folha fecham (publicar não fica bloqueado por eles)');
   const t1 = await pg.evaluate(() => document.getElementById('toast').textContent);
   chk(/voltou ao projeto/.test(t1) && /Desfazer/.test(t1), 'aviso diz que a folha voltou, com "Desfazer"', t1);
-  chk(await espera(async () => !(await pg.$(`#err-body [data-fp-box="${D(5)}"]`))), 'a folha sai da lista de abertos');
-  // 4) depois: aba "Não era problema" tem "Desfazer É deste projeto"
-  await pg.click('#err-abas [data-err-sit="ignorado"]');
-  const temDesf = await pg.waitForSelector(`#err-body [data-deste-desfazer="${D(5)}"]`, { timeout: 10000 }).then(() => true, () => false);
-  chk(temDesf, 'aba "Não era problema": a decisão aparece com "Desfazer \\"É deste projeto\\""');
-  if (temDesf) await pg.click(`#err-body [data-deste-desfazer="${D(5)}"]`);
+  await pg.evaluate(() => closeDrawer(true)); await pg.evaluate(() => carregarErros());
+  chk(await espera(async () => !(await pg.$(`#err-body [data-err-folha="${D(5)}"]`))), 'a folha sai da lista de abertos');
+  // 4) depois: em Concluídos, o problema fechado por "É deste projeto" tem "Desfazer É deste projeto" (no painel)
+  await pg.click('#err-abas [data-err-sit="concluidos"]'); await pg.waitForTimeout(1500);
+  const linhaFech = await pg.$(`#err-body [data-err-folha="${D(5)}"] .cp-cta`);
+  if (linhaFech) await linhaFech.click();
+  const temDesf = await pg.waitForSelector(`#d-body [data-deste-desfazer="${D(5)}"]`, { timeout: 10000 }).then(() => true, () => false);
+  chk(temDesf, 'Concluídos: a decisão aparece com "Desfazer \\"É deste projeto\\""');
+  if (temDesf) await pg.click(`#d-body [data-deste-desfazer="${D(5)}"]`);
   chk(await espera(() => JSON.parse(q(`SELECT status_site FROM item WHERE codigo='${D(5)}'`))[0][0] === 'bloqueado'), 'Desfazer: a folha volta a ficar bloqueada com o aviso de outro projeto');
-  // o de "folha retirada" fecha sozinho de novo (a folha já está no painel); o que importa é o que bloqueia publicar reabrir
   chk(JSON.parse(q(`SELECT COUNT(*) FROM erro WHERE codigo='${D(5)}' AND situacao='aberto' AND gravidade='bloqueia'`))[0][0] === 1, 'Desfazer: o problema "de outro projeto" que bloqueia publicar reabre');
   // 5) "É de outro projeto…" na folha que nem entrou no painel: fecha os problemas dela (fica fora)
-  // UX-19: a aba "Abertos" agora é data-err-sit="pedem_acao" (bloqueia/corrigir); os 2 problemas desta folha (bloqueia + corrigir) ficam nela
-  await pg.click('#err-abas [data-err-sit="pedem_acao"]'); await pg.waitForSelector(`#err-body [data-fp-outro="${D(6)}"]`, { timeout: 10000 });
-  await pg.click(`#err-body [data-fp-outro="${D(6)}"]`); await pg.click('#conf-ov [data-conf="sim"]');
+  await pg.evaluate(() => closeDrawer(true));
+  await pg.goto(BASE + '/#erros/' + P); await pg.waitForTimeout(800);
+  await abrirD(6); await pg.waitForSelector(`#d-body [data-fp-outro="${D(6)}"]`, { timeout: 10000 });
+  await pg.click(`#d-body [data-fp-outro="${D(6)}"]`); await pg.click('#conf-ov [data-conf="sim"]');
   chk(await espera(() => JSON.parse(q(`SELECT COUNT(*) FROM erro WHERE codigo='${D(6)}' AND situacao='corrigido'`))[0][0] === 2), '"É de outro projeto…" (folha fora do painel): os problemas fecham como corrigidos, a folha fica fora');
-  // 6) a gaveta do problema também tem a imagem e as decisões
-  await pg.goto(BASE + '/#erros/' + P); await pg.waitForSelector(`#err-body tr[data-err-linha]`, { timeout: 10000 });
-  await pg.click(`#err-body tr[data-err-linha] .err-oque`);
-  chk(await pg.waitForSelector(`#d-body [data-fp-box="${D(5)}"] [data-deste-projeto]`, { timeout: 8000 }).then(() => true, () => false), 'a gaveta do problema mostra a imagem e "É deste projeto"');
-  chk(await espera(() => pg.$eval(`#d-body [data-fp-box="${D(5)}"] img.fp-mini`, i => i.complete && i.naturalWidth > 0).catch(() => false)), 'na gaveta a imagem carrega (a folha já no painel, sem prévia do CAMP Vision: vem da pasta do lote)');
+  // 6) o painel do problema mostra a imagem e as decisões (a folha já no painel)
+  await pg.evaluate(() => closeDrawer(true));
+  await pg.goto(BASE + '/#erros/' + P); await pg.waitForTimeout(800);
+  chk(await abrirD(5) && !!(await pg.$(`#d-body [data-fp-box="${D(5)}"] [data-deste-projeto]`)), 'o painel do problema mostra a imagem e "É deste projeto"');
+  chk(await espera(() => pg.$eval(`#d-body [data-fp-box="${D(5)}"] img.fp-mini`, i => i.complete && i.naturalWidth > 0).catch(() => false)), 'no painel a imagem carrega (a folha já no painel, sem prévia do CAMP Vision: vem da pasta do lote)');
   await pg.screenshot({ path: path.join(os.tmpdir(), 'camp069_gaveta.png') });
   chk(!erros.length, 'nenhum erro de JavaScript', erros.join(' | '));
   await br.close();

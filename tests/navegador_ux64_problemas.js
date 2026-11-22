@@ -8,7 +8,7 @@
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8972', DB = process.env.CAMP_DB_PATH;
-const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
 const problemas = [], linhas = [];
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
@@ -37,22 +37,25 @@ erro('bloqueia', 'outro', 'campvision', '${F90}', 'título ilegível na folha 90
     await page.goto(BASE + '/');
     await page.fill('#lg-email', 'rafael@camp.arq.br'); await page.fill('#lg-senha', 'senha-bem-longa-123'); await page.press('#lg-senha', 'Enter');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
+    // CAMP-PROB-UX (22/11/2026): na Central de Problemas cada problema tem a própria linha compacta (documento do Rafael: uma ação por
+    // item); a mesma folha com vários problemas fica marcada "N problemas nesta folha" em cada uma, com a caixa e o botão de cada problema.
     await page.goto(BASE + '/#erros/' + P);
-    await page.waitForSelector(`#err-body tr[data-err-folha="${F3}"]`, { timeout: 15000 });
-    const linhasF3 = await page.locator(`#err-body tr[data-err-linha]`).filter({ has: page.locator(`.code[title="${F3}"]`) }).count();
-    chk(linhasF3 === 1, `a folha D00003 com 2 problemas aparece em UMA linha (${linhasF3})`);
-    const l3 = page.locator(`#err-body tr[data-err-folha="${F3}"]`);
-    chk(await l3.locator('.err-motivo').count() === 2 && /2 motivos/.test(await l3.textContent()), 'a linha junta os 2 motivos e diz "2 motivos"');
-    chk(/bloqueia/.test(await l3.locator('td').nth(1).textContent()), 'a gravidade da linha é a mais séria (bloqueia)');
-    chk(await l3.locator('.err-motivo .err-sel').count() === 2, 'cada motivo tem a própria caixa de seleção');
-    chk(await l3.locator('.err-motivo button.err-acao').count() === 2 && /girar/i.test(await l3.locator('.err-motivo').first().textContent()), 'cada motivo tem o próprio botão que resolve ("Abrir a folha para girar" no da rotação)');
-    chk(await l3.locator('.err-motivo .err-fazer').count() === 2, 'cada motivo tem o "O que fazer"');
-    await l3.locator('.err-motivo .err-sel').first().check();
-    chk(/1 selecionado/.test(await page.textContent('#err-bulk-n')), 'marcar um motivo seleciona só aquele problema');
-    chk(await page.locator(`#err-body tr[data-err-linha]`).filter({ has: page.locator(`.code[title="${F4}"]`) }).count() === 1
-        && !(await page.$(`#err-body tr[data-err-folha="${F4}"]`)), 'folha com um problema só continua a linha de sempre');
+    await page.waitForSelector(`#err-body [data-err-folha="${F3}"]`, { timeout: 15000 }); await page.waitForTimeout(500);
+    const l3 = page.locator(`#err-body [data-err-folha="${F3}"]`);
+    chk(await l3.count() === 2, `a folha D00003 com 2 problemas: uma linha por problema (${await l3.count()})`);
+    chk(await l3.locator('.cp-mesma-folha').count() === 2 && /2 problemas nesta folha/.test(await l3.first().textContent()), 'as duas linhas dizem "2 problemas nesta folha"');
+    chk(/sev-critico/.test(await l3.first().getAttribute('class')), 'a mais séria (Crítico) vem primeiro');
+    chk(await l3.locator('.err-sel').count() === 2 && await l3.locator('.cp-cta').count() === 2, 'cada problema tem a própria caixa de seleção e o próprio botão');
+    const rot = l3.filter({ hasText: 'Folha virada' });
+    await rot.locator('.cp-cta').click(); await page.waitForSelector('#d-body .cp-ident');
+    chk(/girar/i.test(await page.textContent('#d-body button.err-acao')) && /O que precisa ser decidido\?/.test(await page.textContent('#d-body')), 'o da rotação abre o painel com o botão que resolve ("Abrir a folha para girar") e o que fazer');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    await l3.locator('.err-sel').first().check();
+    chk(/1 selecionado/.test(await page.textContent('#err-bulk-n')), 'marcar um seleciona só aquele problema');
+    const l4 = page.locator(`#err-body [data-err-folha="${F4}"]`);
+    chk(await l4.count() === 1 && await l4.locator('.cp-mesma-folha').count() === 0, 'folha com um problema só: linha de sempre, sem a marca');
     // (a) a folha retirada: só o problema da retirada (o bloqueio do erros.json fechou sozinho; nada de "não existe mais")
-    const l90 = page.locator(`#err-body tr[data-err-linha]`).filter({ has: page.locator(`.code[title="${F90}"]`) });
+    const l90 = page.locator(`#err-body [data-err-folha="${F90}"]`);
     chk(await l90.count() === 1 && /fora do painel/.test(await l90.first().textContent()) && !/não existe mais/.test(await l90.first().textContent())
         && !/título ilegível/.test(await page.textContent('#err-body')), 'folha retirada: fica só o problema da retirada (o outro fechou sozinho)');
     // no celular, sem rolagem lateral
