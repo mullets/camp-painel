@@ -72,10 +72,10 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE '[central]%' LIMIT 1
     chk(menuN === abaN, `número do menu (${menuN}) = aba Prioridades (${abaN})`);
     await page.click('#err-abas [data-err-sit="todos"]'); await espera(page);
     await page.click('[data-cp-chip="sem_responsavel"]'); await espera(page);
-    const semResp = await page.$$eval('#err-body [data-err-linha] .cp-resp', rs => rs.every(r => /Não atribuído/.test(r.textContent)));
-    chk(semResp && await page.$eval('[data-cp-chip="sem_responsavel"]', b => b.getAttribute('aria-pressed') === 'true'), 'filtro rápido Sem responsável: todas as linhas "Não atribuído" e o chip marcado');
+    const semResp = await page.$$eval('#err-body [data-err-linha] .cp-resp', rs => rs.every(r => /Sem responsável/.test(r.textContent)));
+    chk(semResp && await page.$eval('[data-cp-chip="sem_responsavel"]', b => b.getAttribute('aria-pressed') === 'true'), 'filtro rápido Sem responsável: todas as linhas "Sem responsável" e o chip marcado');
     await page.click('[data-cp-chip="critico"]'); await espera(page);
-    const ambos = await page.$$eval('#err-body [data-err-linha]', ls => ls.every(l => /sev-critico/.test(l.className) && /Não atribuído/.test(l.querySelector('.cp-resp').textContent)));
+    const ambos = await page.$$eval('#err-body [data-err-linha]', ls => ls.every(l => /sev-critico/.test(l.className) && /Sem responsável/.test(l.querySelector('.cp-resp').textContent)));
     chk(ambos, 'Críticos + Sem responsável: toda linha satisfaz os dois');
     // busca e paginação
     await page.click('[data-cp-tirar="chip:critico"]'); await espera(page);

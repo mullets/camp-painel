@@ -51,7 +51,7 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
   // na tela nova: o que se resolveu sozinho não aparece; "Podem já estar resolvidos" é um filtro rápido; filtros, busca e "Só este projeto";
   // a ação que resolve fica no painel; devolver a folha retirada fecha o problema e a lista fica no lugar; resolver em lote com frase e
   // Desfazer; "Abrir a folha para girar" leva à revisão e o Voltar traz a lista; operador vê o que é de admin desabilitado.
-  const linha = t => page.locator('#err-body [data-err-linha]').filter({ hasText: t });
+  const linha = t => page.locator(`#err-body [data-err-folha$="${t}"]`);   // a folha fica no data-* (a linha mostra fundo · projeto e o código curto)
   const recarregou = async () => { await page.waitForTimeout(300); await page.waitForFunction(() => document.getElementById('err-body').getAttribute('aria-busy') === 'false' && document.querySelector('#err-body [data-err-linha], #err-body .estado-vazio'), null, { timeout: 10000 }); await page.waitForTimeout(400); };
   const abrirFiltros = async () => { if (await page.isHidden('#cp-filtros-mais')) await page.click('#cp-filtros-btn'); };
   try {
@@ -137,7 +137,7 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     op.on('pageerror', e => erros.push('pageerror (operador): ' + e.message));
     await op.goto(BASE + '/'); await op.fill('#lg-email', 'operador@camp.arq.br'); await op.fill('#lg-senha', 'senha-operador-123'); await op.press('#lg-senha', 'Enter');
     await op.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await op.evaluate(() => nav('erros/~aba=todos&por=100')); await op.waitForSelector('#err-body [data-err-linha]', { timeout: 15000 });
-    await op.locator('#err-body [data-err-linha]').filter({ hasText: 'D00009' }).locator('.cp-cta').click(); await op.waitForSelector('#d-body .cp-ident');
+    await op.locator('#err-body [data-err-folha$="D00009"]').locator('.cp-cta').click(); await op.waitForSelector('#d-body .cp-ident');
     const mv = op.locator('#d-body button.err-acao');
     chk(await mv.isDisabled() && /peça a um admin/.test(await op.textContent('#d-body')), 'operador: "Mover para o projeto certo" desabilitado, com "peça a um admin"');
     await ctxOp.close();

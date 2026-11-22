@@ -56,7 +56,7 @@ erro('bloqueia', 'outro', 'campvision', '${F90}', 'título ilegível na folha 90
     chk(await l4.count() === 1 && await l4.locator('.cp-mesma-folha').count() === 0, 'folha com um problema só: linha de sempre, sem a marca');
     // (a) a folha retirada: só o problema da retirada (o bloqueio do erros.json fechou sozinho; nada de "não existe mais")
     const l90 = page.locator(`#err-body [data-err-folha="${F90}"]`);
-    chk(await l90.count() === 1 && /fora do painel/.test(await l90.first().textContent()) && !/não existe mais/.test(await l90.first().textContent())
+    chk(await l90.count() === 1 && /Folha retirada pelo CAMP Vision/.test(await l90.first().textContent()) && !/não existe mais/.test(await l90.first().textContent())
         && !/título ilegível/.test(await page.textContent('#err-body')), 'folha retirada: fica só o problema da retirada (o outro fechou sozinho)');
     // no celular, sem rolagem lateral
     await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300);
