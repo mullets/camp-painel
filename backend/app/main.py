@@ -121,6 +121,8 @@ from .titulos_pasta import router as rotas_titulos_pasta   # UX-67
 app.include_router(rotas_titulos_pasta)
 from .rotas_clima import router as rotas_clima   # clima das salas (sensores Tuya)
 app.include_router(rotas_clima)
+from .central_problemas import router as rotas_central_problemas   # CAMP-PROB-UX: Central de Problemas
+app.include_router(rotas_central_problemas)
 
 
 @app.on_event("startup")

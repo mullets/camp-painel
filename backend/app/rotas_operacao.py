@@ -1657,6 +1657,10 @@ def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
             raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
         campos.append("fechado_por=?"); vals.append(ator if d.situacao in ("corrigido", "fechado", "ignorado") else None)   # UX-03: quem fechou
+        campos.append("fase=NULL")   # CAMP-PROB-UX: rota antiga = a fase volta a ser deduzida da situação (nunca se contradizem)
+        if d.situacao in ("aberto", "em_correcao") and e["situacao"] not in ("aberto", "em_correcao"):
+            from .central_problemas import estornar_pontos
+            estornar_pontos(con, e["id"], ator)   # reabrir estorna os pontos da resolução
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
@@ -1749,6 +1753,9 @@ def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dic
             if n:
                 voltaram += 1
                 _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
+                if a["situacao"] in ("aberto", "em_correcao") and r["situacao"] not in ("aberto", "em_correcao"):
+                    from .central_problemas import estornar_pontos
+                    estornar_pontos(con, a["id"], u["email"], "desfeito")
             else:
                 ficaram += 1
         con.execute("UPDATE erro_desfazer SET desfeito_em=datetime('now') WHERE id=?", (token,))
