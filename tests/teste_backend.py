@@ -59,6 +59,7 @@ MODOS_RAPIDOS |= {"amigo_doacao"}   # CAMP-DOA-AMIGO 21/11/2026: Amigo da doaç�
 MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linha de etapas, tarefas e roteiro, arquivos, contrato assinado da Autentique, histórico único (linha própria)
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
 MODOS_RAPIDOS |= {"problemas_rapido"}   # CAMP-PROB-RAPIDO 22/11/2026: decisões rápidas na lista de Problemas (modelo de decisão, Desfazer, mover pela rota de sempre, grupos; migração 244; linha própria)
+MODOS_RAPIDOS |= {"problemas_real"}   # CAMP-PROB-REAL 22/11/2026: ações rápidas e miniaturas com o formato dos dados reais (folha retirada fora do painel, JPG do QNAP, motivo de não ter ação; linha própria)
 MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking da equipe ligado por padrão desde a 243; migração 242; linha própria)
 
 MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking da equipe ligado por padrão (linha própria)
@@ -12583,6 +12584,112 @@ def filho(modo):
         ver("Atividade recente: 'fechado_na_conferencia' vira 'Resolvido na conferência' e nenhum título ou texto tem código interno",
             any(a["titulo"] == "Resolvido na conferência" for a in at) and not any("_" in (a["titulo"] + a["texto"]) for a in at), str([(a["titulo"], a["texto"]) for a in at])[:300])
         for l in res: print(l)
+    elif modo == "problemas_real":
+        # CAMP-PROB-REAL (22/11/2026, Rafael com o print da produção: "tá bem ruim de UI e UX, nem consigo alterar as coisas"): as ações rápidas e as
+        # miniaturas do CAMP-PROB-RAPIDO só apareciam no banco sintético. Aqui os problemas nascem pelo caminho da produção (pacote + erros.json lidos por
+        # importar_lote; tests/semear_problemas_real.py): folha retirada fora da tabela de folhas com o problema do erros.json (bloqueia) e o da retirada,
+        # folha importada com arquivo_jpg do QNAP e sem prévia. Prova: miniatura pela rota de prévia de sempre; "É deste projeto" e "É de outro projeto (fica
+        # fora)" na linha e no grupo; o porquê de não poder mover; toda linha sem ação diz por quê; as ações fecham os problemas irmãos e o Desfazer volta.
+        init_db(); _aplicar_migracoes_real()
+        import os as _os, pathlib as _pl, sys as _sys
+        _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent))
+        from semear_problemas_real import semear, D as _D, SEM_IMAGEM, ANTIGA, EXISTENTE
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.importador_lote import importar_lote
+        from app.problemas_rapido import miniaturas
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(_os.environ.get("CAMP_TMP_PRONTOS") or "/dev/shm/camp_prob_real") / "prob_real"
+        c = connect()
+        lotes = semear(c, raiz)["lotes"]
+        # um problema do projeto inteiro (sem folha) e um que está em "Aguardando revisão": não têm decisão rápida, mas dizem por quê
+        e_proj = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','projeto_errado','operador','F001-P0003','Parte das folhas parece de outra obra')").lastrowid
+        e_rev = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,fase) VALUES ('corrigir','metadado','operador',?,'Escala errada','aguardando_revisao')", (_D("F001-P0003", 3),)).lastrowid
+        c.execute("UPDATE erro SET situacao='em_correcao' WHERE id=?", (e_rev,)); c.commit()
+        auth.criar_usuario("Ana", "ana@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leo", "leo@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        auth.criar_usuario("Ivo", "ivo@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        def cli(email, senha):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": email, "senha": senha}); return x
+        ana, leo, ivo = cli("ana@camp.arq.br", "senha-operador-123"), cli("leo@camp.arq.br", "senha-leitor-1234"), cli("ivo@camp.arq.br", "senha-admin-12345")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        id_cv = lambda cod: q("SELECT id FROM erro WHERE codigo=? AND chave LIKE 'campvision:erros:%'", cod)[0]
+        id_ret = lambda cod: q("SELECT id FROM erro WHERE chave=?", f"campvision:retirado:{cod}")[0]
+        sit = lambda i: q("SELECT situacao FROM erro WHERE id=?", i)[0]
+        P1 = [_D("F001-P0001", n) for n in range(4, 16)]
+        P2 = [_D("F001-P0002", n) for n in range(3, 6)]
+        F21 = _D("F001-P0021", 1)
+        ver("cenário real: as retiradas não estão na tabela de folhas e cada uma tem 2 problemas abertos (erros.json bloqueia + retirada)",
+            q(f"SELECT COUNT(*) FROM item WHERE codigo IN ({','.join('?' * len(P1))})", *P1)[0] == 0
+            and all(sit(id_cv(f)) == "aberto" and sit(id_ret(f)) == "aberto" for f in P1 + P2 + [F21]))
+        # 1) Críticos agrupado, como o print do Rafael
+        L = ivo.get("/api/problemas?aba=prioridades&chip=critico&agrupar=1&por_pagina=50").json()
+        it = L.get("itens", [])
+        g1 = next((x for x in it if x.get("grupo") and x.get("projeto_codigo") == "F001-P0001"), {})
+        g2 = next((x for x in it if x.get("grupo") and x.get("projeto_codigo") == "F001-P0002"), {})
+        s21 = next((x for x in it if not x.get("grupo") and x.get("folha") == F21), {})
+        rota = lambda f: f"/api/itens/{f}/previa?t=240"
+        ver("miniaturas do grupo pela rota de prévia do painel (antes: todas 'sem imagem')",
+            g1.get("n") == 12 and all(m.get("miniatura") == rota(m["folha"]) for m in g1.get("membros", [])), str([m.get("miniatura") for m in g1.get("membros", [])][:3]))
+        r_img = ivo.get(rota(P1[0]))
+        ver("a miniatura de uma folha retirada abre (prévia do pacote em _campvision/preview)", r_img.status_code == 200 and r_img.content[:2] == b"\xff\xd8", f"HTTP {r_img.status_code}")
+        ver("folha sem imagem em lugar nenhum: a rota responde 404 (a tela mostra o aviso neutro)", ivo.get(rota(SEM_IMAGEM)).status_code == 404)
+        mi = miniaturas(c, [ANTIGA, EXISTENTE])
+        r_ant = ivo.get(rota(ANTIGA))
+        ver("folha importada de lote antigo (pendências sem 'previa', arquivo_jpg no QNAP): miniatura pela rota, que serve o JPG",
+            mi.get(ANTIGA) == rota(ANTIGA) and mi.get(EXISTENTE) == rota(EXISTENTE) and r_ant.status_code == 200, f"{mi} HTTP {r_ant.status_code}")
+        ver("grupo de folhas retiradas: 'Todas são deste projeto' e 'Ficam fora' valem para todas; o porquê de não ter Mover",
+            (g1.get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"] and "não dá para mover" in ((g1.get("rapido") or {}).get("nota") or "")
+            and (g2.get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"], str(g1.get("rapido"))[:300])
+        r21 = s21.get("rapido") or {}
+        ver("linha solta real (erros.json de uma folha retirada, F001·P0021·D00001): É deste projeto · É de outro projeto, com o carimbo e a miniatura",
+            r21.get("tipo") == "outro_projeto" and r21.get("acoes") == ["deste_projeto", "fica_fora"] and r21.get("carimbo") == "RESIDÊNCIA RAMALHO ALVES"
+            and r21.get("fora_do_painel") is True and "não dá para mover" in (r21.get("mover_porque_nao") or "") and s21.get("miniatura") == rota(F21), str(s21.get("rapido"))[:300])
+        # 2) folha no painel: admin tem Mover; operador tem o porquê
+        La = {x["id"]: x for x in ana.get("/api/problemas?aba=todos&agrupar=0&por_pagina=100").json().get("itens", [])}
+        Li = {x["id"]: x for x in ivo.get("/api/problemas?aba=todos&agrupar=0&por_pagina=100").json().get("itens", [])}
+        e_ex = q("SELECT id FROM erro WHERE codigo=? AND categoria='projeto_errado'", EXISTENTE)[0]
+        ver("folha no painel: admin vê É deste projeto · Mover · Escolher, com a miniatura do JPG no QNAP",
+            (Li.get(e_ex, {}).get("rapido") or {}).get("acoes") == ["deste_projeto", "mover", "escolher"] and Li[e_ex].get("miniatura") == rota(EXISTENTE), str(Li.get(e_ex, {}).get("rapido")))
+        ver("folha no painel, operador: É deste projeto e o porquê de não mover", (La.get(e_ex, {}).get("rapido") or {}).get("acoes") == ["deste_projeto"]
+            and "admin" in ((La[e_ex].get("rapido") or {}).get("mover_porque_nao") or ""))
+        ver("a retirada (corrigir) também tem as duas decisões", (La.get(id_ret(F21), {}).get("rapido") or {}).get("acoes") == ["deste_projeto", "fica_fora"])
+        # 3) diagnóstico: nenhuma linha sem ação fica calada
+        ver("sem decisão rápida, a linha diz por quê: problema do projeto inteiro", "projeto inteiro" in (La.get(e_proj, {}).get("rapido_motivo") or ""), str(La.get(e_proj, {}).get("rapido_motivo")))
+        ver("sem decisão rápida, a linha diz por quê: fase Aguardando revisão", "Aguardando revisão" in (La.get(e_rev, {}).get("rapido_motivo") or ""), str(La.get(e_rev, {}).get("rapido_motivo")))
+        Ll = {x["id"]: x for x in leo.get("/api/problemas?aba=todos&agrupar=0&por_pagina=100").json().get("itens", [])}
+        ver("leitura: nenhum botão e o porquê", not ((Ll.get(id_cv(F21), {}).get("rapido") or {}).get("acoes")) and "leitura" in (Ll.get(id_cv(F21), {}).get("rapido_motivo") or ""))
+        sem_motivo = [x["id"] for x in La.values() if x.get("aberto") and not (x.get("rapido") or {}).get("acoes") and not x.get("rapido_motivo")]
+        ver("toda linha aberta tem decisão rápida ou o motivo", not sem_motivo, str(sem_motivo))
+        # 4) painel do problema: a mesma imagem
+        dt = ana.get(f"/api/problemas/{id_cv(F21)}").json()
+        ver("painel do problema da folha retirada: a imagem pela mesma rota (antes: nenhuma)", dt.get("previa") == f"/api/itens/{F21}/previa", str(dt.get("previa")))
+        # 5) "Todas são deste projeto" no grupo real: resolve, fecha as retiradas da mesma folha, devolve ao lote; reimportar traz as folhas
+        ids1 = g1.get("ids") or []
+        r = ana.post("/api/problemas/rapido", json={"ids": ids1, "acao": "deste_projeto"})
+        j = r.json() if r.status_code == 200 else {}
+        ver("'Todas são deste projeto' no grupo real: os 12 resolvidos e as 12 retiradas irmãs fechadas junto (fechados)",
+            r.status_code == 200 and sorted(j.get("resolvidos", [])) == sorted(ids1) and set(id_ret(f) for f in P1) <= set(j.get("fechados", []))
+            and all(sit(id_ret(f)) != "aberto" for f in P1), r.text[:300])
+        ver("devolvidas ao lote (cv_resposta) com quem decidiu", q("SELECT COUNT(*) FROM cv_resposta WHERE tipo='retirado' AND acao='devolver' AND lote_id=?", lotes["F001-P0001"])[0] == 12)
+        importar_lote(c, lotes["F001-P0001"], "teste"); c.commit()
+        ver("importar de novo: as 12 folhas entram no painel", q(f"SELECT COUNT(*) FROM item WHERE codigo IN ({','.join('?' * len(P1))})", *P1)[0] == 12)
+        # 6) "Ficam fora" no outro grupo: resolve, fecha irmãs, a folha continua fora, a publicação destrava; Desfazer volta tudo
+        ids2 = g2.get("ids") or []
+        r = ana.post("/api/problemas/rapido", json={"ids": ids2, "acao": "fica_fora"})
+        j = r.json() if r.status_code == 200 else {}
+        bloq = lambda: q("SELECT COUNT(*) FROM erro WHERE codigo LIKE 'F001-P0002%' AND gravidade='bloqueia' AND situacao IN ('aberto','em_correcao')")[0]
+        ver("'É de outro projeto (fica fora)': resolvidos, retiradas irmãs fechadas, nada entra no painel e nada mais bloqueia o projeto",
+            r.status_code == 200 and sorted(j.get("resolvidos", [])) == sorted(ids2) and all(sit(id_ret(f)) == "corrigido" for f in P2)
+            and q(f"SELECT COUNT(*) FROM item WHERE codigo IN ({','.join('?' * len(P2))})", *P2)[0] == 0 and bloq() == 0, r.text[:300])
+        ver("a conclusão vem do modelo 'Fica fora deste projeto' e a fase é Resolvido", q("SELECT fase FROM erro WHERE id=?", ids2[0])[0] == "resolvido"
+            and "fica fora" in (q("SELECT resolucao FROM erro WHERE id=?", ids2[0])[0] or "").lower())
+        u = ana.post(f"/api/problemas/rapido/desfazer/{j.get('desfazer')}")
+        ver("Desfazer do 'fica fora': os 6 problemas voltam a abertos", u.status_code == 200 and all(sit(i) == "aberto" for i in ids2 + [id_ret(f) for f in P2]), u.text[:200])
+        ver("'fica fora' não vale para folha que está no painel (lá é Mover)", ana.post("/api/problemas/rapido", json={"ids": [e_ex], "acao": "fica_fora"}).status_code == 409)
+        for l in res: print(l)
     elif modo == "material_novo_filas":
         # Redesenho Material novo (documento do Rafael §5, §7, §12): /api/filas ganha campos OPCIONAIS para a linha — a autoria SÓ a registrada
         # no projeto (nunca o fundo como autor), a miniatura SÓ de folha real do próprio lote (com imagem; nunca retida; sem folha = capa do
@@ -22644,6 +22751,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Problemas rápidos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("CAMP-PROB-REAL: ações rápidas e miniaturas com o formato dos dados reais (folha retirada, JPG do QNAP)")
+rc, out = rodar("problemas_real", f"{tmp}/problemas_real.db")
+if rc != 0: ok(False, f"teste problemas_real não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Problemas reais: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Redesenho Material novo: campos opcionais de /api/filas (autoria registrada, miniatura real, ?leve=1)")
 rc, out = rodar("material_novo_filas", f"{tmp}/material_novo_filas.db")
