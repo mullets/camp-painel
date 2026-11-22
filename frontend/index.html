@@ -9954,7 +9954,7 @@ function cpRender(){const tb=document.getElementById('err-body');if(!tb)return;
     :CP.aba==='minha_fila'?vazioHTML('Nada na sua fila.','Quando alguém atribuir um problema a você (ou você assumir um), ele aparece aqui.','<button class="btn sm" data-err-sit="prioridades">Ver as prioridades</button>')
     :CP.aba==='prioridades'&&CP_RES&&CP_RES.cartoes&&CP_RES.cartoes.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(CP_RES.cartoes.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-cp-ver-avisos>Ver os avisos</button>')
     :vazioHTML('Nenhum problema nesta lista.','Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':''));
-  tb.setAttribute('aria-busy','false');
+  tb.setAttribute('aria-busy','false');tb.dataset.render=(+tb.dataset.render||0)+1;   /* contador de desenhos (os testes esperam por ele) */
   const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=CP_TOTAL?qtd(CP_TOTAL,'problema','problemas'):'';
   const m=document.getElementById('err-mais');if(m){m.hidden=!CP_TOTAL;m.innerHTML=cpPaginasHTML()}
   const sub=document.getElementById('cp-sub');if(sub&&CP_RES&&CP_RES.cartoes){const c=CP_RES.cartoes;sub.textContent=`${qtd(c.em_aberto,'item precisa','itens precisam')} de análise, conferência ou decisão. Autoria não confirmada não bloqueia: a folha sobe ao site com esse aviso.`}
@@ -9976,7 +9976,7 @@ async function carregarErros(aba){
   {const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master');const rp=document.querySelector('#v-erros [data-err-repetidos]');if(rp)rp.hidden=!(EU&&['admin','master'].includes(EU.papel))}
   if(naTela&&/^#erros/.test(location.hash))carregarDupProjetos();
   const volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;
-  sec.querySelector('.aviso-exemplo')?.remove();const seq=++ERR_SEQ;if(!tb.querySelector('[data-err-linha]')){tb.innerHTML=cpEsqueleto();tb.setAttribute('aria-busy','true')}
+  sec.querySelector('.aviso-exemplo')?.remove();const seq=++ERR_SEQ;tb.setAttribute('aria-busy','true');if(!tb.querySelector('[data-err-linha]'))tb.innerHTML=cpEsqueleto();
   cpCarregarPessoas();cpSincronizarCampos();
   try{const [L,R]=await Promise.all([API('/api/problemas?'+cpParams({ordem:CP.ordem,pagina:CP.pagina,por_pagina:CP.por})),API('/api/problemas/resumo?'+cpParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
     if(L.pagina>L.paginas&&CP.pagina>1){CP.pagina=L.paginas;return carregarErros()}
