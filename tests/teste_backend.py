@@ -43,6 +43,7 @@ MODOS_RAPIDOS |= {"ingressos_detalhe"}   # CAMP-INGRESSOS 20/11/2026: tipos (mei
 MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista de presença por pessoa e reenvio por ingresso (site falso; contrato 1.24; linha própria)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
+MODOS_RAPIDOS |= {"patrocinios_painel"}   # CAMP-PAT-EMPRESA 23/11/2026: patrocínio de empresas do site, etapas, pagamento (site falso; contrato 1.31)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
@@ -19608,6 +19609,105 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
         for l in res: print(l)
+    elif modo == "patrocinios_painel":
+        # CAMP-PAT-EMPRESA 23/11/2026 · Patrocínio de empresas do site (contrato 1.31; site FALSO): busca incremental, site antigo, "pedem ação",
+        # números (recebido, 12 meses), detalhe, mudar etapa/nota/novo link pelo site, etapas automáticas recusadas, manual/logos repassados, papéis e LGPD.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, patrocinios as pt, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='patrocinios.coleta_min'").fetchone()
+        ver("migração 245: busca a cada 10 min, não sensível; tabelas patrocinio e estado", cf is not None and tuple(cf) == ("10", 0) and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('patrocinio','patrocinio_estado')").fetchone()[0] == 2, tuple(cf) if cf else None)
+        class Resp:
+            def __init__(s, code, dados=None, content=b"", headers=None): s.status_code, s._d, s.content, s.headers = code, dados, content, headers or {}
+            def json(s): return s._d
+        gets, posts = [], []
+        class H:
+            def __init__(s, r, rp=None): s.r, s.rp = r, rp
+            def get(s, path, params=None): gets.append((path, dict(params or {}))); return s.r
+            def post(s, path, json=None): posts.append((path, json)); return s.rp
+        class WPF:
+            def __init__(s, r, rp=None): s.h = H(r, rp)
+        A = {"id": 701, "protocolo": "CAMP-PAT-2026-000701", "recebida_em": "2026-11-23T12:00:00+00:00", "cota": "mantenedor", "cota_nome": "Mantenedor", "valor_anual": 24000, "valor_mensal": 2000,
+             "consulta": False, "desconto_locacao": 15, "contrapartidas": ["Logotipo na faixa do site", "15% de desconto na locação da Residência João Marino"], "modalidade": "mensal", "modalidade_nome": "12 meses no cartão (cobrança mensal)",
+             "razao_social": "Construtora Exemplo Ltda", "nome_marca": "Exemplo", "cnpj": "11.222.333/0001-81", "site": "https://exemplo.com.br", "endereco": "Rua A, 1", "nome": "Ana Diretora", "cargo": "Marketing",
+             "email": "Ana@Exemplo.com.br", "telefone": "11 97777-6666", "mensagem": "Queremos apoiar", "link_marca": "", "arquivos": [{"tipo": "manual", "nome": "manual.pdf", "tamanho": 9000}, {"tipo": "logos", "nome": "logos.zip", "tamanho": 9000}],
+             "marketing": True, "etapa": "pago", "etapa_nome": "Pagamento confirmado", "cobranca": None, "assinatura": {"id": "pre-1", "status": "authorized", "link": "https://mp/pre-1"},
+             "pagamentos": [{"id": "1", "status": "approved", "valor": 2000, "meio": "credit_card", "pago_em": "2026-11-23T13:00:00-03:00"}], "meses_pagos": 1, "valor_pago": 2000,
+             "notas": [], "historico": ["2026-11-23 12:00 UTC · proposta recebida"], "anonimizado": False, "alterado_em": "2026-11-23T13:00:00+00:00"}
+        B = dict(A, id=702, protocolo="CAMP-PAT-2026-000702", cota="master", cota_nome="Master", valor_anual=60000, consulta=True, modalidade="", modalidade_nome="", nome_marca="Grande SA", razao_social="Grande SA",
+                 nome="Beto", email="beto@grande.com", etapa="em_conversa", etapa_nome="Em conversa com a equipe", assinatura={"id": "", "status": "", "link": ""}, pagamentos=[], meses_pagos=0, valor_pago=0, arquivos=[])
+        C = dict(A, id=703, protocolo="CAMP-PAT-2026-000703", nome_marca="Antiga", nome="Caio", email="caio@antiga.com", etapa="encerrada", etapa_nome="Encerrada", recebida_em="2026-01-10T12:00:00+00:00",
+                 modalidade="anual", pagamentos=[{"id": "9", "status": "approved", "valor": 12000, "pago_em": "2026-01-11"}], meses_pagos=0, valor_pago=12000, cota="parceiro", valor_anual=12000)
+        o = pt.coletar(c, WPF(Resp(200, {"itens": [A, B, C], "etapas": pt.ETAPAS, "etapas_auto": list(pt.ETAPAS_AUTO), "pagina": "https://camp.arq.br/patrocinio-e-apoio/cotas/", "agora": "2026-11-23T14:00:00Z"})))
+        ver("busca no site: 3 propostas, sem desde na 1ª vez, na rota do contrato", o["lidos"] == 3 and o["novos"] == 3 and not o["erro"] and gets[0] == ("/wp-json/camp/v1/painel/patrocinios", {}), (o, gets))
+        a1 = c.execute("SELECT * FROM patrocinio WHERE site_id=701").fetchone()
+        ver("gravado: e-mail em minúsculas, UTC, cota, empresa, valores e meses pagos", (a1["email"], a1["recebida_em"], a1["cota"], a1["empresa"], a1["valor_anual"], a1["valor_pago"], a1["meses_pagos"])
+            == ("ana@exemplo.com.br", "2026-11-23 12:00:00", "mantenedor", "Exemplo", 24000.0, 2000.0, 1), dict(a1))
+        gets.clear()
+        o2 = pt.coletar(c, WPF(Resp(200, {"itens": [dict(B, etapa="contrato_enviado", etapa_nome="Contrato enviado")], "agora": "2026-11-23T15:00:00Z"})))
+        ver("busca incremental: manda desde (agora − 2 min), atualiza sem duplicar", gets[0][1].get("desde", "").startswith("2026-11-23T13:58") and o2["novos"] == 0 and c.execute("SELECT COUNT(*) FROM patrocinio").fetchone()[0] == 3
+            and c.execute("SELECT etapa FROM patrocinio WHERE site_id=702").fetchone()[0] == "contrato_enviado", (gets, o2))
+        ver("site antigo (404): sem erro, marca 'sem rota'", pt.coletar(c, WPF(Resp(404, {})))["sem_rota"] and pt._estado(c, "sem_rota") == "1")
+        ver("site com erro: guarda o erro, sem levantar", pt.coletar(c, WPF(Resp(500, {})))["erro"] and "500" in pt._estado(c, "ultimo_erro"))
+        ver("lista 'pedem ação' tem a paga e a em contrato, não a encerrada; busca por CNPJ e empresa", [x["id"] for x in pt.filtrar(c, "abertas")] == [702, 701] and len(pt.filtrar(c, "")) == 3
+            and [x["id"] for x in pt.filtrar(c, "", "grande")] == [702] and [x["id"] for x in pt.filtrar(c, "encerrada")] == [703])
+        n_ = pt.numeros(c)
+        ver("números: 3 propostas, 2 pedem ação, 2 pagando (R$ 14.000), 1 em 12 meses", (n_["propostas"], n_["abertas"], n_["pagos"], n_["recebido"], n_["mensais"]) == (3, 2, 2, 14000.0, 1), n_)
+        # ---- telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x0.get("/api/patrocinios").status_code == 401)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê, não muda, não baixa arquivo (403)", all(r_.status_code == 403 for r_ in (op.get("/api/patrocinios"), op.get("/api/patrocinios/701"), op.post("/api/patrocinios/701", json={"nota": "x"}), op.get("/api/patrocinios/701/arquivo/manual"))))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r_ = x.get("/api/patrocinios?etapa=abertas")
+        ver("tela: itens, etapas, automáticas, números, página das cotas e estado da busca", r_.status_code == 200 and [i["id"] for i in r_.json()["itens"]] == [702, 701] and r_.json()["etapas_auto"] == ["aguardando_pagamento", "pago"]
+            and r_.json()["numeros"]["abertas"] == 2 and r_.json()["listas"].get("pagina", "").endswith("/cotas/") and "site" in r_.json(), r_.text[:200])
+        it_ = {i["id"]: i for i in x.get("/api/patrocinios").json()["itens"]}
+        ver("lista: cota pelo nome, Master como 'consulta', assinatura e meses pagos", it_[701]["cota_nome"] == "Mantenedor" and it_[702]["consulta"] and it_[701]["assinatura_status"] == "authorized" and it_[701]["meses_pagos"] == 1, it_.get(701))
+        d_ = x.get("/api/patrocinios/701").json()
+        ver("detalhe: contrapartidas (com desconto na Residência), arquivos e pagamentos", any("Residência" in t for t in d_["contrapartidas"]) and [a["tipo"] for a in d_["arquivos"]] == ["manual", "logos"] and d_["pagamentos"][0]["valor"] == 2000, d_)
+        ver("proposta que não existe: 404", x.get("/api/patrocinios/999").status_code == 404)
+        ver("mudar sem a senha do site: 409", x.post("/api/patrocinios/701", json={"nota": "x"}).status_code == 409)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        np_ = len(posts)
+        ver("etapas automáticas (aguardando pagamento, pago) recusadas sem chamar o site", x.post("/api/patrocinios/702", json={"etapa": "pago"}).status_code == 400 and x.post("/api/patrocinios/702", json={"etapa": "aguardando_pagamento"}).status_code == 400 and len(posts) == np_)
+        ver("etapa ou ação desconhecida e nada para mudar: 400 sem chamar o site", x.post("/api/patrocinios/702", json={"acao": "apagar"}).status_code == 400 and x.post("/api/patrocinios/702", json={"etapa": "xyz"}).status_code == 400
+            and x.post("/api/patrocinios/702", json={}).status_code == 400 and len(posts) == np_)
+        pt._wp = lambda: WPF(Resp(200, {}), Resp(200, {"ok": True, "registro": dict(B, etapa="contrato_assinado", etapa_nome="Contrato assinado", notas=[{"em": "23/11/2026 15:00", "quem": "painel (Adm)", "texto": "assinado"}])}))
+        rr = x.post("/api/patrocinios/702", json={"etapa": "contrato_assinado", "nota": "assinado"})
+        ver("mudar: vai ao site (etapa, nota, autor do painel) e grava o que voltou", rr.status_code == 200 and posts[-1] == ("/wp-json/camp/v1/painel/patrocinios/702", {"etapa": "contrato_assinado", "nota": "assinado", "autor_painel": "Adm"})
+            and rr.json()["etapa"] == "contrato_assinado" and rr.json()["notas"][0]["texto"] == "assinado", (posts[-1], rr.text[:200]))
+        pt._wp = lambda: WPF(Resp(200, {}), Resp(409, {"code": "camp_pat_consulta", "message": "Esta cota é combinada com a equipe."}))
+        rc_ = x.post("/api/patrocinios/702", json={"acao": "novo_link"})
+        ver("novo link na Master: 409 com a explicação do site", rc_.status_code == 409 and "combinada com a equipe" in (rc_.json().get("erro") or rc_.json().get("detail") or ""), rc_.text[:200])
+        pt._wp = lambda: WPF(Resp(200, {}), Resp(404, {"code": "rest_no_route"}))
+        ver("site sem a rota: 409 dizendo para atualizar o site", x.post("/api/patrocinios/701", json={"nota": "y"}).status_code == 409)
+        pt._wp = lambda: WPF(Resp(200, {}), Resp(502, {"code": "camp_mp_falhou"}))
+        ver("Mercado Pago fora: 502", x.post("/api/patrocinios/701", json={"acao": "consultar"}).status_code == 502)
+        pt._wp = lambda: WPF(Resp(200, None, b"%PDF-1.4 x", {"content-type": "application/pdf"}))
+        f_ = x.get("/api/patrocinios/701/arquivo/manual")
+        ver("manual: repassado do site como download, sem cache", f_.status_code == 200 and f_.headers["content-type"] == "application/pdf" and f_.content.startswith(b"%PDF") and "no-store" in f_.headers.get("cache-control", "")
+            and "attachment" in f_.headers.get("content-disposition", "") and gets[-1][0] == "/wp-json/camp/v1/painel/patrocinios/701/arquivo/manual", dict(f_.headers))
+        pt._wp = lambda: WPF(Resp(200, None, b"<html>", {"content-type": "text/html"}))
+        ver("arquivo: resposta que não é PDF/ZIP vira 404; tipo desconhecido: 404", x.get("/api/patrocinios/701/arquivo/logos").status_code == 404 and x.get("/api/patrocinios/701/arquivo/outro").status_code == 404)
+        # ---- LGPD
+        out_ = lgpd.apagar_pessoa_local(c, "ana@exemplo.com.br")
+        a2 = c.execute("SELECT nome, email, telefone, empresa, etapa, valor_pago, dados FROM patrocinio WHERE site_id=701").fetchone()
+        ver("LGPD: apagar pessoa tira o responsável; empresa, etapa e valor ficam", out_.get("patrocinio") == 1 and (a2["nome"], a2["email"], a2["telefone"], a2["empresa"], a2["etapa"], a2["valor_pago"]) == ("(removido)", None, None, "Exemplo", "pago", 2000.0)
+            and _j.loads(a2["dados"])["mensagem"] == "" and _j.loads(a2["dados"])["arquivos"] == [], (out_, tuple(a2)[:6]))
+        pt.coletar(c, WPF(Resp(200, {"itens": [A], "agora": "2026-11-23T17:00:00Z"})))
+        ver("LGPD: a busca seguinte não traz o responsável de volta", tuple(c.execute("SELECT nome, email FROM patrocinio WHERE site_id=701").fetchone()) == ("(removido)", None) and "Ana Diretora" not in c.execute("SELECT dados FROM patrocinio WHERE site_id=701").fetchone()[0])
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@exemplo.com.br", "Ana Diretora", "beto@grande.com")))
+        for l in res: print(l)
     elif modo == "doacoes_pedem_acao":
         # CAMP-DOA-LISTA 21/11/2026 (site e Autentique FALSOS). Rafael: "ele sumiu da lista de doações" (depois de assinar o contrato). Com a
         # cobrança junto do contrato, a doação chega a "paga" antes (ou perto) da assinatura; "paga" não contava no "Pedem ação" e sumia, com o
@@ -23290,6 +23390,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações de acervo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Doações de acervo: todas as verificações rodaram")
+
+print("Patrocínio de empresas: busca no site (site falso), pedem ação, números, mudar etapa/nota/novo link pelo site, etapas automáticas, manual/logos repassados, papéis e LGPD")
+rc, out = rodar("patrocinios_painel", f"{tmp}/patrocinios_painel.db")
+if rc != 0: ok(False, f"teste patrocinios_painel não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Patrocínios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Patrocínios: todas as verificações rodaram")
 
 print("Doações de acervo · contrato e avisos: TR30 e depois a cobrança (TR27), caixa desmarcada, sem TR30, site antigo, aviso de etapa TR31, cobrança avulsa com contrato")
 rc, out = rodar("doacoes_contrato", f"{tmp}/doacoes_contrato.db")
