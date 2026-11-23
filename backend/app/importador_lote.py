@@ -560,6 +560,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             pend["bloqueios"] = [b for b in pend["bloqueios"] if "duplicat" not in str(b).lower()]
             if not pend["bloqueios"] and not d.get("autoria_divergente"):
                 publicavel = True
+        from .bloqueio_folha import so_avisos
+        if not publicavel and so_avisos(pend["bloqueios"]):
+            publicavel = True                                       # CAMP-BLOQUEIO ("só aviso"): ficha, capa… não seguram a publicação; a folha não vira 'bloqueado'
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),

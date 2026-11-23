@@ -3,7 +3,8 @@
 // problema aberto; D3 bloqueada pelo CAMP Vision ("imagem cortada"); D4 normal. Prova, na tela de conferir:
 //  - "Está certo" na D1: a etiqueta "orientação incerta" sai da linha na hora e o filtro "Com problema" baixa;
 //  - D2: o aviso de autoria tem o botão "É de <fundo>" (antes só com problema aberto) e, clicado, a marca sai;
-//  - D3: "Já resolvi" pede o que foi feito e tira a marca "bloqueada";
+//  - D3: "Já resolvi" pede o que foi feito e tira a marca (CAMP-BLOQUEIO "só aviso": o texto livre do CAMP Vision não segura a publicação,
+//    então a marca é âmbar "aviso do CAMP Vision", não "bloqueada");
 //  - recarregando, nada volta; na página do projeto a lista "Problemas que impedem publicar" não tem mais o da D1 e a miniatura
 //    da D1 não mostra "orientação incerta" nem "espelhada?"; nenhum erro de JavaScript.
 // Uso (servidor PRÓPRIO numa porta 89xx):
@@ -62,7 +63,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
     chk(await entrar(), 'abre a tela de conferir do lote');
     await espera(async () => await aberta() === D(1));
     const t0 = { 1: await tagsDe(D(1)), 2: await tagsDe(D(2)), 3: await tagsDe(D(3)) }, n0 = await comProblema();
-    chk(t0[1].includes('orientação incerta') && t0[2].includes('autoria') && t0[3].includes('bloqueada') && n0 === 3, 'antes: as 3 folhas aparecem com a marca e "Com problema 3"', JSON.stringify([t0, n0]));
+    chk(t0[1].includes('orientação incerta') && t0[2].includes('autoria') && t0[3].includes('aviso do CAMP Vision') && !t0[3].includes('bloqueada') && n0 === 3, 'antes: as 3 folhas aparecem com a marca e "Com problema 3"', JSON.stringify([t0, n0]));
     // (1) "Está certo" na D1
     await pg.click('#cf-pane [data-rev-item="conferida"]');
     const saiu1 = await espera(async () => { const t = await tagsDe(D(1)); return t && !t.includes('orientação incerta') && await comProblema() === 2; });
@@ -76,16 +77,16 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
     // (3) bloqueio
     await abre(D(3));
     const btB = await pg.$('#cf-pane [data-cf-bloqueio-ok]');
-    chk(!!btB && /imagem cortada/.test(await pg.textContent('#cf-pane [data-cf-aviso="bloqueio"]')), 'D3: o aviso "Bloqueada pelo CAMP Vision" diz o motivo e tem "Já resolvi"');
+    chk(!!btB && /imagem cortada/.test(await pg.textContent('#cf-pane [data-cf-aviso="bloqueio"]')), 'D3: o aviso do CAMP Vision diz o motivo e tem "Já resolvi"');
     if (btB) { await btB.click(); await pg.waitForSelector('#conf-ov #conf-motivo', { timeout: 5000 });
       chk(await pg.$eval('#conf-ov [data-conf="sim"]', b => b.disabled), '"Já resolvi" não deixa tirar sem dizer o que foi feito');
       await pg.fill('#conf-ov #conf-motivo', 'conferi: a imagem está inteira'); await pg.click('#conf-ov [data-conf="sim"]');
-      chk(await espera(async () => !(await tagsDe(D(3))).includes('bloqueada') && !(await pg.$('#cf-pane [data-cf-aviso="bloqueio"]')) && await comProblema() === 0), 'tirado o bloqueio, a marca "bloqueada" sai e "Com problema" fica 0', JSON.stringify([await tagsDe(D(3)), await comProblema()])); }
+      chk(await espera(async () => !(await tagsDe(D(3))).some(x => /bloqueada|aviso do CAMP Vision/.test(x)) && !(await pg.$('#cf-pane [data-cf-aviso="bloqueio"]')) && await comProblema() === 0), 'tirado o aviso, a marca "aviso do CAMP Vision" sai e "Com problema" fica 0', JSON.stringify([await tagsDe(D(3)), await comProblema()])); }
     if (SHOTS) await pg.screenshot({ path: path.join(SHOTS, 'marcas_conferir.png') });
     // (4) recarregar: nada volta
     await entrar(); await espera(async () => await comProblema() >= 0);
     const t1 = [await tagsDe(D(1)), await tagsDe(D(2)), await tagsDe(D(3))];
-    chk(await comProblema() === 0 && !t1.flat().some(x => /orientação incerta|autoria|bloqueada/.test(x)), 'recarregando, nenhuma das marcas resolvidas volta', JSON.stringify(t1));
+    chk(await comProblema() === 0 && !t1.flat().some(x => /orientação incerta|autoria|bloqueada|aviso do CAMP Vision/.test(x)), 'recarregando, nenhuma das marcas resolvidas volta', JSON.stringify(t1));
     // (5) página do projeto
     await pg.goto(BASE + '/#projeto/' + P); await pg.reload(); await pg.waitForSelector(`.thumb[data-rev-abrir="${D(1)}"]`, { timeout: 15000 });
     await espera(() => pg.evaluate(() => !!(window.PJ_D && document.getElementById('pj-probs'))));

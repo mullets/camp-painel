@@ -62,6 +62,7 @@ MODOS_RAPIDOS |= {"doacoes_central"}   # CAMP-DOA-CENTRAL 21/11/2026: abas, linh
 MODOS_RAPIDOS |= {"camp_view"}   # CAMP-VIEW 21/11/2026: visualizador padrão da folha e o .main que contém o absoluto (sem retângulo em branco; linha própria)
 MODOS_RAPIDOS |= {"problemas_rapido"}   # CAMP-PROB-RAPIDO 22/11/2026: decisões rápidas na lista de Problemas (modelo de decisão, Desfazer, mover pela rota de sempre, grupos; migração 244; linha própria)
 MODOS_RAPIDOS |= {"bloqueio_claro"}   # CAMP-BLOQUEIO 23/11/2026: motivo do bloqueio em frase (folha e Problemas) e decisão na própria folha (liberar com troca de tipo, deixar fora, Desfazer, pontos; migração 246; linha própria)
+MODOS_RAPIDOS |= {"ficha_aviso"}   # CAMP-BLOQUEIO 2ª parte (Rafael: "só aviso"): ficha/capa/retirada do CAMP Vision são aviso (frase, /detalhe, importação, publicável como antes; migração 248)
 MODOS_RAPIDOS |= {"problemas_real"}   # CAMP-PROB-REAL 22/11/2026: ações rápidas e miniaturas com o formato dos dados reais (folha retirada fora do painel, JPG do QNAP, motivo de não ter ação; linha própria)
 MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de Problemas (fases, revisão, atribuir, duplicado, pontos da Home, ranking da equipe ligado por padrão desde a 243; migração 242; linha própria)
 
@@ -12619,11 +12620,11 @@ def filho(modo):
         c.commit()
         # 1) as frases (inventário: cada motivo que bloqueia uma folha tem a sua; frase séria, com ponto final, sem exclamação)
         x = explicar(FICHA, TIT, "Documento", "nao_publicado")
-        ESP = ('Bloqueada: o CAMP Vision acha que esta folha é uma ficha de documentação, não uma prancha do projeto (o título lido tem a palavra '
-               '"memorial" e o tipo é "Documento"). Se for prancha, libere; se for ficha, deixe fora do site.')
+        ESP = ('Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação, não uma prancha do projeto (o título lido tem a palavra '
+               '"memorial" e o tipo é "Documento"). Não impede publicar. Se for ficha, deixe fora do site.')   # CAMP-BLOQUEIO 2ª parte: "só aviso"
         ver("ficha de documentação: a frase diz o que o CAMP Vision acha, por quê (a palavra do título e o tipo) e o que fazer", x["frase"] == ESP, x["frase"])
         ver("ficha de documentação: selo curto 'ficha?', os dois botões e a caixa de trocar o tipo", x["curto"] == "ficha?" and [a["rotulo"] for a in x["acoes"]] ==
-            ["É prancha do projeto · liberar", "É ficha · deixar fora"] and x["trocar_tipo"] is True, str(x))
+            ["É prancha · tirar o aviso", "É ficha · deixar fora"] and x["trocar_tipo"] is True, str(x))
         ver("folha já no site (rascunho): a frase avisa que deixar fora a deixa privada lá", explicar(FICHA, TIT, "Documento", "rascunho")["frase"].endswith(
             "Ela já foi ao site: deixar fora a deixa privada lá."), explicar(FICHA, TIT, "Documento", "rascunho")["frase"])
         CASOS = {"capa: não é prancha": "capa", "projeto divergente: o carimbo diz 'SIERNA 3 · BAIRRO DO LIMÃO'": "outro_projeto",
@@ -12631,7 +12632,7 @@ def filho(modo):
                  "lote de teste (CV-24)": "teste", "retirado por decisão de Rafael: folha em branco": "retirada", "imagem cortada": "outro", FICHA: "ficha"}
         fr = {t: explicar(t, TIT, "Planta") for t in CASOS}
         ver("inventário: cada bloqueio do CAMP Vision vira o tipo certo e uma frase com ponto final, sem exclamação",
-            all(fr[t]["tipo"] == k and fr[t]["frase"].startswith("Bloqueada") and fr[t]["frase"].endswith(".") and "!" not in fr[t]["frase"] for t, k in CASOS.items()),
+            all(fr[t]["tipo"] == k and fr[t]["frase"].startswith("Aviso" if k in ("ficha", "capa", "retirada", "outro") else "Bloqueada") and fr[t]["frase"].endswith(".") and "!" not in fr[t]["frase"] for t, k in CASOS.items()),
             {t: (fr[t]["tipo"], fr[t]["frase"]) for t in CASOS})
         ver("o carimbo, a cópia e quem retirou aparecem na frase", '"SIERNA 3 · BAIRRO DO LIMÃO"' in fr["projeto divergente: o carimbo diz 'SIERNA 3 · BAIRRO DO LIMÃO'"]["frase"]
             and "D00002" in fr["duplicata de F010-P0174-1970-S01-D00002"]["frase"] and 'Rafael tirou esta folha' in fr["retirado por decisão de Rafael: folha em branco"]["frase"], "")
@@ -12654,7 +12655,7 @@ def filho(modo):
         it1 = next((i for i in dt.get("itens", []) if i["codigo"] == F(1)), {})
         bm = it1.get("bloqueio_motivos") or [{}]
         ver("/detalhe: a folha traz bloqueio_motivos com a frase, o selo e as ações (campo novo e opcional)", bm[0].get("tipo") == "ficha" and bm[0].get("curto") == "ficha?"
-            and bm[0].get("frase", "").startswith("Bloqueada: o CAMP Vision acha que esta folha é uma ficha de documentação") and bm[0].get("acoes"), str(bm)[:300])
+            and bm[0].get("frase", "").startswith("Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação") and bm[0].get("acoes"), str(bm)[:300])
         lp = ana.get("/api/problemas?aba=prioridades&por_pagina=50").json().get("itens", [])
         lpj = next((e for e in lp if e.get("id") == e_proj), {})
         ver("Problemas: a linha do problema que bloqueia traz frase_bloqueio (o carimbo dito)", (lpj.get("frase_bloqueio") or "").startswith("Impede publicar esta folha: o CAMP Vision acha que ela é de outro projeto (o carimbo diz \"SIERNA 3"),
@@ -12708,6 +12709,94 @@ def filho(modo):
         u3 = ana.post(f"/api/problemas/rapido/desfazer/{r.json().get('desfazer')}")
         ver("Desfazer: o problema reabre e o ponto some", u3.status_code == 200 and c.execute("SELECT situacao FROM erro WHERE id=?", (e_ficha,)).fetchone()[0] == "aberto"
             and f"erro:{e_ficha}" not in {x_["ref"] for x_ in eventos_validados(c) if x_["email"] == "ana@camp.arq.br"}, u3.text[:200])
+        for l in res: print(l)
+    elif modo == "ficha_aviso":
+        # CAMP-BLOQUEIO, 2ª parte (23/11/2026, Rafael: "só aviso"): os motivos que o CAMP Vision escreve na folha ("ficha de documentação (não é obra)",
+        # capa, retirada, texto livre) nunca seguraram a publicação (publicacao.ELEGIVEL_LOCAL). Viram AVISO: frase "Aviso: … Não impede publicar.",
+        # `aviso: true` no /detalhe, a importação não põe a folha em 'bloqueado' só por eles, a folha continua publicável como antes; lote de teste e
+        # problema que bloqueia continuam bloqueio de verdade. Migração 248: o texto padrão dos modelos de decisão diz "aviso" (só onde não foi editado).
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, shutil, pathlib as _pl
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.bloqueio_folha import explicar, so_avisos
+        from app.publicacao import ELEGIVEL_LOCAL
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:400]}")
+        FICHA, TESTE = "ficha de documentação (não é obra)", "lote de teste (CV-24)"
+        # 1) as frases
+        x = explicar(FICHA, "MEMORIAL / ISOMÉTRICA", "Documento", "nao_publicado")
+        ver("ficha: aviso (não bloqueio), a frase começa com 'Aviso:' e diz 'Não impede publicar'", x["aviso"] is True and x["frase"].startswith(
+            "Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação") and "Não impede publicar. Se for ficha, deixe fora do site." in x["frase"]
+            and "Bloqueada" not in x["frase"], x["frase"])
+        ver("ficha: os botões 'É prancha · tirar o aviso' e 'É ficha · deixar fora'", [a["rotulo"] for a in x["acoes"]] == ["É prancha · tirar o aviso", "É ficha · deixar fora"], x["acoes"])
+        av = {t: explicar(t, "", "Planta") for t in ("capa: não é prancha", "retirado por decisão de Rafael: folha em branco", "imagem cortada")}
+        ver("capa, retirada e texto livre: aviso, 'Não impede publicar'", all(v["aviso"] and "Não impede publicar" in v["frase"] and v["frase"].startswith("Aviso") for v in av.values()),
+            {t: v["frase"] for t, v in av.items()})
+        bl = {t: explicar(t, "", "Planta") for t in (TESTE, "duplicata de F010-P0174-1970-S01-D00002", "sem identificação (pasta com várias obras)",
+                                                     "projeto divergente: o carimbo diz 'X'")}
+        ver("lote de teste, duplicata, sem identificação e outro projeto continuam 'Bloqueada' (a publicação os segura)",
+            all(v["aviso"] is False and v["frase"].startswith("Bloqueada") for v in bl.values()), {t: v["frase"] for t, v in bl.items()})
+        ver("so_avisos: só ficha = aviso; com lote de teste junto ou vazio = não", so_avisos([FICHA, "capa: não é prancha"]) and not so_avisos([FICHA, TESTE]) and not so_avisos([]), "")
+        # 2) a folha antiga 'bloqueado' só pela ficha continua publicável (a regra não mudou) e o /detalhe diz aviso; problema que bloqueia continua bloqueio
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F010','Escritório Teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F010',174)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F010-P0174','F010',174,'Concurso Público/Votorantim',1970)")
+        F = lambda n_: f"F010-P0174-1970-S01-D{n_:05d}"
+        for n_, bls in ((1, [FICHA]), (2, [FICHA]), (3, [TESTE])):
+            c.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,origem,revisao,pendencias,status_site)
+                         VALUES (?,?,?,?,?,'Documento','campvision','conferida',?,'bloqueado')""",
+                      (F(n_), "F010-P0174", "S01", n_, f"Concurso {n_}", _j.dumps({"titulo_lido": "CONCURSO PÚBLICO · MEMORIAL", "bloqueios": bls}, ensure_ascii=False)))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','operador',?,'Escala ilegível')", (F(2),))
+        c.commit()
+        eleg = lambda cod: c.execute(f"SELECT COUNT(*) FROM item WHERE codigo=? AND {ELEGIVEL_LOCAL}", (cod,)).fetchone()[0] == 1
+        ver("folha 'bloqueado' só pela ficha: publicável como antes (a regra de publicar não lê o aviso)", eleg(F(1)), "")
+        ver("folha com a ficha E um problema aberto que bloqueia: fora da publicação (bloqueio de verdade)", not eleg(F(2)), "")
+        auth.criar_usuario("Ana", "ana@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        ana = TestClient(app, raise_server_exceptions=False); ana.post("/api/auth/login", json={"email": "ana@camp.arq.br", "senha": "senha-operador-123"})
+        dt = {i["codigo"]: i for i in ana.get("/api/projetos/F010-P0174/detalhe").json().get("itens", [])}
+        m1, m3 = (dt.get(F(1)) or {}).get("bloqueio_motivos") or [{}], (dt.get(F(3)) or {}).get("bloqueio_motivos") or [{}]
+        ver("/detalhe: o motivo da ficha vem com aviso=true e a frase de aviso; o lote de teste com aviso=false", m1[0].get("aviso") is True
+            and m1[0].get("frase", "").startswith("Aviso:") and m3[0].get("aviso") is False and m3[0].get("frase", "").startswith("Bloqueada"), str([m1, m3])[:300])
+        r = ana.post(f"/api/itens/{F(1)}/bloqueio/decidir", json={"acao": "liberar", "tipo": "ficha"})
+        i1 = c.execute("SELECT status_site, pendencias FROM item WHERE codigo=?", (F(1),)).fetchone()
+        ver("'É prancha · tirar o aviso': o aviso sai e a folha sai de 'bloqueado'", r.status_code == 200 and _j.loads(i1["pendencias"])["bloqueios"] == []
+            and i1["status_site"] == "nao_publicado", r.text[:200])
+        ver("o texto do modelo de decisão diz 'aviso' (migração 248)", "O aviso do CAMP Vision saiu." in (r.json().get("conclusao") or ""), r.json().get("conclusao"))
+        # 3) migração 248: troca só o texto padrão, uma vez
+        sql248 = (_pl.Path(__file__).resolve().parent.parent / "db" / "migrations" / "248_ficha_aviso.sql").read_text(encoding="utf-8")
+        ANT = "Conferido na folha: é prancha do projeto, não ficha de documentação. O bloqueio do CAMP Vision saiu."
+        c.execute("UPDATE erro_modelo SET texto=? WHERE categoria='outro' AND titulo='É prancha do projeto'", (ANT,))
+        c.execute("UPDATE erro_modelo SET texto='Texto do Rafael' WHERE categoria='outro' AND titulo='Pode ir ao site'")
+        c.commit(); c.executescript(sql248); c.executescript(sql248)
+        tx = dict(c.execute("SELECT titulo, texto FROM erro_modelo WHERE categoria='outro' AND titulo IN ('É prancha do projeto','Pode ir ao site')").fetchall())
+        ver("migração 248: o texto padrão antigo vira 'aviso'; o texto editado fica; rodar de novo não muda nada", tx.get("É prancha do projeto", "").endswith(
+            "O aviso do CAMP Vision saiu.") and tx.get("Pode ir ao site") == "Texto do Rafael", tx)
+        # 4) importação: a ficha sozinha não põe a folha em 'bloqueado'; lote de teste põe
+        FIX = _pl.Path(__file__).parent / "fixtures" / "campvision"
+        prontos = _pl.Path(os.environ["CAMP_TMP_PRONTOS"]); proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"
+        shutil.rmtree(prontos, ignore_errors=True); shutil.copytree(FIX / "lote_normal", proj)
+        pkf = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pkf.read_text(encoding="utf-8"))
+        for chave in ("documentos", "itens"):
+            for d_ in pk.get(chave) or []:
+                if d_["codigo"].endswith("D00001"): d_.update({"duplicata_de": "", "publicavel": False, "bloqueios": [FICHA], "titulo_lido": "MEMORIAL DESCRITIVO"})
+                if d_["codigo"].endswith("D00002"): d_.update({"duplicata_de": "", "publicavel": False, "bloqueios": [TESTE]})
+        pkf.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa) VALUES ('Lote Tarumã','F026-P0001',?,3,3,'revisao')", (str(proj),)).lastrowid
+        c.commit()
+        r = ana.post(f"/api/lotes/{lote}/importar")
+        st = dict(c.execute("SELECT codigo, status_site FROM item WHERE projeto_codigo='F026-P0001'").fetchall())
+        D = lambda n_: f"F026-P0001-1972-S01-D0000{n_}"
+        ver("importar: folha só com a ficha entra 'nao_publicado' (aviso, não bloqueio); a do lote de teste entra 'bloqueado'", r.status_code == 200
+            and st.get(D(1)) == "nao_publicado" and st.get(D(2)) == "bloqueado" and st.get(D(3)) == "nao_publicado", r.text[:200] + str(st))
+        p1 = _j.loads(c.execute("SELECT pendencias FROM item WHERE codigo=?", (D(1),)).fetchone()[0])
+        ver("importar: o aviso continua guardado na folha (a tela mostra e a pessoa decide)", p1.get("bloqueios") == [FICHA], p1)
         for l in res: print(l)
     elif modo == "problemas_real":
         # CAMP-PROB-REAL (22/11/2026, Rafael com o print da produção: "tá bem ruim de UI e UX, nem consigo alterar as coisas"): as ações rápidas e as
@@ -23084,6 +23173,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Bloqueio claro: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Bloqueio claro: todas as verificações rodaram")
+
+print("CAMP-BLOQUEIO 2ª parte: ficha de documentação e os outros motivos do CAMP Vision que não seguram a publicação são aviso")
+rc, out = rodar("ficha_aviso", f"{tmp}/ficha_aviso.db")
+if rc != 0: ok(False, f"teste ficha_aviso não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha é aviso: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 13, "Ficha é aviso: todas as verificações rodaram")
 
 print("CAMP-PROB-REAL: ações rápidas e miniaturas com o formato dos dados reais (folha retirada, JPG do QNAP)")
 rc, out = rodar("problemas_real", f"{tmp}/problemas_real.db")

@@ -7,7 +7,7 @@ Rafael, olhando F010-P0174 (Concurso Público/Votorantim), Folha 1/7 com a marca
   folha (`pendencias.bloqueios`, texto livre do `pacote_tainacan.json`: `campvision-new/nucleo/projeto.py`) e para os problemas que bloqueiam
   (`erro.gravidade='bloqueia'`, por categoria). A tela usa `bloqueio_motivos` (campo novo e opcional de cada folha em `/detalhe`) e
   `frase_bloqueio` (campo novo e opcional de cada problema na lista de Problemas). Sem esses campos (painel antigo), a tela mostra o texto de antes.
-- **Decidir na própria folha** (`POST /api/itens/{codigo}/bloqueio/decidir`): "É prancha do projeto · liberar" (tira o bloqueio; com a caixa
+- **Decidir na própria folha** (`POST /api/itens/{codigo}/bloqueio/decidir`): "É prancha · tirar o aviso" (antes "É prancha do projeto · liberar"; tira o aviso; com a caixa
   "trocar o tipo para Planta", o tipo "Documento" vira "Planta" pela rota de editar a folha de sempre) e "É ficha · deixar fora" (retém a folha
   pela rota de reter de sempre: fica no painel e não vai ao site; se já está no site, fica privada lá). A conclusão vem do modelo de decisão
   (`erro_modelo`, migração 246, editável em Problemas); problema aberto da folha sobre o mesmo motivo é resolvido pelo fluxo da Central
@@ -15,6 +15,14 @@ Rafael, olhando F010-P0174 (Concurso Público/Votorantim), Folha 1/7 com a marca
   (`POST /api/problemas/rapido/desfazer/{token}`: só quem fez ou um admin, uma vez, até 30 min; o tipo volta pela rota de editar a folha).
 - Os bloqueios "de outro projeto" e "duplicata" têm frase aqui, mas a decisão continua nas ações que já existiam (É deste projeto / É de outro
   projeto…; Ver lado a lado / Não é duplicata). "Lote de teste" não se libera na folha: o CAMP Vision precisa ler a pasta de novo.
+
+**Só aviso** (CAMP-BLOQUEIO, 2ª parte, Rafael: "só aviso"): a regra de publicar (`publicacao.ELEGIVEL_LOCAL`) nunca leu `pendencias.bloqueios`
+nem `status_site='bloqueado'` da folha: o que tira uma folha da publicação é problema aberto com gravidade 'bloqueia', folha retida, duplicata
+(`duplicata_de`) ou lote de teste (condição do projeto). Por isso "ficha de documentação", "não é prancha" (capa), "retirado por decisão" e o
+texto livre do CAMP Vision são AVISO (`AVISOS`): a frase começa com "Aviso:" e diz "Não impede publicar"; a tela os mostra na caixa âmbar
+"Aviso do CAMP Vision" e no selo "aviso · ficha?", e o filtro "bloqueada (N)" não os conta. A importação também não põe mais a folha em
+'bloqueado' só por eles (`so_avisos`); folha antiga que ficou 'bloqueado' só por eles a tela lê como aviso (nada é regravado). Lote de
+teste, outro projeto, sem identificação e duplicata continuam "Bloqueada" (a publicação os segura de verdade, ou têm problema que bloqueia).
 
 Achado (não mexe no CAMP Vision): "ficha de documentação" nasce de `derivacao.e_documento(titulo)`, uma lista de palavras no TÍTULO lido do
 carimbo (documento, memorial, caderno, pasta, contrato, ofício, recorte, correspondência, currículo), só na série S01. Prancha de concurso com
@@ -36,6 +44,7 @@ from .db import connect
 router = APIRouter(prefix="/api", tags=["revisao"])
 
 # a mesma lista de `campvision-new/nucleo/derivacao.py` (TERMOS_DOCUMENTO), só para explicar; quem decide o bloqueio é o CAMP Vision
+# (o CAMP Vision novo só marca "memorial" quando o título é SÓ o memorial; a palavra continua aqui para explicar as folhas lidas antes e essas)
 PALAVRAS_FICHA = re.compile(r"\b(documento\w*|curriculo\w*|caderno\w*|pasta\w*|recortes?|correspondenc\w*|memorial\w*|contrato\w*|oficios?)\b")
 _CARIMBO = re.compile(r"carimbo diz\s*:?\s*[\"'“‘«]([^\"'”’»]{1,160})", re.I)
 _FOLHA = re.compile(r"\bF\d{3}-P\d{4}-\d{4}-S\d{2}-D(\d{4,6})\b")
@@ -46,26 +55,28 @@ TIPOS = {
     "ficha": ("ficha?", True),
     "capa": ("não é prancha?", True),
     "retirada": ("retirada", True),
-    "outro": ("bloqueada", True),
+    "outro": ("aviso", True),
     "teste": ("lote de teste", False),
     "outro_projeto": ("outro projeto?", False),
     "sem_identificacao": ("sem identificação", False),
     "duplicata": ("cópia?", False),
 }
+# os que a regra de publicar NÃO segura: aviso ("Não impede publicar"), não bloqueio
+AVISOS = frozenset({"ficha", "capa", "retirada", "outro"})
 # (tipo, ação) -> (título do modelo de decisão, texto padrão se o modelo foi desativado, rótulo do botão)
 MODELOS = {
-    ("ficha", "liberar"): ("É prancha do projeto", "Conferido na folha: é prancha do projeto, não ficha de documentação. O bloqueio do CAMP Vision saiu.",
-                           "É prancha do projeto · liberar"),
+    ("ficha", "liberar"): ("É prancha do projeto", "Conferido na folha: é prancha do projeto, não ficha de documentação. O aviso do CAMP Vision saiu.",
+                           "É prancha · tirar o aviso"),
     ("ficha", "deixar_fora"): ("É ficha: fica fora do site", "Conferido na folha: é ficha de documentação, não prancha do projeto. Fica no painel e não vai ao site.",
                                "É ficha · deixar fora"),
-    ("capa", "liberar"): ("É prancha do projeto", "Conferido na folha: é prancha do projeto, não ficha de documentação. O bloqueio do CAMP Vision saiu.",
-                          "É prancha do projeto · liberar"),
-    ("capa", "deixar_fora"): ("Fica fora do site", "Conferido na folha: o bloqueio do CAMP Vision está certo. A folha fica no painel e não vai ao site.",
+    ("capa", "liberar"): ("É prancha do projeto", "Conferido na folha: é prancha do projeto, não ficha de documentação. O aviso do CAMP Vision saiu.",
+                          "É prancha · tirar o aviso"),
+    ("capa", "deixar_fora"): ("Fica fora do site", "Conferido na folha: o aviso do CAMP Vision está certo. A folha fica no painel e não vai ao site.",
                               "Não é prancha · deixar fora"),
 }
 for _t in ("retirada", "outro"):
-    MODELOS[(_t, "liberar")] = ("Pode ir ao site", "Conferido na folha: o motivo do bloqueio do CAMP Vision não vale mais. A folha pode ir ao site.", "Pode ir ao site · liberar")
-    MODELOS[(_t, "deixar_fora")] = ("Fica fora do site", "Conferido na folha: o bloqueio do CAMP Vision está certo. A folha fica no painel e não vai ao site.", "Deixar fora do site")
+    MODELOS[(_t, "liberar")] = ("Pode ir ao site", "Conferido na folha: o aviso do CAMP Vision não vale mais. A folha pode ir ao site.", "Pode ir ao site · tirar o aviso")
+    MODELOS[(_t, "deixar_fora")] = ("Fica fora do site", "Conferido na folha: o aviso do CAMP Vision está certo. A folha fica no painel e não vai ao site.", "Deixar fora do site")
 ACOES = ("liberar", "deixar_fora")
 TIPO_PLANTA, TIPO_DOCUMENTO = "Planta", "Documento"
 
@@ -95,6 +106,12 @@ def classificar(texto) -> str:
     return "outro"
 
 
+def so_avisos(bloqueios) -> bool:
+    """Os bloqueios que o CAMP Vision escreveu numa folha são todos aviso (nenhum segura a publicação)? Lista vazia: False."""
+    bl = [b for b in (bloqueios or []) if b]
+    return bool(bl) and all(classificar(b) in AVISOS for b in bl)
+
+
 def palavra_da_ficha(titulo_lido) -> str | None:
     m = PALAVRAS_FICHA.search(_sem_acento(titulo_lido))
     return m.group(1) if m else None
@@ -107,7 +124,7 @@ def _tem_documento(tipo) -> bool:
 
 def explicar(texto, titulo_lido=None, tipo=None, status_site=None) -> dict:
     """Um bloqueio do CAMP Vision em frase: {tipo, texto (o original), curto (o selo do cartão), frase, decide (a decisão vale na folha),
-    acoes ([{acao, rotulo}]), trocar_tipo (oferecer "trocar o tipo para Planta")}."""
+    acoes ([{acao, rotulo}]), trocar_tipo (oferecer "trocar o tipo para Planta"), aviso (não impede publicar; campo novo e opcional)}."""
     k = classificar(texto)
     curto, decide = TIPOS[k]
     raw = str(texto or "").strip()
@@ -117,17 +134,17 @@ def explicar(texto, titulo_lido=None, tipo=None, status_site=None) -> dict:
         porque = [f'o título lido tem a palavra "{p}"' if p else "pelo título lido"]
         if _tem_documento(tipo):
             porque.append('o tipo é "Documento"')
-        frase = ("Bloqueada: o CAMP Vision acha que esta folha é uma ficha de documentação, não uma prancha do projeto ("
-                 + " e ".join(porque) + "). Se for prancha, libere; se for ficha, deixe fora do site.")
+        frase = ("Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação, não uma prancha do projeto ("
+                 + " e ".join(porque) + "). Não impede publicar. Se for ficha, deixe fora do site.")
     elif k == "capa":
         qual = raw.split(":", 1)[0].strip() or "capa"
-        frase = (f'Bloqueada: o CAMP Vision acha que esta folha é {qual.lower()}, não uma prancha do projeto. '
-                 "Se for prancha, libere; se não for, deixe fora do site.")
+        frase = (f'Aviso: o CAMP Vision acha que esta folha pode ser {qual.lower()}, não uma prancha do projeto. '
+                 "Não impede publicar. Se não for prancha, deixe fora do site.")
     elif k == "retirada":
         m = _RETIRADO.match(raw)
         quem, mot = ((m.group(1).strip() or "alguém"), m.group(2).strip()) if m else ("alguém", "")
-        frase = (f"Bloqueada: {quem} tirou esta folha da publicação no CAMP Vision" + (f' ("{mot}")' if mot else "")
-                 + ". Se ela pode ir ao site, libere; se não, deixe fora do site.")
+        frase = (f"Aviso: {quem} tirou esta folha da publicação no CAMP Vision" + (f' ("{mot}")' if mot else "")
+                 + ". Não impede publicar. Se ela não pode ir ao site, deixe fora do site.")
     elif k == "teste":
         frase = ("Bloqueada: a folha veio de um lote de teste do CAMP Vision, que nunca vai ao site. "
                  "Para publicar, o CAMP Vision precisa ler a pasta de novo fora do teste.")
@@ -143,12 +160,12 @@ def explicar(texto, titulo_lido=None, tipo=None, status_site=None) -> dict:
         frase = ("Bloqueada: o CAMP Vision acha que esta folha é cópia de " + (f"D{m.group(1)}" if m else "outra folha")
                  + " (a mesma imagem duas vezes); só uma vai ao site. Confira lado a lado.")
     else:
-        frase = f'Bloqueada pelo CAMP Vision: "{raw}". Se você conferiu e não vale mais, libere; se vale, deixe fora do site.'
+        frase = f'Aviso do CAMP Vision: "{raw}". Não impede publicar. Se vale, deixe fora do site; se não vale mais, tire o aviso.'
     if decide and no_site:
         frase += " Ela já foi ao site: deixar fora a deixa privada lá."
     acoes = [{"acao": a, "rotulo": MODELOS[(k, a)][2]} for a in ACOES] if decide else []
     return {"tipo": k, "texto": raw, "curto": curto, "frase": frase, "decide": decide, "acoes": acoes,
-            "trocar_tipo": k in ("ficha", "capa") and _tem_documento(tipo)}
+            "trocar_tipo": k in ("ficha", "capa") and _tem_documento(tipo), "aviso": k in AVISOS}
 
 
 def motivos_da_folha(item: dict) -> list[dict]:
@@ -229,7 +246,7 @@ def _saida(con, codigo: str) -> dict:
 
 @router.post("/itens/{codigo}/bloqueio/decidir")
 def decidir(codigo: str, d: Decidir, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """"É prancha do projeto · liberar" ou "É ficha · deixar fora", na própria folha. Ver o topo do módulo."""
+    """"É prancha · tirar o aviso" ou "É ficha · deixar fora", na própria folha. Ver o topo do módulo."""
     from . import central_problemas as cp
     from .problemas_rapido import _entradas_erros, _entradas_itens, _guardar, _snap_erros, _snap_itens
     if d.acao not in ACOES:
@@ -244,7 +261,7 @@ def decidir(codigo: str, d: Decidir, tarefas: BackgroundTasks, u: dict = Depends
         pend = _pend(i)
         alvo = [b for b in (pend.get("bloqueios") or []) if b and TIPOS[classificar(b)][1] and (not d.tipo or classificar(b) == d.tipo)]
         if not alvo:
-            raise HTTPException(409, "Esta folha não tem mais esse bloqueio: alguém já decidiu. Atualize a página.")
+            raise HTTPException(409, "Esta folha não tem mais esse aviso: alguém já decidiu. Atualize a página.")
         k = d.tipo or classificar(alvo[0])
         texto, tit = _modelo(con, k, d.acao)
         # problemas abertos da folha sobre o mesmo motivo (o CAMP Vision às vezes também o manda em erros.json): resolvem pelo fluxo da Central
