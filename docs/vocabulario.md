@@ -686,6 +686,41 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
   ao site"). Rodapé: **Cancelar** · **Salvar alterações** ("Salvando…"). Os termos são os da taxonomia do site (`/api/vocabulario/tipologia`),
   nunca os do protótipo.
 
+## Motivo do bloqueio em frase e decisão na própria folha (CAMP-BLOQUEIO, 23/11/2026)
+Rafael, numa folha "bloqueada" que só dizia "ficha de documentação (não é obra)": "não entendi por que tá bloqueado". Todo bloqueio de folha vira
+UMA frase: o que o sistema acha, por quê e o que fazer. Fonte única: `backend/app/bloqueio_folha.py` (`explicar`, `frase_erro`).
+- **Cartão da folha**: a marca vira **bloqueada · <selo>** (**ficha?**, **não é prancha?**, **retirada**, **lote de teste**; o genérico continua
+  **bloqueada**), com a frase inteira no título (passar o mouse). O filtro continua **bloqueada (N)**.
+- **Revisar folha**, caixa **Impede publicar**: a frase no lugar da pílula, com "O CAMP Vision escreveu: <texto original>" embaixo, os botões da
+  decisão e o link **Abrir em Problemas**.
+- **Próximo passo** da página do projeto: "**N folhas bloqueadas pelo CAMP Vision: decida na própria folha.**", cada uma com a frase e
+  **Decidir na folha**. Na lista de **Problemas**, o problema que bloqueia mostra a frase em cima da descrição.
+- Frases dos bloqueios do CAMP Vision na folha (`pendencias.bloqueios`):
+  - ficha de documentação: "Bloqueada: o CAMP Vision acha que esta folha é uma ficha de documentação, não uma prancha do projeto (o título lido tem a
+    palavra "memorial" e o tipo é "Documento"). Se for prancha, libere; se for ficha, deixe fora do site." (sem a palavra achada: "pelo título lido";
+    sem o tipo Documento, só a palavra);
+  - capa / folha de rosto: "Bloqueada: o CAMP Vision acha que esta folha é capa, não uma prancha do projeto. Se for prancha, libere; se não for, deixe fora do site.";
+  - retirada por decisão: "Bloqueada: <quem> tirou esta folha da publicação no CAMP Vision ("<motivo>"). Se ela pode ir ao site, libere; se não, deixe fora do site.";
+  - lote de teste: "Bloqueada: a folha veio de um lote de teste do CAMP Vision, que nunca vai ao site. Para publicar, o CAMP Vision precisa ler a pasta de novo fora do teste.";
+  - outro projeto: "Bloqueada: o carimbo diz "<carimbo>", e o CAMP Vision acha que esta folha é de outro projeto. Se for deste, use "É deste projeto"; se não for, mova para o projeto certo.";
+  - sem identificação: "Bloqueada: a pasta tem várias obras e a folha não diz de qual é. Se for deste projeto, use "É deste projeto"; se não for, mova para o projeto certo.";
+  - duplicata: "Bloqueada: o CAMP Vision acha que esta folha é cópia de Dnnnnn (a mesma imagem duas vezes); só uma vai ao site. Confira lado a lado.";
+  - qualquer outro: "Bloqueada pelo CAMP Vision: "<texto>". Se você conferiu e não vale mais, libere; se vale, deixe fora do site.";
+  - folha que já foi ao site (rascunho ou publicada), nos que se decidem na folha: + "Ela já foi ao site: deixar fora a deixa privada lá."
+- Frases dos problemas que bloqueiam (`erro.gravidade='bloqueia'`): "Impede publicar esta folha: …" (ou "Impede publicar o projeto: …") +
+  folha de outro projeto "o CAMP Vision acha que ela é de outro projeto (o carimbo diz "…"). Diga se é deste projeto ou mova para o projeto certo." ·
+  duplicata "parece cópia de outra folha; só uma vai ao site. Confira lado a lado e diga se é a mesma folha." · metadados "falta um dado obrigatório ou
+  ele está errado. Corrija na folha e resolva o problema." · arquivo danificado "o arquivo da imagem está danificado e não abre. Peça para o CAMP Vision
+  ler de novo ou digitalize outra vez." · código "o código não bate com o do painel. Confira a pasta e o código antes de publicar." · orientação "a folha
+  está virada. Gire na revisão e confira." · verso "a folha foi digitalizada pelo verso. Espelhe na revisão e confira." · crédito "o crédito está errado
+  ou faltando. Corrija com a fonte." · outro "alguém registrou um problema que trava esta folha. Leia a descrição e resolva." (autoria nunca bloqueia).
+- Botões na caixa vermelha: ficha **É prancha do projeto · liberar** (com a caixa **trocar o tipo para Planta**, marcada, quando o tipo é
+  "Documento") e **É ficha · deixar fora**; capa **É prancha do projeto · liberar** e **Não é prancha · deixar fora**; retirada e outro **Pode ir ao
+  site · liberar** e **Deixar fora do site**; outro projeto **É deste projeto** e (admin) **É de outro projeto…**; duplicata **Ver lado a lado** e
+  **Não é duplicata**; lote de teste: sem botão. Aviso: "Resolvido." (+ " O tipo passou a Planta." / " A folha fica fora do site.") com
+  **Desfazer**; "Desfeito.". Modelos de decisão (Problemas › Modelos de decisão, categoria Outro): **É prancha do projeto**, **É ficha: fica fora do
+  site**, **Pode ir ao site**, **Fica fora do site**. "Deixar fora" é o mesmo **Reter** de sempre (a folha fica no painel; nunca "excluir" nem "apagar").
+
 ## Fundo sem legendas no site (10/11/2026, contrato painel ↔ site 1.9)
 - Caixa no "Editar" do fundo, grupo "Aparece na página pública": **Sem legendas nas imagens do site** — "As fotos e desenhos deste fundo
   aparecem no site sem o texto embaixo da imagem (título, ano). A ficha de cada folha e o crédito da foto continuam."

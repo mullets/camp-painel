@@ -624,6 +624,9 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 d["pendencias"] = json.loads(d["pendencias"])
             except ValueError:
                 d["pendencias"] = None
+        if isinstance(d.get("pendencias"), dict) and d["pendencias"].get("bloqueios"):   # CAMP-BLOQUEIO (campo novo, opcional): o motivo em frase
+            from .bloqueio_folha import motivos_da_folha
+            d["bloqueio_motivos"] = motivos_da_folha(d)
         if isinstance(d.get("recorte"), str):           # 19/10: recorte manual (frações), para a tela de recortar e a marca da prévia
             try:
                 d["recorte"] = json.loads(d["recorte"])

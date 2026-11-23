@@ -127,6 +127,8 @@ from .home_trabalho import router as rotas_home_trabalho   # CAMP-HOME-UX: respo
 app.include_router(rotas_home_trabalho)
 from .problemas_rapido import router as rotas_problemas_rapido   # CAMP-PROB-RAPIDO: decisões rápidas na lista (antes da Central: /api/problemas/{eid})
 app.include_router(rotas_problemas_rapido)
+from .bloqueio_folha import router as rotas_bloqueio_folha   # CAMP-BLOQUEIO: motivo do bloqueio em frase e decisão na própria folha
+app.include_router(rotas_bloqueio_folha)
 from .central_problemas import router as rotas_central_problemas   # CAMP-PROB-UX: Central de Problemas
 app.include_router(rotas_central_problemas)
 
