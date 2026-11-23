@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.31 (23/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
+Versão deste documento: **1.32 (23/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -301,6 +301,10 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - `GET /painel/patrocinios/{id}/arquivo/(manual|logos)` → o manual de marca (PDF) ou os logos (ZIP), privados (o painel só repassa, não guarda). 404 `camp_pat_arquivo`.
   - E-mail de confirmação TR32 (`patrocinio_recebido`) pelo Sender; sem o ID, e-mail simples. LGPD (`/painel/pessoa/apagar`, por e-mail): tira o responsável; empresa, cota e valores ficam.
   - Painel: tela **Patrocínios** (só admin, atalho Y), busca a cada `patrocinios.coleta_min` (10) minutos e em "Sincronizar agora". Site antigo (404) = "atualize o site (plugin 1.40.0)".
+- **NOVO 1.32** (contrato do patrocínio pela Autentique, 23/11/2026; Rafael: "sim, igual da doação no autentique"; site plugin 1.41.0; painel `app/patrocinios.py`, migração 247). OPCIONAL dos dois lados; `edit_pages`. Mesmo token e chave `autentique.ligado` da doação de acervo.
+  - **Nova** `POST /painel/patrocinios/{id}/enviar-contrato` `{contrato_link (http/https), prazo?: AAAA-MM-DD, pagamento?: bool, simular?: bool, autor_painel?}` → `{ok, enviado, via: "sender"|"simples", template: "TR33", modelo: "patrocinio_contrato", link_pagamento, registro}`. O site manda à empresa o e-mail do contrato (TR33; sem ID no Sender, e-mail simples). Com `pagamento` (não na Master, não pago), abre o pagamento ANTES (à vista CAMP-COB ou 12 meses CAMP-PAT) e o link vai no mesmo e-mail; falhou: nada sai. Etapa `recebida|em_conversa|aguardando_pagamento` → `contrato_enviado`. 400 `camp_valor`; 404 `camp_pat_nao_existe`; 409 `camp_pat_etapa` (encerrada/cancelada), `camp_pat_email`, `camp_pat_consulta`, `camp_pat_pago`, `camp_mp_desligado`; 502 `camp_mp_falhou`, `camp_pat_email_falhou`.
+  - `registro` (1.31) ganha, OPCIONAIS: `contrato_link`, `contrato_enviado_em` (ISO), `contrato_prazo` (AAAA-MM-DD). Pagamento confirmado depois do contrato enviado/assinado também leva a `pago`.
+  - Painel: no detalhe do patrocínio, **Contrato para assinatura** (PDF → Autentique, ou link colado; prazo; "Mandar o link de pagamento no mesmo e-mail"). Quem assina pela empresa entra por NOME (a Autentique não manda e-mail; o link vai no e-mail do site). Todos assinaram → `POST /painel/patrocinios/{id}` `{etapa: "contrato_assinado", nota}` (já `pago` ou adiante: só a nota). PDF assinado só repassado da Autentique. Site antigo (404) = "atualize o site (plugin 1.41.0)".
 
 ## 7. Versionamento e exemplos
 

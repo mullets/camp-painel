@@ -9962,6 +9962,26 @@ async function carregarPatrocinios(){const tb=document.getElementById('pat-lista
   tb.innerHTML=it.length?it.map(x=>`<tr data-pat-abrir="${x.id}" tabindex="0"><td class="pat-dt">${escHtml(patData(x.recebida_em))}<br><small class="mono">${escHtml(x.protocolo)}</small></td><td><b>${escHtml(x.empresa||'—')}</b><br><small>${escHtml(x.razao_social||'')}${x.cnpj?' · '+escHtml(x.cnpj):''}</small><br><small>${escHtml(x.nome||'')}</small></td><td>${escHtml(x.cota_nome)}<br><small>${escHtml(patBRL(x.valor_anual))}/ano</small></td><td>${escHtml(patPagTxt(x))}${x.valor_pago?`<br><small>${escHtml(patBRL(x.valor_pago))} recebido</small>`:''}</td><td><span class="tag ${PAT_TAG[x.etapa]||''}">${escHtml(x.etapa_nome)}</span></td></tr>`).join('')
     :`<tr><td colspan="5" class="empty">${vazioHTML(PAT.etapa==='abertas'?'Nenhuma proposta pedindo ação.':'Nenhuma proposta de patrocínio.','As propostas chegam pela página de cotas do site.','')}</td></tr>`}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#pat-lista','Não consegui carregar os patrocínios: '+e.message,'carregarPatrocinios()')}}}
+/* CAMP-PAT-AUTENTIQUE (23/11/2026, Rafael: "sim, igual da doação no autentique"): contrato do patrocínio pela Autentique (mesmo token da doação). */
+function patContratoHTML(x){const A=(PAT.d&&PAT.d.autentique)||{},a=x.autentique,fechado=['encerrada','cancelada'].includes(x.etapa);
+  const sit=a?`<p><span class="tag ${a.situacao==='assinado'?'g':a.situacao==='recusado'?'r':'a'}">${escHtml(a.situacao_nome)}</span> <small>${a.assinantes?`${a.assinaram} de ${a.assinantes} assinaram`:''}${a.assinado_em?` · em ${escHtml(patData(a.assinado_em))}`:''}${a.erro?` · ${escHtml(a.erro)}`:''}</small></p>
+    <div class="act">${a.situacao!=='assinado'?'<button type="button" class="btn" data-pat-acao="conferir_aut" data-trabalhando="Conferindo…">Conferir assinatura agora</button>':`<a class="btn" href="/api/patrocinios/${x.id}/contrato-assinado" download>Baixar contrato assinado</a>`}</div>`:'';
+  const env=x.contrato_enviado_em?`<p class="help">Contrato enviado em ${escHtml(patData(x.contrato_enviado_em))}${x.contrato_prazo?` · assinar até ${escHtml(patData(x.contrato_prazo))}`:''}.</p>`:'';
+  if(fechado)return `<div class="panel cob-previa"><b>Contrato</b>${env}${sit}</div>`;
+  const podePag=!x.consulta&&!x.valor_pago;
+  return `<div class="panel cob-previa pat-contrato"><b>Contrato para assinatura</b>${env}${sit}
+  ${A.ativo?`<label class="field">PDF do contrato (vai para a Autentique; até ${Math.round((A.max_pdf||5242880)/1048576)} MB)<input type="file" id="pat-pdf" accept="application/pdf,.pdf"></label><p class="help">Ou cole um link já pronto:</p>`:'<p class="help">A Autentique está desligada ou sem o token (Doações de acervo → Assinatura eletrônica): cole o link do contrato.</p>'}
+  <label class="field">Link do contrato para assinatura${A.ativo?' (opcional)':''}<input id="pat-clink" type="url" placeholder="https://" maxlength="500"></label>
+  <label class="field">Assinar até (opcional)<input id="pat-prazo" type="date"></label>
+  ${podePag?'<label class="conf-opcao"><input type="checkbox" id="pat-compag"><span><b>Mandar o link de pagamento no mesmo e-mail</b><small>Abre o pagamento no Mercado Pago (à vista ou 12 meses, como a empresa escolheu) e o link vai junto do contrato.</small></span></label>':''}
+  <p class="help">O site manda o e-mail à empresa (modelo TR33 do Sender; sem ID, sai um e-mail simples). Quando todos assinam na Autentique, o patrocínio passa a “Contrato assinado” sozinho.</p>
+  <div class="act"><button type="button" class="btn pri" data-pat-acao="enviar_contrato" data-trabalhando="Enviando…">Enviar contrato para assinatura</button></div></div>`}
+async function patEnviarContrato(id,btn){const f=(document.getElementById('pat-pdf')||{}).files?.[0],link=((document.getElementById('pat-clink')||{}).value||'').trim(),prazo=(document.getElementById('pat-prazo')||{}).value||'',pag=!!(document.getElementById('pat-compag')||{}).checked;
+  if(!f&&!link){toast('Anexe o PDF do contrato ou cole o link para assinatura');return}
+  const corpo={prazo:prazo||null,pagamento:pag};
+  try{if(f){if(f.size>((PAT.d&&PAT.d.autentique&&PAT.d.autentique.max_pdf)||5242880)){toast('O PDF passa de 5 MB, o limite do plano grátis da Autentique.');return}corpo.pdf_base64=await doaLerBase64(f);corpo.pdf_nome=f.name}else corpo.contrato_link=link}catch(e){toast(e.message);return}
+  if(btn)btn.disabled=true;
+  try{const r=await API('/api/patrocinios/'+id+'/enviar-contrato',{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');patDrawer(r.patrocinio);toast(r.mensagem);carregarPatrocinios()}catch(e){toast(e.message)}finally{if(btn)btn.disabled=false}}
 async function patAbrir(id){try{patDrawer(await API('/api/patrocinios/'+id))}catch(e){toast(e.message)}}
 function patDrawer(x){const et=(PAT.d&&PAT.d.etapas)||{},auto=(PAT.d&&PAT.d.etapas_auto)||['aguardando_pagamento','pago'],ass=x.assinatura||{},cob=x.cobranca;
   const dl=[['Protocolo',x.protocolo],['Recebida',patData(x.recebida_em)],['Cota',`${x.cota_nome} · ${patBRL(x.valor_anual)}/ano`],['Pagamento',x.modalidade_nome||(x.consulta?'combinar com a equipe':'')],['Empresa',x.razao_social],['Nome da marca',x.nome_marca||x.empresa],['CNPJ',x.cnpj],['Endereço',x.endereco],['Site',x.site],['Responsável',[x.nome,x.cargo].filter(Boolean).join(' · ')],['E-mail',x.email],['Telefone',x.telefone],['Mensagem',x.mensagem],['Quer receber novidades',x.marketing?'sim':'não']].filter(([,v])=>v).map(([k,v])=>`<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`).join('');
@@ -9980,6 +10000,7 @@ function patDrawer(x){const et=(PAT.d&&PAT.d.etapas)||{},auto=(PAT.d&&PAT.d.etap
   <div class="panel cob-previa"><b>Pagamento</b><br><small>${escHtml(patPagTxt(x))} · recebido ${escHtml(patBRL(x.valor_pago))}</small>${cob?`<br><small>Cobrança <span class="mono">${escHtml(cob.external_reference)}</span> · ${escHtml(cob.situacao)}</small>`:''}${ass&&ass.id?`<br><small>Assinatura <span class="mono">${escHtml(ass.id)}</span>${ass.status?' · '+escHtml(patAss(ass.status)):''}</small>`:''}${pgs?`<ul class="pat-l">${pgs}</ul>`:''}
   ${link&&!x.valor_pago?`<label class="field">Link do pagamento<input id="pat-link" readonly value="${escHtml(link)}"></label>`:''}
   <div class="act">${link&&!x.valor_pago?'<button type="button" class="btn" data-pat-acao="copiar">Copiar link</button>':''}${!x.consulta&&!x.valor_pago?`<button type="button" class="btn" data-pat-acao="novo_link" data-trabalhando="Abrindo…">${link?'Gerar novo link de pagamento':'Gerar link de pagamento'}</button>`:''}<button type="button" class="btn" data-pat-acao="consultar">Consultar no Mercado Pago</button></div></div>
+  ${patContratoHTML(x)}
   <h3>Andamento</h3>
   <label class="field">Etapa<select id="pat-etapa-sel">${opts}</select></label>
   <p class="help">“Aguardando pagamento” e “Pagamento confirmado” o sistema marca sozinho.</p>
@@ -9994,6 +10015,8 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   const ac=t.closest('[data-pat-acao]');if(!ac)return;const a=ac.dataset.patAcao,box=t.closest('.pat-det'),id=box&&box.dataset.patId;if(!id)return;
   if(a==='copiar'){const l=(document.getElementById('pat-link')||{}).value||'';(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){patMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
+  if(a==='enviar_contrato'){patEnviarContrato(id,ac);return}
+  if(a==='conferir_aut'){ac.disabled=true;try{const r=await API('/api/patrocinios/'+id+'/conferir-assinatura',{method:'POST'});patDrawer(r.patrocinio);toast(r.mensagem);carregarPatrocinios()}catch(err){toast(err.message)}ac.disabled=false;return}
   if(a==='novo_link'){patMudar(id,{acao:'novo_link'},'Link de pagamento aberto: copie e mande junto com o contrato ou depois da assinatura');return}
   if(a==='salvar'){const x=(PAT.d&&PAT.d.itens||[]).find(i=>String(i.id)===String(id))||{};const sel=(document.getElementById('pat-etapa-sel')||{}).value||'',nota=((document.getElementById('pat-nota')||{}).value||'').trim(),c={};if(sel&&sel!==x.etapa)c.etapa=sel;if(nota)c.nota=nota;if(!Object.keys(c).length){toast('Nada para salvar');return}patMudar(id,c,'Patrocínio atualizado')}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#pat-lista tr[data-pat-abrir]')){e.preventDefault();patAbrir(e.target.dataset.patAbrir)}});
