@@ -3050,7 +3050,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
     <p class="help">No relatório do Mercado Pago, cada cobrança aparece com a referência CAMP-COB-n e o título "CAMP · finalidade · descrição"; na fatura do cartão, como CAMP DOACAO, CAMP PATROCINIO etc. O Mercado Pago desconta a tarifa dele: o líquido aparece quando ele informa. O CSV traz tudo isso para conferir com o extrato.</p>
   </section>
   <section class="content" id="v-patrocinios">
-    <div class="hdr"><div><h1>Patrocínios</h1><p class="sub">Propostas de patrocínio de empresas enviadas pela página de cotas do site (Programa de Patrocínio 2027). Parceiro, Mantenedor e Institucional pagam pelo site (à vista ou 12 meses no cartão, cobrança mensal); a Master é combinada com a equipe. Aqui a equipe acompanha pagamento, contrato e aplicação da marca. Tem dados pessoais: só admin e master veem.</p></div>
+    <div class="hdr"><div><h1>Patrocínios</h1><p class="sub">Intenções de patrocínio de empresas enviadas pela página de cotas do site (Programa de Patrocínio 2027). O envio é só intenção: nada é cobrado. A equipe manda o contrato por e-mail para assinatura e aprovação e, depois, usa Gerar link de pagamento (à vista ou 12 meses no cartão, cobrança mensal); a Master é combinada com a equipe. Aqui a equipe acompanha contrato, pagamento e aplicação da marca. Tem dados pessoais: só admin e master veem.</p></div>
       <div class="act"><button type="button" class="btn" id="pat-sinc">Sincronizar agora</button><a class="btn" id="pat-pag" href="https://camp.arq.br/patrocinio-e-apoio/cotas/" target="_blank" rel="noopener">Ver as cotas no site</a></div></div>
     <p class="help" id="pat-busca" aria-live="polite"></p>
     <div class="hoje-kpis" id="pat-kpis"></div>
@@ -9938,7 +9938,7 @@ function patDrawer(x){const et=(PAT.d&&PAT.d.etapas)||{},auto=(PAT.d&&PAT.d.etap
   <p><b>Marca</b><br>${arqs||'<small class="help">Nenhum arquivo enviado.</small>'}${x.link_marca?`<br><small>Link: <a href="${escHtml(x.link_marca)}" target="_blank" rel="noopener noreferrer">${escHtml(x.link_marca)}</a></small>`:''}</p>
   <div class="panel cob-previa"><b>Pagamento</b><br><small>${escHtml(patPagTxt(x))} · recebido ${escHtml(patBRL(x.valor_pago))}</small>${cob?`<br><small>Cobrança <span class="mono">${escHtml(cob.external_reference)}</span> · ${escHtml(cob.situacao)}</small>`:''}${ass&&ass.id?`<br><small>Assinatura <span class="mono">${escHtml(ass.id)}</span>${ass.status?' · '+escHtml(patAss(ass.status)):''}</small>`:''}${pgs?`<ul class="pat-l">${pgs}</ul>`:''}
   ${link&&!x.valor_pago?`<label class="field">Link do pagamento<input id="pat-link" readonly value="${escHtml(link)}"></label>`:''}
-  <div class="act">${link&&!x.valor_pago?'<button type="button" class="btn" data-pat-acao="copiar">Copiar link</button>':''}${!x.consulta&&!x.valor_pago?'<button type="button" class="btn" data-pat-acao="novo_link" data-trabalhando="Abrindo…">Gerar novo link de pagamento</button>':''}<button type="button" class="btn" data-pat-acao="consultar">Consultar no Mercado Pago</button></div></div>
+  <div class="act">${link&&!x.valor_pago?'<button type="button" class="btn" data-pat-acao="copiar">Copiar link</button>':''}${!x.consulta&&!x.valor_pago?'<button type="button" class="btn" data-pat-acao="novo_link" data-trabalhando="Abrindo…">${link?'Gerar novo link de pagamento':'Gerar link de pagamento'}</button>':''}<button type="button" class="btn" data-pat-acao="consultar">Consultar no Mercado Pago</button></div></div>
   <h3>Andamento</h3>
   <label class="field">Etapa<select id="pat-etapa-sel">${opts}</select></label>
   <p class="help">“Aguardando pagamento” e “Pagamento confirmado” o sistema marca sozinho.</p>
@@ -9953,7 +9953,7 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   const ac=t.closest('[data-pat-acao]');if(!ac)return;const a=ac.dataset.patAcao,box=t.closest('.pat-det'),id=box&&box.dataset.patId;if(!id)return;
   if(a==='copiar'){const l=(document.getElementById('pat-link')||{}).value||'';(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){patMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
-  if(a==='novo_link'){patMudar(id,{acao:'novo_link'},'Novo link de pagamento aberto');return}
+  if(a==='novo_link'){patMudar(id,{acao:'novo_link'},'Link de pagamento aberto: copie e mande junto com o contrato ou depois da assinatura');return}
   if(a==='salvar'){const x=(PAT.d&&PAT.d.itens||[]).find(i=>String(i.id)===String(id))||{};const sel=(document.getElementById('pat-etapa-sel')||{}).value||'',nota=((document.getElementById('pat-nota')||{}).value||'').trim(),c={};if(sel&&sel!==x.etapa)c.etapa=sel;if(nota)c.nota=nota;if(!Object.keys(c).length){toast('Nada para salvar');return}patMudar(id,c,'Patrocínio atualizado')}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#pat-lista tr[data-pat-abrir]')){e.preventDefault();patAbrir(e.target.dataset.patAbrir)}});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='pat-etapa'){PAT.etapa=e.target.value;carregarPatrocinios()}});

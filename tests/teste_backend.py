@@ -19669,6 +19669,8 @@ def filho(modo):
         r_ = x.get("/api/patrocinios?etapa=abertas")
         ver("tela: itens, etapas, automáticas, números, página das cotas e estado da busca", r_.status_code == 200 and [i["id"] for i in r_.json()["itens"]] == [702, 701] and r_.json()["etapas_auto"] == ["aguardando_pagamento", "pago"]
             and r_.json()["numeros"]["abertas"] == 2 and r_.json()["listas"].get("pagina", "").endswith("/cotas/") and "site" in r_.json(), r_.text[:200])
+        fl_ = r_.json()["fluxo"]
+        ver("CAMP-PAT-INTENCAO: o fluxo tem o contrato antes do pagamento (o envio é só intenção)", fl_.index("contrato_assinado") < fl_.index("aguardando_pagamento") < fl_.index("pago") < fl_.index("marca_aplicada"), fl_)
         it_ = {i["id"]: i for i in x.get("/api/patrocinios").json()["itens"]}
         ver("lista: cota pelo nome, Master como 'consulta', assinatura e meses pagos", it_[701]["cota_nome"] == "Mantenedor" and it_[702]["consulta"] and it_[701]["assinatura_status"] == "authorized" and it_[701]["meses_pagos"] == 1, it_.get(701))
         d_ = x.get("/api/patrocinios/701").json()
@@ -23398,7 +23400,7 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Patrocínios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Patrocínios: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 27, "Patrocínios: todas as verificações rodaram")
 
 print("Doações de acervo · contrato e avisos: TR30 e depois a cobrança (TR27), caixa desmarcada, sem TR30, site antigo, aviso de etapa TR31, cobrança avulsa com contrato")
 rc, out = rodar("doacoes_contrato", f"{tmp}/doacoes_contrato.db")
