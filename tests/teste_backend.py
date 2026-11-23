@@ -43,6 +43,7 @@ MODOS_RAPIDOS |= {"ingressos_detalhe"}   # CAMP-INGRESSOS 20/11/2026: tipos (mei
 MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista de presença por pessoa e reenvio por ingresso (site falso; contrato 1.24; linha própria)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
+MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
 MODOS_RAPIDOS |= {"patrocinios_painel"}   # CAMP-PAT-EMPRESA 23/11/2026: patrocínio de empresas do site, etapas, pagamento (site falso; contrato 1.31)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
@@ -19833,6 +19834,103 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@exemplo.com.br", "Ana Diretora", "beto@grande.com")))
         for l in res: print(l)
+    elif modo == "patrocinios_autentique":
+        # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
+        # Autentique (mesmo token), link no e-mail do site (enviar-contrato, contrato 1.32) com o pagamento junto; reaproveita o documento se o
+        # e-mail falhou; desligada → só link colado; todos assinaram → etapa contrato_assinado + nota pelo site; já pago → só a nota; recusa;
+        # PDF assinado repassado; site antigo; papéis.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, base64 as _b64
+        from fastapi.testclient import TestClient
+        from app import auth, patrocinios as pt, autentique as au
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 247: tabela patrocinio_autentique", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='patrocinio_autentique'").fetchone()[0] == 1)
+        class Resp:
+            def __init__(s, code, dados=None, content=b"", headers=None): s.status_code, s._d, s.content, s.headers = code, dados, content, headers or {}
+            def json(s): return s._d
+        posts = []
+        fila = []
+        class H:
+            def get(s, path, params=None): return Resp(200, {"itens": []})
+            def post(s, path, json=None): posts.append((path, json)); return fila.pop(0) if fila else Resp(200, {"ok": True})
+        class WPF:
+            h = H()
+        pt._wp = lambda: WPF()
+        REG = {"id": 801, "protocolo": "CAMP-2026-000801", "recebida_em": "2026-11-23T12:00:00+00:00", "cota": "parceiro", "valor_anual": 12000, "modalidade": "anual",
+               "nome_marca": "Exemplo", "razao_social": "Exemplo Ltda", "cnpj": "11.222.333/0001-81", "nome": "Ana Diretora", "email": "ana@exemplo.com", "etapa": "recebida",
+               "pagamentos": [], "meses_pagos": 0, "valor_pago": 0, "notas": [], "historico": [], "alterado_em": "2026-11-23T12:00:00+00:00"}
+        pt._gravar(c, REG); c.commit()
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)")
+        c.execute("UPDATE configuracao SET valor='tok-SEGREDO-123' WHERE chave='autentique.token'"); c.execute("UPDATE configuracao SET valor='1' WHERE chave='autentique.ligado'"); c.commit()
+        criados = []
+        def falso_criar(tk, nome_doc, pdf, nome_arq, nome, email_camp=""):
+            criados.append((tk, nome_doc, nome)); return {"id": "doc-P1", "link": "https://assina.ae/P1", "assinantes": [{"public_id": "s1", "papel": "doador"}]}
+        au.criar_documento = falso_criar
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não envia contrato nem confere (403)", op.post("/api/patrocinios/801/enviar-contrato", json={"contrato_link": "https://x.com/a"}).status_code == 403 and op.post("/api/patrocinios/801/conferir-assinatura").status_code == 403)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("tela: Autentique ativa (mesmo token da doação)", x.get("/api/patrocinios").json()["autentique"]["ativo"] is True)
+        PDF = "data:application/pdf;base64," + _b64.b64encode(b"%PDF-1.4 contrato").decode()
+        ver("sem PDF nem link: 400, nada vai ao site", x.post("/api/patrocinios/801/enviar-contrato", json={}).status_code == 400 and not posts and not criados)
+        ver("arquivo que não é PDF: 400", x.post("/api/patrocinios/801/enviar-contrato", json={"pdf_base64": _b64.b64encode(b"GIF89a").decode()}).status_code == 400 and not criados)
+        fila.append(Resp(502, {"code": "camp_pat_email_falhou", "message": "O e-mail do contrato não saiu agora. Tente de novo em instantes."}))
+        r1 = x.post("/api/patrocinios/801/enviar-contrato", json={"pdf_base64": PDF, "pdf_nome": "contrato.pdf", "pagamento": True})
+        ver("e-mail falhou: 502 e o documento criado fica guardado ('criado')", r1.status_code == 502 and len(criados) == 1 and criados[0][0] == "tok-SEGREDO-123" and "Ana Diretora" == criados[0][2]
+            and c.execute("SELECT situacao FROM patrocinio_autentique WHERE site_id=801").fetchone()[0] == "criado", r1.text[:200])
+        REG2 = dict(REG, etapa="contrato_enviado", contrato_link="https://assina.ae/P1")
+        fila.append(Resp(200, {"ok": True, "enviado": True, "via": "simples", "link_pagamento": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=z", "registro": REG2}))
+        r2 = x.post("/api/patrocinios/801/enviar-contrato", json={"pdf_base64": PDF, "pdf_nome": "contrato.pdf", "pagamento": True, "prazo": "2099-12-31"})
+        ver("de novo: reaproveita o documento (não gasta outro), manda o link da Autentique e o pagamento junto ao site", r2.status_code == 200 and len(criados) == 1
+            and posts[-1][0] == "/wp-json/camp/v1/painel/patrocinios/801/enviar-contrato" and posts[-1][1]["contrato_link"] == "https://assina.ae/P1" and posts[-1][1]["pagamento"] is True and posts[-1][1]["prazo"] == "2099-12-31", (r2.text[:200], posts[-1]))
+        d2 = r2.json()
+        ver("resposta: e-mail simples (TR33 sem ID) com o link de pagamento; situação Aguardando assinaturas; etapa Contrato enviado", "e-mail simples" in d2["mensagem"] and "link de pagamento" in d2["mensagem"]
+            and d2["patrocinio"]["autentique"]["situacao"] == "pendente" and d2["patrocinio"]["etapa"] == "contrato_enviado", d2.get("mensagem"))
+        ver("o token nunca aparece nas respostas", "tok-SEGREDO" not in r1.text + r2.text + x.get("/api/patrocinios/801").text)
+        # conferir
+        au.consultar = lambda tk, did: [{"public_id": "s1", "assinado_em": "", "recusado_em": "", "acao": "SIGN"}]
+        rc = x.post("/api/patrocinios/801/conferir-assinatura")
+        ver("conferir: ainda falta assinar (etapa não muda)", rc.status_code == 200 and rc.json()["situacao"] == "pendente" and "0 de 1" in rc.json()["mensagem"], rc.text[:200])
+        au.consultar = lambda tk, did: [{"public_id": "s1", "assinado_em": "2026-11-24 10:00:00", "recusado_em": "", "acao": "SIGN"}]
+        fila.append(Resp(200, {"ok": True, "registro": dict(REG2, etapa="contrato_assinado")}))
+        o = pt.conferir_pendentes(c, WPF())
+        ver("rodada: todos assinaram → etapa Contrato assinado + nota pelo site", o["assinados"] == 1 and posts[-1][1].get("etapa") == "contrato_assinado" and "24/11/2026" in posts[-1][1]["nota"]
+            and c.execute("SELECT situacao, assinado_em FROM patrocinio_autentique WHERE site_id=801").fetchone()[0] == "assinado", (o, posts[-1]))
+        au.consultar_doc = lambda tk, did: ([], "https://api.autentique.com.br/arquivo.pdf")
+        au.baixar_assinado = lambda tk, url: b"%PDF-1.7 assinado"
+        g = x.get("/api/patrocinios/801/contrato-assinado")
+        ver("PDF assinado repassado (não guardado), sem cache", g.status_code == 200 and g.content.startswith(b"%PDF") and "no-store" in g.headers.get("cache-control", ""))
+        # já pago: só a nota
+        pt._gravar(c, dict(REG, id=802, protocolo="CAMP-2026-000802", etapa="pago", valor_pago=12000)); c.commit()
+        c.execute("INSERT INTO patrocinio_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (802,'doc-P2','https://assina.ae/P2','[]','pendente')"); c.commit()
+        pt.conferir_pendentes(c, WPF())
+        ver("já pago quando todos assinam: só a nota (a etapa não volta)", posts[-1][0].endswith("/802") and "etapa" not in posts[-1][1], posts[-1])
+        # recusado
+        pt._gravar(c, dict(REG, id=803, protocolo="CAMP-2026-000803", etapa="contrato_enviado")); c.commit()
+        c.execute("INSERT INTO patrocinio_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (803,'doc-P3','https://assina.ae/P3','[]','pendente')"); c.commit()
+        au.consultar = lambda tk, did: [{"public_id": "s9", "assinado_em": "", "recusado_em": "2026-11-24 11:00:00", "acao": "SIGN"}]
+        np_ = len(posts); pt.conferir_pendentes(c, WPF())
+        ver("recusado: situação recusado, nada vai ao site", c.execute("SELECT situacao FROM patrocinio_autentique WHERE site_id=803").fetchone()[0] == "recusado" and len(posts) == np_)
+        # desligada: só link
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='autentique.ligado'"); c.commit()
+        ver("Autentique desligada: PDF recusado (409); link colado vai", x.post("/api/patrocinios/803/enviar-contrato", json={"pdf_base64": PDF}).status_code == 409)
+        fila.append(Resp(200, {"ok": True, "enviado": True, "via": "sender", "link_pagamento": "", "registro": dict(REG, id=803, etapa="contrato_enviado")}))
+        r4 = x.post("/api/patrocinios/803/enviar-contrato", json={"contrato_link": "https://drive.example.com/c"})
+        ver("link colado: vai ao site como está; mensagem TR33 pelo Sender", r4.status_code == 200 and posts[-1][1]["contrato_link"] == "https://drive.example.com/c" and "TR33" in r4.json()["mensagem"], r4.text[:200])
+        fila.append(Resp(404, {"code": "rest_no_route"}))
+        r5 = x.post("/api/patrocinios/803/enviar-contrato", json={"contrato_link": "https://drive.example.com/c"})
+        ver("site antigo: 409 pedindo o plugin 1.41.0", r5.status_code == 409 and "1.41.0" in r5.text, r5.text[:200])
+        fila.append(Resp(409, {"code": "camp_pat_consulta", "message": "A cota Master é combinada com a equipe: o link de pagamento não vai junto. Nada foi enviado."}))
+        r6 = x.post("/api/patrocinios/803/enviar-contrato", json={"contrato_link": "https://drive.example.com/c", "pagamento": True})
+        ver("recusa do site (Master com pagamento): 409 com a frase do site", r6.status_code == 409 and "Master" in r6.text, r6.text[:200])
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem token, nome nem e-mail", not any(t_ in log_ for t_ in ("tok-SEGREDO", "Ana Diretora", "ana@exemplo.com")))
+        for l in res: print(l)
     elif modo == "doacoes_pedem_acao":
         # CAMP-DOA-LISTA 21/11/2026 (site e Autentique FALSOS). Rafael: "ele sumiu da lista de doações" (depois de assinar o contrato). Com a
         # cobrança junto do contrato, a doação chega a "paga" antes (ou perto) da assinatura; "paga" não contava no "Pedem ação" e sumia, com o
@@ -23533,6 +23631,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Patrocínios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 27, "Patrocínios: todas as verificações rodaram")
+
+print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
+rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")
+if rc != 0: ok(False, f"teste patrocinios_autentique não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Patrocínios · Autentique: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 19, "Patrocínios · Autentique: todas as verificações rodaram")
 
 print("Doações de acervo · contrato e avisos: TR30 e depois a cobrança (TR27), caixa desmarcada, sem TR30, site antigo, aviso de etapa TR31, cobrança avulsa com contrato")
 rc, out = rodar("doacoes_contrato", f"{tmp}/doacoes_contrato.db")
