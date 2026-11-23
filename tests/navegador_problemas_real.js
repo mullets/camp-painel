@@ -62,6 +62,21 @@ const idRev = +py(`print(con.execute("SELECT id FROM erro WHERE descricao='[real
     chk(imgs.length >= 7 && imgs.every(x => /^\/api\/itens\/F001-P0001-1970-S01-D\d+\/previa\?t=240&q=1$/.test(x.src)) && imgs.filter(x => x.ok).length >= 7,
       `miniaturas do grupo: <img> pela rota de prévia, carregadas (${imgs.filter(x => x.ok).length} de ${th.length}; ${th.map(x => x.tag === 'IMG' ? 'img' : x.txt).join(',')})`);
     chk(th.filter(x => /sem imagem/.test(x.txt)).length <= 1, `"sem imagem" só onde a rota não tem imagem (no máximo a folha sem prévia): ${th.filter(x => /sem imagem/.test(x.txt)).length}`);
+    // 23/11 (Rafael: "ao clicar pra ver uma a uma quebra a página"): as linhas de dentro do grupo têm a MESMA grade de uma linha solta
+    // a quebra aparece em tela larga (o print era ~1930 px): mede nas duas larguras
+    const medir = () => page.$$eval(`${g} > .cp-g-membros > .cp-linha`, ls => ls.map(l => { const q = s => l.querySelector(':scope > ' + s), box = e => e ? e.getBoundingClientRect() : null;
+      const c = box(q('.cp-corpo')), a = box(q('.cp-acoes')), ic = box(q('.cp-sev-ic')), r = box(l.querySelector('.cp-rap'));
+      return { areaCorpo: q('.cp-corpo') ? getComputedStyle(q('.cp-corpo')).gridArea : '', corpoLargo: c ? c.width : 0, linhaLarga: l.getBoundingClientRect().width,
+        acoesDireita: !!(c && a) && a.left >= c.right - 2, icEsquerda: !!(ic && c) && ic.right <= c.left + 2, rapAbaixo: !!(r && c) && r.top >= c.top }; }));
+    await page.click(`${g} [data-cp-g="ver"]`); await page.waitForTimeout(500);
+    for (const [w, h] of [[1366, 768], [1930, 1100]]) {
+      await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(400);
+      const mem = await medir();
+      chk(mem.length >= 7 && mem.every(m => m.acoesDireita && m.icEsquerda && m.rapAbaixo && m.corpoLargo >= m.linhaLarga * 0.4),
+        `"Ver uma a uma" a ${w} px: cada linha de dentro fica como uma linha solta (ícone à esquerda, texto largo, Analisar à direita, decisão embaixo): ${JSON.stringify(mem.slice(0, 2))}`);
+    }
+    await page.setViewportSize({ width: 1366, height: 768 }); await page.waitForTimeout(300);
+    await page.click(`${g} [data-cp-g="ver"]`); await page.waitForTimeout(300);
     // linha solta real
     const l21 = `#err-body [data-err-linha="${id21}"]`;
     chk(!!(await page.$(`${l21} [data-cp-r="deste_projeto"]`)) && !!(await page.$(`${l21} [data-cp-r="fica_fora"]`)), 'linha F001·P0021·D00001: botões "É deste projeto" e "É de outro projeto (fica fora)" na linha (antes só "Analisar" e ⋯)');
