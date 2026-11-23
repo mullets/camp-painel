@@ -2280,7 +2280,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .rv-bloq{margin:0 0 10px}.rv-bloq:last-child{margin-bottom:0}.rv-bloq-frase{margin:0 0 6px;color:var(--ink);line-height:1.45}
 .rv-bloq-acoes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.rv-bloq-tipo{display:inline-flex;gap:4px;align-items:center;font-size:var(--fs-2nd);color:var(--ink2)}
 .rv-bloq-orig{display:block;margin-top:2px;font-size:var(--fs-2nd);color:var(--ink2)}.pp-bloq{margin:10px 0 0;padding:8px 12px;border-left:4px solid var(--red);background:var(--red-soft);border-radius:var(--r)}
-.pp-bloq ul{margin:4px 0 0;padding-left:18px}.pp-bloq li{margin:2px 0}.cp-porque{font-size:var(--fs-2nd);color:var(--ink);margin:2px 0}
+.pp-bloq.aviso{border-left-color:var(--amber);background:var(--amber-soft)}.pp-bloq ul{margin:4px 0 0;padding-left:18px}.pp-bloq li{margin:2px 0}.cp-porque{font-size:var(--fs-2nd);color:var(--ink);margin:2px 0}
 .rev-sug-giro p{margin:0}.rev-sug-giro .btn{margin-left:6px}
 .rv-ferr{gap:6px 8px;justify-content:flex-start;bottom:var(--rv-rodape-h,66px)}   /* gruda no pé ACIMA do rodapé de ações (os dois ficam à vista) */
 .rv-ferr .rev-giro{margin:0;justify-content:flex-start}
@@ -6838,8 +6838,8 @@ function apontaRevHTML(p,it){const ok=folhaJaConferida(it);p=p||{};
   const tag=(c,a)=>a.campos?`<span class="tag ${c} rev-aviso-grupo"><b>${escHtml(a.texto)}</b> <span class="rev-aviso-campos">${a.campos.map(escHtml).join(', ')}</span></span> `:`<span class="tag ${c}">${escHtml(a.texto)}</span> `;
   /* redesenho da página do projeto §4.2 B: separados por gravidade, com o nome do grupo em texto (a cor só ajuda): "Impede publicar" (bloqueio)
      e "Aviso" (sinal e ressalva do CAMP Vision: não impede). Sugestão automática fica no bloco "Sugestões do CAMP Vision". */
-  const er=it&&(p.bloqueios||[]).length?bloqCaixaHTML({...it,pendencias:p}):'',av=[...juntarAvisosRepetidos(p.sinais).map(a=>ok&&!a.campos&&/orienta[cç][aã]o incerta/i.test(a.texto)?tag('g',{texto:a.texto+': conferida'}):tag('a',a)),...juntarAvisosRepetidos(p.ressalvas).map(a=>tag('a',a))].join('');
-  const g=(cls,ic,rot,dica,h)=>h?`<div class="rv-al ${cls}" role="group" aria-label="${escHtml(rot)}"><p class="rv-al-tit"><span aria-hidden="true">${ic}</span> ${escHtml(rot)} <small>${escHtml(dica)}</small></p><div class="${cls==='erro'?'rv-al-bloq':'rv-al-tags'}">${h}</div></div>`:'';
+  const er=it&&(p.bloqueios||[]).length?bloqCaixaHTML({...it,pendencias:p},false):'',avb=it&&(p.bloqueios||[]).length?bloqCaixaHTML({...it,pendencias:p},true):'',avt=[...juntarAvisosRepetidos(p.sinais).map(a=>ok&&!a.campos&&/orienta[cç][aã]o incerta/i.test(a.texto)?tag('g',{texto:a.texto+': conferida'}):tag('a',a)),...juntarAvisosRepetidos(p.ressalvas).map(a=>tag('a',a))].join('');const av=avb?avb+(avt?`<div class="rv-al-tags">${avt}</div>`:''):avt;   /* CAMP-BLOQUEIO: o aviso em frase (ficha?) em cima, as pílulas embaixo */
+  const g=(cls,ic,rot,dica,h)=>h?`<div class="rv-al ${cls}" role="group" aria-label="${escHtml(rot)}"><p class="rv-al-tit"><span aria-hidden="true">${ic}</span> ${escHtml(rot)} <small>${escHtml(dica)}</small></p><div class="${cls==='erro'||(cls==='aviso'&&avb)?'rv-al-bloq':'rv-al-tags'}">${h}</div></div>`:'';
   return (g('erro','✕','Impede publicar','resolva antes de publicar',er)+g('aviso','!','Aviso do CAMP Vision','confira; não impede publicar',av))||'<small class="help">Nada apontado.</small>'}
 /* Sírio, 19/10: o CAMP Vision marcou "projeto divergente" numa folha que está na pasta certa. A pessoa diz "É deste projeto": o aviso sai,
    e o bloqueio também (se era o único). Fica no histórico. Código só em data-*. */
@@ -7160,7 +7160,7 @@ function confFolhas(){return (window.ITENS_PJ||[]).filter(x=>emConferencia(x))}
 function confTemImg(it){return !!((it.pendencias&&it.pendencias.previa)||it.thumb_url)}
 function confProblemas(it){const p=it.pendencias||{},o=[];
   if(it.autoria_divergente)o.push(['r','autoria']);if(dupAConferir(it))o.push(['a','duplicata']);if(orientIncerta(it))o.push(['a','orientação incerta']);if(espelhadaAConferir(it))o.push(['a','espelhada?']);
-  if(projetoDivergente(p))o.push(['a','outro projeto?']);{const tb=tagBloqueada(it);if(tb)o.push(['r',tb.t,tb.title])}   /* CAMP-BLOQUEIO: "bloqueada · ficha?", a frase inteira no título */
+  if(projetoDivergente(p))o.push(['a','outro projeto?']);{const tb=tagBloqueada(it);if(tb)o.push(['r',tb.t,tb.title]);const ta=tagAvisoCV(it);if(ta)o.push(['a',ta.t,ta.title])}   /* CAMP-BLOQUEIO: "bloqueada · lote de teste" (vermelho, impede) ou "aviso · ficha?" (âmbar, não impede), a frase inteira no título */
   for(const x of tiposProblemaFolha(it))if(x.k.startsWith('erro-'))o.push([x.c,x.s]);return o}   /* CAMP-127: o tipo do problema, não só "problema" */
 /* Fluxo real (20/10): os problemas ABERTOS da folha (ex.: "ano lido 1927 diverge do projeto") não apareciam no conferir; a pessoa clicava
    "Está certo" sem ver, e a conferência os fechava. Agora aparecem na folha e na lista. Os que já têm aviso próprio não repetem. */
@@ -7174,7 +7174,8 @@ function pendentesComAviso(lote){const L=(window.ITENS_PJ||[]).filter(x=>String(
 /* o número do botão: a conta da tela (se as folhas do lote já vieram) e a do servidor (itens_sem_aviso); havendo as duas, a menor (a mais cautelosa) */
 function semAvisoNoLote(l){const {L,com}=pendentesComAviso(l.id),cs=[];if(L.length)cs.push(L.length-com.length);if(l.itens_sem_aviso!=null)cs.push(+l.itens_sem_aviso);return cs.length?Math.min(...cs):null}
 function avisoParaConferir(i){const p=i.pendencias||{},er=errosDoProjeto(String(i.codigo).slice(0,10));
-  return i.status_site==='bloqueado'||(p.bloqueios||[]).length?'bloqueada':i.duplicata_de?'duplicata':i.autoria_divergente?'autoria':espelhadaAConferir(i)?'espelhada?':((p.sinais||[]).length||(p.ressalvas||[]).length)?'aviso do CAMP Vision':er.some(e=>e.codigo===i.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto'))?'problema aberto':''}
+  const so=soAvisoCV(i);   /* CAMP-BLOQUEIO ("só aviso"): folha 'bloqueado' só por ficha/capa… é aviso (continua pedindo um olhar) */
+  return (i.status_site==='bloqueado'||(p.bloqueios||[]).length)&&!so?'bloqueada':i.duplicata_de?'duplicata':i.autoria_divergente?'autoria':espelhadaAConferir(i)?'espelhada?':(so||(p.sinais||[]).length||(p.ressalvas||[]).length)?'aviso do CAMP Vision':er.some(e=>e.codigo===i.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto'))?'problema aberto':''}
 function espelhadaAConferir(it){return !!(it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it))}
 /* CAMP-081: "Com problema" é UMA regra só, na página do projeto (barra e miniaturas) e no conferir: antes a página contava só autoria, duplicata e
    espelhada (1) e o conferir também orientação incerta e problemas abertos da folha (4), no mesmo lote. Folha retida também conta. */
@@ -7188,7 +7189,8 @@ function flagsAvisosHTML(it){const av=avisosFolha(it),ja=new Set(['autoria','dup
 function rotuloErroTipo(e){const c=String(e.categoria||'outro');return c==='outro'||!c?'outro problema':String(rotulo(c)).toLowerCase()}
 function tiposProblemaFolha(it){if(!it)return [];const p=it.pendencias||{},o=[],add=(k,t,c,b,s)=>{if(!o.some(x=>x.k===k))o.push({k,t,c,b:!!b,s:s||t})};
   if(it.autoria_divergente)add('autoria','autoria não confirmada','r');if(dupAConferir(it))add('duplicata','duplicata','a');if(orientIncerta(it))add('orientacao','orientação incerta','a');
-  if(espelhadaAConferir(it))add('espelhada','espelhada?','a');if(projetoDivergente(p))add('outro_projeto','outro projeto?','a');if(bloqueiosResolviveis(it).length)add('bloqueada','bloqueada','r',true);
+  if(espelhadaAConferir(it))add('espelhada','espelhada?','a');if(projetoDivergente(p))add('outro_projeto','outro projeto?','a');if(motivosResolviveis(it).some(m=>!m.aviso)||confErrosFolha(it).some(e=>e.gravidade==='bloqueia'))add('bloqueada','bloqueada','r',true);   /* CAMP-BLOQUEIO: só o que a publicação segura (problema que bloqueia, lote de teste) */
+  for(const m of motivosResolviveis(it))if(m.aviso)add('aviso-'+m.tipo,rotuloAvisoCV(m),'a');   /* "aviso · ficha?": não impede publicar */
   for(const e of confErrosFolha(it)){const cat=String(e.categoria||'outro'),t=rotuloErroTipo(e),s=cat==='outro'&&e.descricao?String(e.descricao).replace(/\s+/g,' ').slice(0,38)+(String(e.descricao).length>38?'…':''):t;
     add('erro-'+cat,t,e.gravidade==='bloqueia'?'r':'a',e.gravidade==='bloqueia',s)}
   if(it.retida)add('retida','retida','r');return o}
@@ -7202,16 +7204,22 @@ function bloqueiosResolviveis(it){const p=(it&&it.pendencias)||{};return (Array.
 /* CAMP-BLOQUEIO (23/11/2026, Rafael: "não entendi por que tá bloqueado"): cada bloqueio em UMA frase (o que o sistema acha, por quê, o que fazer),
    vinda do servidor (`bloqueio_motivos` de cada folha no /detalhe); painel antigo, sem o campo: o texto do CAMP Vision, como antes, sem os botões. */
 function motivosBloqueio(it){const p=(it&&it.pendencias)||{},m=Array.isArray(it&&it.bloqueio_motivos)?it.bloqueio_motivos:[];
-  return (Array.isArray(p.bloqueios)?p.bloqueios:[]).filter(Boolean).map(b=>m.find(x=>x.texto===String(b).trim())||{tipo:'antigo',texto:String(b),curto:'bloqueada',frase:`Bloqueada pelo CAMP Vision: ${b}.`,decide:false,acoes:[]})}
+  return (Array.isArray(p.bloqueios)?p.bloqueios:[]).filter(Boolean).map(b=>{const x=m.find(x=>x.texto===String(b).trim());if(x)return 'aviso' in x?x:{...x,aviso:['ficha','capa','retirada','outro'].includes(x.tipo)};
+    const av=!/lote de teste|projeto divergente|outro projeto|sem identifica|duplicat/i.test(String(b));return {tipo:'antigo',texto:String(b),curto:av?'aviso':'bloqueada',frase:av?`Aviso do CAMP Vision: ${b}. Não impede publicar.`:`Bloqueada pelo CAMP Vision: ${b}.`,decide:false,acoes:[],aviso:av}})}
+/* CAMP-BLOQUEIO, 2ª parte (Rafael: "só aviso"): ficha de documentação, capa, retirada e o texto livre do CAMP Vision nunca seguraram a publicação
+   (a regra é problema que bloqueia, retida, duplicata, lote de teste): são AVISO (âmbar, "aviso · ficha?"); "bloqueada" só o que segura de verdade. */
 function motivosResolviveis(it){const r=new Set(bloqueiosResolviveis(it).map(b=>String(b).trim()));return motivosBloqueio(it).filter(m=>r.has(m.texto))}
-function tagBloqueada(it){const m=motivosResolviveis(it);if(!m.length)return null;const c=m[0].curto&&m[0].curto!=='bloqueada'?m[0].curto:'';return {t:'bloqueada'+(c?' · '+c:''),title:m.map(x=>x.frase).join(' ')}}
+function soAvisoCV(it){const M=motivosBloqueio(it);return M.length>0&&M.every(m=>m.aviso)}
+function rotuloAvisoCV(m){return m.curto&&m.curto!=='aviso'&&m.curto!=='bloqueada'?'aviso · '+m.curto:'aviso do CAMP Vision'}
+function tagBloqueada(it){const m=motivosResolviveis(it).filter(x=>!x.aviso);if(!m.length)return null;const c=m[0].curto&&m[0].curto!=='bloqueada'?m[0].curto:'';return {t:'bloqueada'+(c?' · '+c:''),title:m.map(x=>x.frase).join(' ')}}
+function tagAvisoCV(it){const m=motivosResolviveis(it).filter(x=>x.aviso);if(!m.length)return null;return {t:rotuloAvisoCV(m[0]),title:m.map(x=>x.frase).join(' ')}}
 function bloqDecisaoHTML(m,it,op){const c=escHtml(it.codigo),k=escHtml(m.tipo);let a='';
   if(op&&m.decide&&(m.acoes||[]).length){const li=m.acoes.find(x=>x.acao==='liberar'),fo=m.acoes.find(x=>x.acao==='deixar_fora');
     a=`${li?`<button type="button" class="btn sm" data-blq-decidir="liberar" data-blq-tipo="${k}" data-codigo="${c}">${escHtml(li.rotulo)}</button>`:''}${m.trocar_tipo&&li?`<label class="rv-bloq-tipo"><input type="checkbox" data-blq-trocar="${k}" checked> trocar o tipo para Planta</label>`:''}${fo?`<button type="button" class="btn sm" data-blq-decidir="deixar_fora" data-blq-tipo="${k}" data-codigo="${c}">${escHtml(fo.rotulo)}</button>`:''}`}
   else if(op&&['outro_projeto','sem_identificacao'].includes(m.tipo))a=`<button type="button" class="btn sm" data-deste-projeto="${c}">É deste projeto</button>${EU&&['admin','master'].includes(EU.papel)?`<button type="button" class="btn sm" data-blq-outro="${c}">É de outro projeto…</button>`:''}`;
   else if(m.tipo==='duplicata')a=`<button type="button" class="btn sm" data-dupv-abrir="${escHtml(String(it.codigo).slice(0,10))}">Ver lado a lado</button>${op&&it.duplicata_de?`<button type="button" class="btn sm" data-dup-desfazer="${c}">Não é duplicata</button>`:''}`;
   return a}
-function bloqCaixaHTML(it){const op=EU&&['operador','admin','master'].includes(EU.papel),M=motivosBloqueio(it);if(!M.length)return '';
+function bloqCaixaHTML(it,aviso){const op=EU&&['operador','admin','master'].includes(EU.papel),M=motivosBloqueio(it).filter(m=>aviso==null||!!m.aviso===!!aviso);if(!M.length)return '';
   return M.map(m=>{const a=bloqDecisaoHTML(m,it,op);return `<div class="rv-bloq" data-blq-motivo="${escHtml(m.tipo)}"><p class="rv-bloq-frase">${escHtml(m.frase)}${m.tipo!=='antigo'?`<small class="rv-bloq-orig">O CAMP Vision escreveu: ${escHtml(m.texto)}</small>`:''}</p>${a?`<div class="rv-bloq-acoes">${a}</div>`:''}</div>`}).join('')
     +`<p class="rv-bloq-acoes"><a class="lnk" href="#erros/${escHtml(String(it.codigo).slice(0,10))}">Abrir em Problemas</a></p>`}
 /* "É prancha do projeto · liberar" / "É ficha · deixar fora": a rota da folha resolve com o modelo de decisão; a caixa some, o cartão e as contas
@@ -7232,8 +7240,11 @@ async function blqDesfazer(cod,tok){try{await API('/api/problemas/rapido/desfaze
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-blq-decidir],[data-blq-outro]');if(!b||b.disabled)return;e.preventDefault();
   if(b.dataset.blqDecidir)blqDecidir(b);else{const d=(revHost()||document).querySelector('details.op-det');if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}}});
 /* Próximo passo da página do projeto: as folhas bloqueadas, cada uma com a frase e o botão que abre a folha para decidir */
-function bloqueadasPassoHTML(){const its=(window.ITENS_PJ||[]).filter(x=>!x.duplicata_de&&motivosBloqueio(x).length);if(!its.length)return '';
-  return `<div class="pp-bloq" role="note"><b>${its.length===1?'1 folha bloqueada':`${fmtN(its.length)} folhas bloqueadas`} pelo CAMP Vision: decida na própria folha.</b><ul>${its.slice(0,8).map(it=>`<li>${escHtml(folhaIdent(it))}: ${escHtml(motivosBloqueio(it).map(m=>m.frase).join(' '))} <button type="button" class="btn sm" data-rev-abrir-blq="${escHtml(it.codigo)}">Decidir na folha</button></li>`).join('')}</ul>${its.length>8?`<small class="help">e mais ${fmtN(its.length-8)}: use o filtro "bloqueada" nas folhas.</small>`:''}</div>`}
+function bloqueadasPassoHTML(){const L=(window.ITENS_PJ||[]).filter(x=>!x.duplicata_de),
+    lista=(its,av)=>`<ul>${its.slice(0,8).map(it=>`<li>${escHtml(folhaIdent(it))}: ${escHtml(motivosBloqueio(it).filter(m=>!!m.aviso===av).map(m=>m.frase).join(' '))} <button type="button" class="btn sm" data-rev-abrir-blq="${escHtml(it.codigo)}">Decidir na folha</button></li>`).join('')}</ul>${its.length>8?`<small class="help">e mais ${fmtN(its.length-8)}: use o filtro "${av?'aviso':'bloqueada'}" nas folhas.</small>`:''}`,
+    bq=L.filter(x=>motivosBloqueio(x).some(m=>!m.aviso)),av=L.filter(x=>motivosBloqueio(x).some(m=>m.aviso));
+  return (bq.length?`<div class="pp-bloq" role="note"><b>${bq.length===1?'1 folha bloqueada':`${fmtN(bq.length)} folhas bloqueadas`} pelo CAMP Vision: decida na própria folha.</b>${lista(bq,false)}</div>`:'')
+    +(av.length?`<div class="pp-bloq aviso" role="note"><b>${av.length===1?'1 folha com aviso':`${fmtN(av.length)} folhas com aviso`} do CAMP Vision (não impede publicar): confira na própria folha.</b>${lista(av,true)}</div>`:'')}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rev-abrir-blq]');if(b){e.preventDefault();abrirRevisaoItem(b.dataset.revAbrirBlq)}});
 function confNoFiltro(it,f){return f==='a_conferir'?it.revisao==='pendente':f==='problema'?folhaComProblema(it):f==='sem_imagem'?!confTemImg(it):String(f||'').startsWith('t-')?tiposProblemaFolha(it).some(x=>'t-'+x.k===f):true}
 function confVisiveis(){return confFolhas().filter(x=>confNoFiltro(x,CONF.filtro)||x.codigo===CONF.atual)}   /* a folha aberta fica na lista mesmo fora do filtro */

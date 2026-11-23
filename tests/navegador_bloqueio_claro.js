@@ -5,10 +5,13 @@
 //    baixa sem recarregar, o tipo vira Planta e o aviso "Resolvido." tem Desfazer; Desfazer devolve o bloqueio, o tipo e a conta;
 //  - "É ficha · deixar fora": a folha fica retida (não vai ao site) e a marca sai;
 //  - o Próximo passo lista a folha bloqueada com a frase; nenhum erro de JavaScript.
+// CAMP-BLOQUEIO, 2ª parte (Rafael: "só aviso"): a ficha de documentação NUNCA segurou a publicação. Agora: selo âmbar "aviso · ficha?", caixa âmbar
+//  "Aviso do CAMP Vision" (a vermelha "Impede publicar" só com o que segura de verdade: aqui, o lote de teste da Folha 4/7), chip "aviso · ficha? (N)"
+//  separado, "bloqueada (N)" conta só o lote de teste; botões "É prancha · tirar o aviso" e "É ficha · deixar fora".
 // Uso (servidor PRÓPRIO numa porta 9030–9039):
 //   CAMP_DB_PATH=/dev/shm/bq/b.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/dev/shm/bq/b.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 9031)
-//   CAMP_DB_PATH=/dev/shm/bq/b.db CAMP_BASE=http://127.0.0.1:9031 [CAMP_SHOTS=/pasta] node tests/navegador_bloqueio_claro.js
+//   CAMP_DB_PATH=/dev/shm/bq/b.db CAMP_BASE=http://127.0.0.1:9041 [CAMP_SHOTS=/pasta] node tests/navegador_bloqueio_claro.js
 const { execFileSync } = require('child_process');
 const path = require('path'), fs = require('fs');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
@@ -33,7 +36,7 @@ con.execute("INSERT OR REPLACE INTO projeto (codigo,fundo_codigo,numero,titulo,a
 con.execute("DELETE FROM item WHERE projeto_codigo='${P}'")
 lid = con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote Votorantim','${P}','/x/vot','revisao')").lastrowid
 tit = "CONCURSO PÚBLICO ESTADUAL · PAÇO MUNICIPAL / CENTRO CÍVICO · VOTORANTIM · MEMORIAL"
-for s in range(1, 4):
+for s in range(1, 5):
     cod = "${P}-1985-S01-D%05d" % s
     rel = "_campvision/preview/${P}/%s.jpg" % cod
     (raiz / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -42,14 +45,14 @@ for s in range(1, 4):
     for y in range(80, 260, 14): dr.line((40, y, 300, y), fill="gray", width=2)
     dr.polygon([(380, 300), (480, 250), (560, 300), (460, 350)], outline="black"); dr.line((380, 300, 380, 200), fill="black"); dr.line((480, 250, 480, 150), fill="black")
     im.save(raiz / rel, "JPEG", quality=90)
-    bl = ["ficha de documentação (não é obra)"] if s in (1, 2) else []
+    bl = ["ficha de documentação (não é obra)"] if s in (1, 2) else ["lote de teste (CV-24)"] if s == 4 else []
     pend = {"titulo_lido": tit, "bloqueios": bl, "sinais": (["orientação incerta"] if s == 1 else []), "ressalvas": ["autoria não confirmada: FERNANDO C. BELLOUBE DOS SANTOS"], "previa": rel}
     con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,origem,lote_id,status_site,pendencias,revisao,autoria_divergente) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
       (cod, '${P}', 'S01', s, "Concurso Público %d" % s, 'Documento' if s in (1, 2) else 'Planta', "%d/7" % s, 'campvision', lid, 'bloqueado' if bl else 'nao_publicado', json.dumps(pend, ensure_ascii=False), 'conferida', 1))
 con.execute("DELETE FROM erro WHERE codigo LIKE '${P}%'")
 `);
 const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f()) return true; await new Promise(r => setTimeout(r, 150)); } return false; };
-const FRASE = 'Bloqueada: o CAMP Vision acha que esta folha é uma ficha de documentação, não uma prancha do projeto (o título lido tem a palavra "memorial" e o tipo é "Documento"). Se for prancha, libere; se for ficha, deixe fora do site.';
+const FRASE = 'Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação, não uma prancha do projeto (o título lido tem a palavra "memorial" e o tipo é "Documento"). Não impede publicar. Se for ficha, deixe fora do site.';
 
 (async () => {
   const br = await chromium.launch({ executablePath: CHROME });
@@ -59,56 +62,76 @@ const FRASE = 'Bloqueada: o CAMP Vision acha que esta folha é uma ficha de docu
   pg.on('console', m => { if (m.type() === 'error' && !/401|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|Failed to load resource/.test(m.text())) erros.push('console.error: ' + m.text()); });
   await pg.goto(BASE + '/');
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
-  const tagBloq = c => pg.evaluate(c => { const t = [...document.querySelectorAll(`.thumb[data-rev-abrir="${c}"] .tag`)].find(x => /bloqueada/.test(x.textContent)); return t ? { t: t.textContent.trim(), title: t.title } : null; }, c);
-  const chipBloq = () => pg.evaluate(() => { const b = document.querySelector('.folhas-bar [data-fl-f="t-bloqueada"]'); return b ? b.textContent.trim() : ''; });
+  const tagRe = (c, re) => pg.evaluate(([c, re]) => { const t = [...document.querySelectorAll(`.thumb[data-rev-abrir="${c}"] .tag`)].find(x => new RegExp(re).test(x.textContent)); return t ? { t: t.textContent.trim(), title: t.title, cls: t.className } : null; }, [c, re]);
+  const tagBloq = c => tagRe(c, 'bloqueada'), tagAviso = c => tagRe(c, '^aviso');
+  const chip = k => pg.evaluate(k => { const b = document.querySelector(`.folhas-bar [data-fl-f="${k}"]`); return b ? { t: b.textContent.trim(), cls: b.className, title: b.title } : null; }, k);
+  const chipBloq = async () => ((await chip('t-bloqueada')) || {}).t || '', chipAviso = async () => ((await chip('t-aviso-ficha')) || {}).t || '';
   const abrirDrawer = async c => { await pg.evaluate(c => abrirRevisaoItem(c), c); return espera(async () => !!(await pg.$('#d-body .rv-alertas'))); };
   const caixa = () => pg.evaluate(() => { const b = document.querySelector('#d-body .rv-al.erro'); return b ? b.innerText : ''; });
+  const caixaAviso = () => pg.evaluate(() => { const b = document.querySelector('#d-body .rv-al.aviso'); return b ? b.innerText : ''; });
   const toastTxt = () => pg.evaluate(() => (document.getElementById('toast') || {}).textContent || '');
   const entrar = async () => { await pg.goto(BASE + '/#projeto/' + P); await pg.reload(); return pg.waitForSelector(`.thumb[data-rev-abrir="${D(1)}"]`, { timeout: 15000 }).then(() => true, () => false); };
   try {
     chk(await entrar(), 'abre a página do projeto');
-    await espera(async () => /bloqueada \(2\)/.test(await chipBloq()));
-    const t1 = await tagBloq(D(1));
-    chk(t1 && t1.t === 'bloqueada · ficha?' && t1.title === FRASE, 'cartão: a marca diz "bloqueada · ficha?" e o título tem a frase inteira', JSON.stringify(t1));
-    chk(/bloqueada \(2\)/.test(await chipBloq()), 'filtro: "bloqueada (2)"', await chipBloq());
-    const pp = await pg.evaluate(() => (document.querySelector('#pj-proximo .pp-bloq') || {}).innerText || '');
-    chk(pp.includes('2 folhas bloqueadas pelo CAMP Vision') && pp.includes('ficha de documentação, não uma prancha do projeto') && /Decidir na folha/.test(pp), 'Próximo passo: as folhas bloqueadas com a frase e "Decidir na folha"', pp.slice(0, 300));
+    await espera(async () => /aviso · ficha\? \(2\)/.test(await chipAviso()));
+    const t1 = await tagAviso(D(1));
+    chk(t1 && t1.t === 'aviso · ficha?' && / a /.test(' ' + t1.cls + ' ') && t1.title === FRASE && !(await tagBloq(D(1))),
+      'cartão: o selo âmbar diz "aviso · ficha?" (não "bloqueada") e o título tem a frase de aviso', JSON.stringify([t1, await tagBloq(D(1))]));
+    const t4 = await tagBloq(D(4));
+    chk(t4 && t4.t === 'bloqueada · lote de teste' && / r /.test(' ' + t4.cls + ' '), 'cartão da Folha 4/7 (lote de teste): continua vermelho "bloqueada · lote de teste"', JSON.stringify(t4));
+    const cA = await chip('t-aviso-ficha');
+    chk(/bloqueada \(1\)/.test(await chipBloq()), 'filtro: "bloqueada (1)" conta só o lote de teste (a ficha não)', await chipBloq());
+    chk(cA && /aviso · ficha\? \(2\)/.test(cA.t) && !/chip-bloq/.test(cA.cls) && cA.title === 'Aviso: não impede publicar', 'filtro âmbar "aviso · ficha? (2)", "Aviso: não impede publicar"', JSON.stringify(cA));
+    await pg.click('.folhas-bar [data-fl-f="t-aviso-ficha"]');
+    const vis = await pg.evaluate(() => [...document.querySelectorAll('.thumb[data-rev-abrir]')].filter(t => t.offsetParent !== null).map(t => t.dataset.revAbrir.slice(-1)));
+    chk(JSON.stringify(vis) === '["1","2"]', 'o filtro "aviso · ficha?" mostra só as Folhas 1 e 2', JSON.stringify(vis));
+    await pg.click('.folhas-bar [data-fl-f="t-aviso-ficha"]');
+    const ppA = await pg.evaluate(() => (document.querySelector('#pj-proximo .pp-bloq.aviso') || {}).innerText || '');
+    const ppB = await pg.evaluate(() => (document.querySelector('#pj-proximo .pp-bloq:not(.aviso)') || {}).innerText || '');
+    chk(ppA.includes('2 folhas com aviso do CAMP Vision (não impede publicar)') && ppA.includes('pode ser uma ficha de documentação') && /Decidir na folha/.test(ppA)
+      && ppB.includes('1 folha bloqueada pelo CAMP Vision') && ppB.includes('lote de teste') && !ppB.includes('ficha'),
+      'Próximo passo: as folhas com aviso (âmbar) separadas da bloqueada pelo lote de teste', JSON.stringify([ppA.slice(0, 200), ppB.slice(0, 200)]));
     // a gaveta "Revisar folha"
     chk(await abrirDrawer(D(1)), 'abre o Revisar folha da Folha 1/7');
-    const cx = await caixa();
-    chk(cx.includes(FRASE) && cx.includes('O CAMP Vision escreveu: ficha de documentação (não é obra)') && cx.includes('Abrir em Problemas'), 'caixa vermelha: a frase, o texto original e "Abrir em Problemas"', cx.slice(0, 400));
-    const bts = await pg.$$eval('#d-body .rv-al.erro button', bs => bs.map(b => b.textContent.trim()));
-    const cxT = await pg.$eval('#d-body .rv-al.erro [data-blq-trocar]', i => i.checked).catch(() => null);
-    chk(bts.includes('É prancha do projeto · liberar') && bts.includes('É ficha · deixar fora') && cxT === true, 'botões "É prancha do projeto · liberar" e "É ficha · deixar fora"; caixa "trocar o tipo para Planta" marcada', JSON.stringify([bts, cxT]));
+    const cx = await caixaAviso();
+    chk(!(await caixa()) && cx.includes('Aviso do CAMP Vision') && cx.includes('confira; não impede publicar') && cx.includes(FRASE) && cx.includes('O CAMP Vision escreveu: ficha de documentação (não é obra)') && cx.includes('Abrir em Problemas'),
+      'caixa âmbar "Aviso do CAMP Vision · confira; não impede publicar" com a frase e o texto original; sem caixa vermelha', JSON.stringify([await caixa(), cx.slice(0, 400)]));
+    const bts = await pg.$$eval('#d-body .rv-al.aviso button', bs => bs.map(b => b.textContent.trim()));
+    const cxT = await pg.$eval('#d-body .rv-al.aviso [data-blq-trocar]', i => i.checked).catch(() => null);
+    chk(bts.includes('É prancha · tirar o aviso') && bts.includes('É ficha · deixar fora') && cxT === true, 'botões "É prancha · tirar o aviso" e "É ficha · deixar fora"; caixa "trocar o tipo para Planta" marcada', JSON.stringify([bts, cxT]));
     const foto = async nome => { if (!SHOTS) return; await pg.evaluate(() => { const b = [...document.querySelectorAll('#d-body button')].find(x => /^Entendi/.test(x.textContent.trim())); if (b) b.click(); });
       await pg.evaluate(() => { const a = document.querySelector('#d-body .rv-alertas') || document.querySelector('#d-body .rv'); if (a) a.scrollIntoView({ block: 'start' }); const d = document.getElementById('d-body'); if (d) d.scrollTop = Math.max(0, d.scrollTop - 120); });
       await pg.waitForTimeout(300); await pg.screenshot({ path: path.join(SHOTS, nome) }); };
-    await foto('bloqueio_antes.png');
-    // liberar
+    await foto('aviso_antes.png');
+    // tirar o aviso
     await pg.click('#d-body [data-blq-decidir="liberar"]');
-    const liberou = await espera(async () => !(await pg.$('#d-body .rv-al.erro')) && !(await tagBloq(D(1))) && /bloqueada \(1\)/.test(await chipBloq()));
-    chk(liberou, 'liberar: a caixa vermelha some, a marca sai do cartão e o filtro baixa para "bloqueada (1)" sem recarregar', JSON.stringify([await caixa(), await tagBloq(D(1)), await chipBloq()]));
+    const liberou = await espera(async () => !(await pg.$('#d-body [data-blq-motivo="ficha"]')) && !(await tagAviso(D(1))) && /aviso · ficha\? \(1\)/.test(await chipAviso()) && /bloqueada \(1\)/.test(await chipBloq()));
+    chk(liberou, '"É prancha · tirar o aviso": o aviso some da gaveta e do cartão, "aviso · ficha? (1)" sem recarregar; "bloqueada (1)" não muda', JSON.stringify([await caixaAviso(), await tagAviso(D(1)), await chipAviso(), await chipBloq()]));
     const db1 = JSON.parse(q(`SELECT tipo_documento, status_site, pendencias FROM item WHERE codigo='${D(1)}'`))[0];
-    chk(db1[0] === 'Planta' && db1[1] === 'nao_publicado' && JSON.parse(db1[2]).bloqueios.length === 0, 'liberar: no banco, tipo Planta, sem bloqueio, fora de "bloqueado"', JSON.stringify(db1));
-    const tipoTela = await pg.evaluate(c => ((window.ITENS_PJ || []).find(x => x.codigo === c) || {}).tipo_documento, D(1));
+    chk(db1[0] === 'Planta' && db1[1] === 'nao_publicado' && JSON.parse(db1[2]).bloqueios.length === 0, 'tirar o aviso: no banco, tipo Planta, sem o aviso, fora de "bloqueado"', JSON.stringify(db1));
     const tipoCartao = await pg.evaluate(c => (document.querySelector(`.thumb[data-rev-abrir="${c}"] .cap-tipo`) || {}).textContent, D(1));
-    chk(tipoTela === 'Planta' && tipoCartao === 'Planta', 'liberar: a folha na tela e o cartão já estão com o tipo Planta', JSON.stringify([tipoTela, tipoCartao]));
+    chk(tipoCartao === 'Planta', 'o cartão já está com o tipo Planta', tipoCartao);
     chk(/^Resolvido\. O tipo passou a Planta\./.test(await toastTxt()) && !!(await pg.$('#toast .toast-acao')), 'aviso "Resolvido. O tipo passou a Planta." com Desfazer', await toastTxt());
-    await foto('bloqueio_depois.png');
+    await foto('aviso_depois.png');
     // Desfazer
     await pg.click('#toast .toast-acao');
-    const voltou = await espera(async () => { const r = JSON.parse(q(`SELECT tipo_documento, pendencias FROM item WHERE codigo='${D(1)}'`))[0]; return r[0] === 'Documento' && JSON.parse(r[1]).bloqueios.length === 1 && /bloqueada \(2\)/.test(await chipBloq()) && !!(await tagBloq(D(1))); });
-    chk(voltou, 'Desfazer: o bloqueio e o tipo Documento voltam; o filtro volta a "bloqueada (2)" e a marca volta ao cartão', JSON.stringify([q(`SELECT tipo_documento, pendencias FROM item WHERE codigo='${D(1)}'`), await chipBloq()]));
-    chk(await espera(async () => (await caixa()).includes(FRASE)), 'Desfazer: a caixa vermelha volta na gaveta', (await caixa()).slice(0, 200));
+    const voltou = await espera(async () => { const r = JSON.parse(q(`SELECT tipo_documento, pendencias FROM item WHERE codigo='${D(1)}'`))[0]; return r[0] === 'Documento' && JSON.parse(r[1]).bloqueios.length === 1 && /aviso · ficha\? \(2\)/.test(await chipAviso()) && !!(await tagAviso(D(1))); });
+    chk(voltou, 'Desfazer: o aviso e o tipo Documento voltam; "aviso · ficha? (2)" e o selo voltam', JSON.stringify([q(`SELECT tipo_documento, pendencias FROM item WHERE codigo='${D(1)}'`), await chipAviso()]));
+    chk(await espera(async () => (await caixaAviso()).includes(FRASE) && !(await caixa())), 'Desfazer: a caixa âmbar volta na gaveta (e nenhuma vermelha)', (await caixaAviso()).slice(0, 200));
     // deixar fora (Folha 2/7)
     await pg.evaluate(() => closeDrawer(true));
     chk(await abrirDrawer(D(2)), 'abre o Revisar folha da Folha 2/7');
     await pg.click('#d-body [data-blq-decidir="deixar_fora"]');
-    const fora = await espera(async () => { const r = JSON.parse(q(`SELECT retida, pendencias FROM item WHERE codigo='${D(2)}'`))[0]; return r[0] === 1 && JSON.parse(r[1]).bloqueios.length === 0 && !(await tagBloq(D(2))) && /bloqueada \(1\)/.test(await chipBloq()); });
-    chk(fora, '"É ficha · deixar fora": a folha fica retida (não vai ao site), a marca sai e o filtro baixa', JSON.stringify([q(`SELECT retida, retida_motivo FROM item WHERE codigo='${D(2)}'`), await chipBloq()]));
+    const fora = await espera(async () => { const r = JSON.parse(q(`SELECT retida, pendencias FROM item WHERE codigo='${D(2)}'`))[0]; return r[0] === 1 && JSON.parse(r[1]).bloqueios.length === 0 && !(await tagAviso(D(2))) && /aviso · ficha\? \(1\)/.test(await chipAviso()); });
+    chk(fora, '"É ficha · deixar fora": a folha fica retida (não vai ao site), o selo sai e "aviso · ficha? (1)"', JSON.stringify([q(`SELECT retida, retida_motivo FROM item WHERE codigo='${D(2)}'`), await chipAviso()]));
     chk(/Resolvido\. A folha fica fora do site\./.test(await toastTxt()), 'aviso "Resolvido. A folha fica fora do site."', await toastTxt());
     const ret = await pg.evaluate(c => { const t = document.querySelector(`.thumb[data-rev-abrir="${c}"]`); return t ? t.textContent : ''; }, D(2));
     chk(/retida/.test(ret), 'o cartão da Folha 2/7 mostra "retida"', ret.slice(0, 200));
+    // a do lote de teste continua na caixa vermelha
+    await pg.evaluate(() => closeDrawer(true));
+    chk(await abrirDrawer(D(4)), 'abre o Revisar folha da Folha 4/7');
+    const cv = await caixa();
+    chk(cv.includes('Impede publicar') && cv.includes('Bloqueada: a folha veio de um lote de teste') && !(await caixaAviso()).includes('lote de teste'), 'lote de teste: continua na caixa vermelha "Impede publicar"', cv.slice(0, 300));
     chk(!erros.length, 'nenhum erro de JavaScript', erros.join(' | '));
   } catch (e) { chk(false, 'o teste rodou até o fim', String(e).slice(0, 300)); }
   await br.close();

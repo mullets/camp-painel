@@ -720,6 +720,24 @@ UMA frase: o que o sistema acha, por quê e o que fazer. Fonte única: `backend/
   **Não é duplicata**; lote de teste: sem botão. Aviso: "Resolvido." (+ " O tipo passou a Planta." / " A folha fica fora do site.") com
   **Desfazer**; "Desfeito.". Modelos de decisão (Problemas › Modelos de decisão, categoria Outro): **É prancha do projeto**, **É ficha: fica fora do
   site**, **Pode ir ao site**, **Fica fora do site**. "Deixar fora" é o mesmo **Reter** de sempre (a folha fica no painel; nunca "excluir" nem "apagar").
+- **Só aviso** (23/11/2026, Rafael: "só aviso"; vale por cima do que está acima): ficha de documentação, capa (não é prancha), retirada e o
+  texto livre do CAMP Vision NUNCA seguraram a publicação (o que segura: problema que bloqueia, folha retida, duplicata, lote de teste). Viram
+  **aviso**:
+  - Cartão da folha: selo âmbar **aviso · ficha?** (**aviso · não é prancha?**, **aviso · retirada**; o genérico **aviso do CAMP Vision**), com a
+    frase no título. O vermelho **bloqueada · <selo>** fica para lote de teste (e o que segura de verdade). Filtro **bloqueada (N)**: só as folhas
+    que a publicação segura (lote de teste, problema aberto que bloqueia); chip âmbar próprio **aviso · ficha? (N)** (título "Aviso: não impede publicar").
+  - Revisar folha: a frase vai na caixa âmbar **Aviso do CAMP Vision** · "confira; não impede publicar" (com os mesmos botões); a caixa vermelha
+    **Impede publicar** só mostra o que segura de verdade.
+  - Próximo passo: "**N folhas com aviso do CAMP Vision (não impede publicar): confira na própria folha.**" (âmbar), separado das bloqueadas.
+  - Frases: ficha "Aviso: o CAMP Vision acha que esta folha pode ser uma ficha de documentação, não uma prancha do projeto (o título lido tem a
+    palavra "contrato" e o tipo é "Documento"). Não impede publicar. Se for ficha, deixe fora do site." · capa "Aviso: o CAMP Vision acha que esta
+    folha pode ser capa, não uma prancha do projeto. Não impede publicar. Se não for prancha, deixe fora do site." · retirada "Aviso: <quem> tirou
+    esta folha da publicação no CAMP Vision ("<motivo>"). Não impede publicar. Se ela não pode ir ao site, deixe fora do site." · outro "Aviso do
+    CAMP Vision: "<texto>". Não impede publicar. Se vale, deixe fora do site; se não vale mais, tire o aviso."
+  - Botões: **É prancha · tirar o aviso** (ficha e capa; antes "É prancha do projeto · liberar"), **Pode ir ao site · tirar o aviso** (retirada e
+    outro), e os de deixar fora de sempre (**É ficha · deixar fora**, **Não é prancha · deixar fora**, **Deixar fora do site**). Os modelos de decisão
+    dizem "O aviso do CAMP Vision saiu." / "o aviso do CAMP Vision está certo" (migração 248, só onde o texto ainda era o padrão).
+  - A importação não põe mais a folha em "bloqueado" só por esses avisos; folha antiga assim a tela lê como aviso (nada é regravado).
 
 ## Fundo sem legendas no site (10/11/2026, contrato painel ↔ site 1.9)
 - Caixa no "Editar" do fundo, grupo "Aparece na página pública": **Sem legendas nas imagens do site** — "As fotos e desenhos deste fundo
