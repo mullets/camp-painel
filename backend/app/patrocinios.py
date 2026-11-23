@@ -38,7 +38,7 @@ ETAPAS = {
     "ativa": "Patrocínio em andamento", "encerrada": "Encerrada", "cancelada": "Cancelada / desistência",
 }
 ETAPAS_AUTO = ("aguardando_pagamento", "pago")
-FLUXO = ["recebida", "aguardando_pagamento", "pago", "contrato_enviado", "contrato_assinado", "marca_aplicada", "ativa", "encerrada"]
+FLUXO = ["recebida", "contrato_enviado", "contrato_assinado", "aguardando_pagamento", "pago", "marca_aplicada", "ativa", "encerrada"]   # CAMP-PAT-INTENCAO: contrato antes do pagamento
 ABERTAS = ("recebida", "em_conversa", "aguardando_pagamento", "pago", "contrato_enviado", "contrato_assinado")   # pedem ação da equipe
 COTAS = {"parceiro": "Parceiro", "mantenedor": "Mantenedor", "institucional": "Institucional", "master": "Master"}
 
