@@ -2584,10 +2584,13 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .cp-rap-res{display:flex;flex-wrap:wrap;gap:6px}
 .cp-rap-res .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-linha.cp-grupo{cursor:default;grid-template-columns:16px 38px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo sev" "sel ic acoes acoes"}
-.cp-linha.cp-grupo .cp-sel{grid-area:sel}.cp-linha.cp-grupo .cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo .cp-corpo{grid-area:corpo}.cp-linha.cp-grupo .cp-sev-tag{grid-area:sev;align-self:start}
-.cp-linha.cp-grupo .cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo .cp-meta{flex-wrap:wrap}
-@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo .cp-sel{display:none}.cp-linha.cp-grupo .cp-sev-tag{justify-self:start}}
-.cp-grupo .cp-tit b{overflow-wrap:anywhere}
+/* 23/11 (Rafael: "ao clicar pra ver uma a uma quebra a página"): só os filhos DIRETOS do grupo; com seletor de descendente as regras
+   do grupo pegavam também as linhas de dentro de "Ver uma a uma" e desmontavam a grade delas */
+.cp-linha.cp-grupo>.cp-sel{grid-area:sel}.cp-linha.cp-grupo>.cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo>.cp-corpo{grid-area:corpo}.cp-linha.cp-grupo>.cp-sev-tag{grid-area:sev;align-self:start}
+.cp-linha.cp-grupo>.cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo>.cp-corpo>.cp-meta{flex-wrap:wrap}
+@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo>.cp-sel{display:none}.cp-linha.cp-grupo>.cp-sev-tag{justify-self:start}}
+.cp-grupo>.cp-corpo .cp-tit b{overflow-wrap:anywhere}
+.cp-g-membros>.cp-linha{cursor:pointer}
 .cp-g-thumbs{display:flex;gap:6px;overflow:hidden;margin-top:4px}
 .cp-g-thumbs img,.cp-g-thumbs .cp-rap-sem{width:44px;height:44px;flex:0 0 44px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface2)}
 .cp-g-mais{align-self:center;font-size:var(--fs-2xs);color:var(--ink2);white-space:nowrap}
