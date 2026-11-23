@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Falha o deploy se estruturas visuais essenciais desaparecerem do frontend."""
 from pathlib import Path
+import os
 import re
 import sys
 
@@ -231,6 +232,25 @@ else:
     for v, k in teclas.items():
         if v in nomes and na_ajuda.get(k) != nomes[v]:
             errors.append(f"atalhos: a ajuda (AJUDA_ATALHOS) diz {k} = '{na_ajuda.get(k)}', mas o item do menu se chama '{nomes[v]}'")
+
+# Sintaxe do JavaScript (23/11/2026, CAMP-PAT-JS): um erro de sintaxe num <script> derruba a tela inteira, e nem a suíte do backend nem as
+# checagens de texto acima percebem (o botão "Gerar link de pagamento" do PR #199 tinha aspas trocadas). Cada <script> embutido passa
+# pelo `node --check`; sem node na máquina, avisa e segue.
+import shutil as _sh, subprocess as _sp, tempfile as _tf
+_node = _sh.which("node")
+if _node:
+    for _i, _js in enumerate(re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", text, re.S)):
+        if not _js.strip():
+            continue
+        with _tf.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as _f:
+            _f.write(_js)
+        _r = _sp.run([_node, "--check", _f.name], capture_output=True, text=True)
+        os.unlink(_f.name)
+        if _r.returncode != 0:
+            _msg = next((l for l in (_r.stderr or "").splitlines() if "Error" in l), (_r.stderr or "").strip()[:200])
+            errors.append(f"javascript: o <script> nº {_i + 1} tem erro de sintaxe (a tela inteira para): {_msg}")
+else:
+    print("aviso: sem node nesta máquina, a sintaxe do JavaScript não foi conferida")
 
 if errors:
     print("UI CHECK FALHOU")
