@@ -170,6 +170,7 @@ def enriquecer(con, rows, usuario: dict | None = None) -> list[dict]:
     """Os campos da Central (opcionais) por cima de problemas.enriquecer: fase, severidade, título curto, tipo, responsável (nome),
     prioridade (nota, razão), idade, onde (fundo > projeto > folha), CTA."""
     from . import problemas
+    from .bloqueio_folha import frase_erro
     base = problemas.enriquecer(con, rows)
     projs = {x["projeto_codigo"] for x in base if x.get("projeto_codigo")}
     no_ar = set()
@@ -189,6 +190,7 @@ def enriquecer(con, rows, usuario: dict | None = None) -> list[dict]:
         x["tipo_rotulo"] = ROTULO_TIPO.get(x.get("categoria"), "Outro")
         x["titulo"] = ("Folha retirada pelo CAMP Vision" if x.get("tipo") == "retirada" else
                        "Folha recusada na importação" if x.get("tipo") == "recusada" else TITULO_TIPO.get(x.get("categoria"), "Problema relatado"))
+        x["frase_bloqueio"] = frase_erro(x)                  # CAMP-BLOQUEIO (campo novo, opcional): o que bloqueia, em frase
         r_ = resp.get(f"erro:{x['id']}")
         x["responsavel_id"], x["responsavel_nome"] = (r_["id"], r_["nome"]) if r_ else (None, None)
         x["idade_dias"] = _dias(x.get("criado_em"))

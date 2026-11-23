@@ -1759,7 +1759,8 @@ def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dic
         con.close()
 
 
-ITEM_CAMPOS_DESFAZER = ("pendencias", "status_site", "duplicata_de", "tipo_duplicata", "duplicata_conferida_em", "duplicata_conferida_por", "duplicata_conferida_de")
+ITEM_CAMPOS_DESFAZER = ("pendencias", "status_site", "duplicata_de", "tipo_duplicata", "duplicata_conferida_em", "duplicata_conferida_por", "duplicata_conferida_de",
+                        "retida", "retida_motivo", "retida_por", "retida_em", "revisao", "revisado_por", "revisado_em")   # CAMP-BLOQUEIO: "É ficha · deixar fora" retém a folha; o Desfazer a devolve
 
 
 def desfazer_antes(con, antes: list, situacao_acao: str, acao: str, ator: str) -> tuple[int, int]:
