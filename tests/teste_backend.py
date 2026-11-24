@@ -44,6 +44,7 @@ MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista d
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
+MODOS_RAPIDOS |= {"financeiro_dre"}   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; contas separadas; anterior e acumulado; mensal; linha própria)
 MODOS_RAPIDOS |= {"financeiro_despesas"}   # CAMP-FIN 24/11/2026: despesas (relatório de liberações do Mercado Pago pelo site, OFX, à mão, comprovantes; linha própria)
 MODOS_RAPIDOS |= {"financeiro_receitas"}   # CAMP-FIN 24/11/2026: Financeiro, receitas para o contador + conta do Mercado Pago pelo site (site e Mercado Pago falsos; contrato 1.33; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_painel"}   # CAMP-PAT-EMPRESA 23/11/2026: patrocínio de empresas do site, etapas, pagamento (site falso; contrato 1.31)
@@ -20213,6 +20214,85 @@ def filho(modo):
         zn = _zf.ZipFile(_io.BytesIO(zr.content)).namelist()
         ver("Exportar comprovantes do período (ZIP)", zr.status_code == 200 and len(zn) == 1 and zn[0].endswith("nota-frete.jpg"), zn)
         for l in res: print(l)
+    elif modo == "financeiro_dre":
+        # CAMP-FIN DRE gerencial 24/11/2026. Rafael: "Já podemos fazer DRE nisso tudo?". Só com o livro do Financeiro (receitas semeadas + conta do
+        # Mercado Pago falsa + despesas). Prova: linhas com tarifas e estorno, superávit e déficit, contas separadas, anterior e acumulado do ano,
+        # visão mensal, item fora do mapa em "Outras" com aviso, detalhe da linha, exportação, papéis.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, io as _io, sys as _s
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, dre
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        sf.semear(c)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        class WPF: h = type("Hh", (), {"get": lambda s, p, params=None: Resp(200, {"itens": sf.conta_mp(), "mais": False})})()
+        fi.coletar_mp(c, WPF(), de="2026-10-01", ate="2026-11-30")
+        D = [(1, "2026-11-06", 320, "frete", "mp"), (1, "2026-11-07", 100, "tecnologia", "mp"), (1, "2026-11-08", 500, "pessoal", "manual"), (1, "2026-11-10", 4.5, "tarifas", "mp"),
+             (1, "2026-11-11", 50, None, "mp"), (1, "2026-11-12", 30, "xyz", "mp"), (2, "2026-11-12", 341.9, "materiais", "ofx"), (1, "2026-10-15", 1000, "frete", "mp")]
+        for i, (ct, d, v, cat, org) in enumerate(D):
+            c.execute("INSERT INTO despesa (conta_id, data, valor, categoria, justificativa, origem, chave) VALUES (?,?,?,?,?,?,?)", (ct, d, v, cat, "ok" if cat else None, org, f"t:{i}"))
+        c.commit()
+        M = dre.montar(c, "2026-11-01", "2026-11-30")
+        L = {l["chave"]: l for l in M["linhas"]}
+        va = {k: l["atual"] for k, l in L.items() if l["tipo"] != "grupo"}
+        ver("receitas da DRE pelas naturezas (Doações já com o estorno de R$ 250)", va["rec_doacoes"] == 530.0 and va["rec_contribuicoes"] == 1145.0 and va["rec_patrocinios"] == 14000.0
+            and va["rec_servicos"] == 620.0 and va["rec_outras"] == 100.0 and va["rec_vinculadas"] == 3000.0 and va["rec_projeto"] == 0.0 and va["receita_bruta"] == 19395.0, va)
+        ver("(−) tarifas de recebimento do Mercado Pago e (=) receita líquida", va["tarifas_receb"] == 306.51 and va["receita_liquida"] == 19088.49, va)
+        ver("despesas por linha (atividades, administrativas, pessoal, financeiras, outras)", va["desp_atividades"] == 661.9 and va["desp_admin"] == 100.0 and va["desp_pessoal"] == 500.0
+            and va["desp_financeiras"] == 4.5 and va["desp_outras"] == 80.0 and va["despesas_total"] == 1346.4, va)
+        ver("superávit do período (não 'lucro')", va["resultado"] == 17742.09 and M["situacao"] == "superavit" and L["resultado"]["rotulo"] == "(=) Superávit do período"
+            and "lucro" not in _j.dumps(M, ensure_ascii=False).lower(), L["resultado"])
+        ver("sem categoria e fora do mapa vão para 'Outras' com aviso", M["avisos"]["sem_categoria"] == 1 and M["avisos"]["despesas_fora_do_mapa"] == 1
+            and M["avisos"]["texto"] == "1 despesa sem categoria: o resultado pode mudar.", M["avisos"])
+        ver("colunas: período anterior (outubro, déficit) e acumulado do ano", M["anterior"] == {"de": "2026-10-01", "ate": "2026-10-31"} and L["receita_bruta"]["anterior"] == 450.0
+            and L["resultado"]["anterior"] == -550.0 and L["receita_bruta"]["ytd"] == 19845.0 and L["despesas_total"]["ytd"] == 2346.4 and M["ytd"]["de"] == "2026-01-01", (L["resultado"], L["receita_bruta"]))
+        Mo = dre.montar(c, "2026-10-01", "2026-10-31")
+        ver("déficit do período (outubro)", Mo["situacao"] == "deficit" and Mo["resultado"] == -550.0 and [l for l in Mo["linhas"] if l["chave"] == "resultado"][0]["rotulo"] == "(=) Déficit do período")
+        Op, Pj = dre.montar(c, "2026-11-01", "2026-11-30", "operacional"), dre.montar(c, "2026-11-01", "2026-11-30", "2")
+        ver("visões: Operacional sem a conta do projeto; a conta do projeto (com restrição) separada", Op["resultado"] == 18083.99 and Pj["resultado"] == -341.9
+            and {v["chave"]: v["resultado"] for v in M["resumo_visoes"]} == {"consolidado": 17742.09, "operacional": 18083.99, "2": -341.9}
+            and [v for v in M["visoes"] if v["chave"] == "2"][0]["restrito"], M["resumo_visoes"])
+        ver("período anterior de um trimestre e de um período livre", dre.periodo_anterior("2026-10-01", "2026-12-31") == ("2026-07-01", "2026-09-30")
+            and dre.periodo_anterior("2026-11-10", "2026-11-19") == ("2026-10-31", "2026-11-09") and dre.periodo_anterior("2026-01-01", "2026-12-31") == ("2025-01-01", "2025-12-31"))
+        Me = dre.mensal(c, 2026)
+        rb = [l for l in Me["linhas"] if l["chave"] == "receita_bruta"][0]
+        ver("visão mensal: janeiro a dezembro e o total", len(rb["meses"]) == 12 and rb["meses"][9] == 450.0 and rb["meses"][10] == 19395.0 and rb["total"] == 19845.0 and rb["meses"][0] == 0.0, rb)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador: 403 (DRE, linha, exportar, mapa)", all(r_.status_code == 403 for r_ in (op.get("/api/financeiro/dre?mes=2026-11"), op.get("/api/financeiro/dre/linha?linha=rec_doacoes&mes=2026-11"),
+            op.get("/api/financeiro/dre/exportar.xlsx?mes=2026-11"), op.get("/api/financeiro/dre/exportar.csv?mes=2026-11"), op.put("/api/financeiro/dre/mapa", json={"mapa": {}}))))
+        J = x.get("/api/financeiro/dre?mes=2026-11").json()
+        ver("tela: aviso de regime de caixa, título sem fins lucrativos, mensal junto", J["aviso"].startswith("DRE gerencial, por regime de caixa (data do pagamento). Não substitui a demonstração oficial do contador")
+            and J["titulo"] == "Demonstração do resultado do período" and J["mensal"]["ano"] == 2026, J["aviso"])
+        ver("trimestre (AAAA-T4) e visão inválida", x.get("/api/financeiro/dre?tri=2026-T4").json()["periodo"] == {"de": "2026-10-01", "ate": "2026-12-31"}
+            and x.get("/api/financeiro/dre?tri=2026-T5").status_code == 400 and x.get("/api/financeiro/dre?mes=2026-11&visao=99").status_code == 400)
+        dl = x.get("/api/financeiro/dre/linha?linha=rec_doacoes&mes=2026-11").json()
+        do = x.get("/api/financeiro/dre/linha?linha=desp_outras&mes=2026-11").json()
+        ver("clicar numa linha: os lançamentos que a formam", dl["total"] == 530.0 and len(dl["itens"]) == 5 and do["total"] == 80.0 and len(do["itens"]) == 2
+            and x.get("/api/financeiro/dre/linha?linha=xyz&mes=2026-11").status_code == 400, (dl["total"], do["total"]))
+        rm = x.put("/api/financeiro/dre/mapa", json={"mapa": {"categoria:xyz": "desp_admin"}})
+        J2 = x.get("/api/financeiro/dre?mes=2026-11").json()
+        v2 = {l["chave"]: l["atual"] for l in J2["linhas"]}
+        ver("mapa da DRE editável (a categoria nova vai para Administrativas); linha desconhecida = 400", rm.status_code == 200 and v2["desp_outras"] == 50.0 and v2["desp_admin"] == 130.0
+            and J2["avisos"]["despesas_fora_do_mapa"] == 0 and x.put("/api/financeiro/dre/mapa", json={"mapa": {"categoria:xyz": "lucro"}}).status_code == 400, v2)
+        from openpyxl import load_workbook
+        wb = load_workbook(_io.BytesIO(x.get("/api/financeiro/dre/exportar.xlsx?mes=2026-11").content))
+        aba = [[c_.value for c_ in r__] for r__ in wb["DRE"].iter_rows()]
+        ver("XLSX: abas DRE e DRE mensal, período, aviso e colunas de comparação", wb.sheetnames == ["DRE", "DRE mensal"] and "01/11/2026 a 30/11/2026" in aba[2][0] and aba[3][0] == dre.AVISO
+            and aba[5][1].startswith("Período") and aba[5][2].startswith("Anterior") and aba[5][3].startswith("Acumulado do ano")
+            and any(str(r__[0]).strip().startswith("(=) Superávit") for r__ in aba) and len(next(wb["DRE mensal"].iter_rows(min_row=3, max_row=3))) == 14, aba[:6])
+        cv = x.get("/api/financeiro/dre/exportar.csv?mes=2026-11").content.decode("utf-8-sig").splitlines()
+        ver("CSV da DRE com o aviso e as colunas", cv[2] == dre.AVISO and cv[4] == "Linha;Período;Anterior;Acumulado do ano" and any(l_.startswith("(=) Receita bruta;19395,00") for l_ in cv), cv[:5])
+        for l in res: print(l)
     elif modo == "patrocinios_autentique":
         # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
         # Autentique (mesmo token), link no e-mail do site (enviar-contrato, contrato 1.32) com o pagamento junto; reaproveita o documento se o
@@ -24037,6 +24117,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · despesas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 29, "Financeiro · despesas: todas as verificações rodaram")
+
+print("Financeiro · DRE gerencial: linhas, tarifas e estorno, superávit e déficit, contas separadas, anterior e acumulado do ano, mensal, fora do mapa, detalhe, exportação, papéis")
+rc, out = rodar("financeiro_dre", f"{tmp}/financeiro_dre.db")
+if rc != 0: ok(False, f"teste financeiro_dre não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · DRE: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 17, "Financeiro · DRE: todas as verificações rodaram")
 
 print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
 rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")

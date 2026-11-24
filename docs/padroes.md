@@ -187,3 +187,7 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Contas (`financeiro_conta`): Mercado Pago (operacional) e, já cadastrada e desativada, a do Banco do Brasil do projeto Rouanet (PRONAC 2613864 ·
   Livro Karazawa), com restrição. Conta com restrição aparece SEMPRE separada da operacional. Sem rubricas/SALIC por enquanto.
 - A leitura da conta do Mercado Pago roda em segundo plano (`financeiro.mp_coleta_min`, 60; 0 desliga) e no botão, também em segundo plano.
+- **DRE gerencial** (CAMP-FIN, pedido do Rafael: "Já podemos fazer DRE nisso tudo?"; `dre.py`): "Demonstração do resultado do período" com superávit ou
+  déficit (nunca "lucro"), só com o livro do Financeiro, **por regime de caixa**; o aviso "Não substitui a demonstração oficial do contador (regime de
+  competência, ITG 2002)" vai na tela e na exportação. Mapa `dre.mapa` (natureza/categoria → linha); fora do mapa = "Outras" com aviso. Visões:
+  Consolidado, Operacional e cada conta com restrição separada. Colunas: período, anterior e acumulado do ano; e a visão mensal.
