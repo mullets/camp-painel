@@ -457,7 +457,7 @@ async def cabecalhos_seguranca(request: Request, call_next):
                   status=resp.status_code, duracao_ms=duracao)
     resp.headers["X-Request-ID"] = request_id
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers.setdefault("X-Frame-Options", "DENY")   # uma rota pode pedir SAMEORIGIN (a prévia do comprovante no painel)
     resp.headers["Referrer-Policy"] = "same-origin"
     resp.headers["Permissions-Policy"] = "camera=(self), geolocation=()"
     # A API NUNCA fica em cache (dado velho na tela já foi problema), salvo quando a PRÓPRIA rota declara (hoje: a prévia privada de uma folha do QNAP).

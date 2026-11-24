@@ -110,7 +110,7 @@ def pasta() -> Path:
 # ---------------------------------------------------------------- leitura
 def _anexos(con, did: int) -> list[dict]:
     return [{"id": r["id"], "nome": r["nome"], "mime": r["mime"] or "", "tamanho": r["tamanho"] or 0}
-            for r in con.execute("SELECT id, nome, mime, tamanho FROM despesa_anexo WHERE despesa_id=? ORDER BY id", (did,))]
+            for r in con.execute("SELECT id, nome, mime, tamanho FROM despesa_anexo WHERE despesa_id=? AND apagado_em IS NULL ORDER BY id", (did,))]
 
 
 def pendente(r, n_anexos: int, projeto: bool = False) -> list[str]:
@@ -176,7 +176,7 @@ def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pende
 
 def pendentes_total(con) -> int:
     n = 0
-    for r in con.execute("""SELECT d.*, (SELECT COUNT(*) FROM despesa_anexo a WHERE a.despesa_id=d.id)
+    for r in con.execute("""SELECT d.*, (SELECT COUNT(*) FROM despesa_anexo a WHERE a.despesa_id=d.id AND a.apagado_em IS NULL)
                                 + (SELECT COUNT(*) FROM nota_camp nc WHERE nc.despesa_id=d.id AND nc.situacao='paga' AND nc.nf_arquivo IS NOT NULL) AS nax,
                                 (SELECT tipo FROM financeiro_conta c WHERE c.id=d.conta_id) = 'projeto_incentivado' AS proj
                             FROM despesa d WHERE apagado_em IS NULL AND tipo='despesa'"""):
@@ -294,6 +294,12 @@ def abas_xlsx(wb, rel: dict) -> None:
 
 
 # ---------------------------------------------------------------- saídas do Mercado Pago (relatório de liberações, pelo site)
+# Rótulos do painel para as saídas (como no Extrato): nunca são o nome de quem recebeu (financeiro.rotulo_generico).
+ROTULOS_MP = ("Pix enviado", "Pagamento com Pix", "Pagamento de boleto/conta", "Compra no cartão de débito", "Compra no cartão de crédito",
+              "Transferência enviada", "Pagamento de crédito do Mercado Pago", "Tarifa do Mercado Pago", "Imposto retido pelo Mercado Pago",
+              "Pagamento com o saldo do Mercado Pago", "Pagamento do Mercado Pago", "Saída do Mercado Pago", "Pagamento")
+
+
 def _classificar_mp(desc: str, meio_tipo: str, meio: str = "", tags: str = "") -> tuple[str | None, str, str | None, str]:
     """(tipo, meio, categoria automática, rótulo como no Extrato do Mercado Pago) de uma linha de saída do relatório; tipo None = não é despesa.
     CAMP-FIN-CONSERTOS (Rafael: "saída de Pix, boleto, transferências"): o rótulo segue o Extrato (Pix enviado, Pagamento com Pix,
@@ -339,6 +345,11 @@ def importar_saidas_mp(con, itens: list[dict]) -> dict:
         out["lidas"] += 1
         valor = _num(x.get("debito"))
         dia = _fin().dia_sp(x.get("data"))
+        # o livro da conta (migração 258): toda linha, de entrada ou de saída, com o sinal do Mercado Pago. A entrada (liberação de uma venda)
+        # NÃO vira receita: só confirma a direção do pagamento (a receita vem do pagamento, uma vez só).
+        if x.get("source_id"):
+            out["movimentos"] = out.get("movimentos", 0) + _fin().gravar_movimento(con, "relatorio", str(x.get("source_id")), dia, x.get("credito") or 0, valor or 0,
+                                                                                   str(x.get("descricao") or ""))
         tipo, meio, cat, rotulo = _classificar_mp(str(x.get("descricao") or ""), str(x.get("meio_tipo") or ""), str(x.get("meio") or ""), str(x.get("tags") or ""))
         if not valor or valor <= 0 or not dia or not tipo:
             out["ignoradas"] += 1
@@ -488,6 +499,9 @@ def importar_extrato_mp(con, texto: str, aplicar: bool, ator: str) -> dict:
         linhas.append(dict(t, valor=valor, tipo=tipo, meio=meio, categoria=cat, descricao=rotulo, contraparte=quem, chave=chave,
                            situacao="ja_importada" if ja else ("completa" if rel else "nova"), despesa_id=(ja or rel or [None])[0]))
     if aplicar:
+        for t in trs:   # o livro da conta (migração 258): toda linha do Extrato com o sinal (positivo = entrada, negativo = saída)
+            if t["ref"]:
+                _fin().gravar_movimento(con, "extrato", t["ref"], t["data"], t["valor"] if t["valor"] > 0 else 0, -t["valor"] if t["valor"] < 0 else 0, t["texto"])
         for x in linhas:
             if x["situacao"] == "nova":
                 did = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, categoria, justificativa, mp_ref, criado_por)
@@ -595,7 +609,7 @@ def rodada_mp(con, wp=None, force: bool = False, max_pedidos: int = 3) -> dict:
             arq = prontos.get(de)
             novo = arq and (not st["baixado_em"] or (st["pedido_em"] and str(arq.get("criado") or "9") >= st["pedido_em"][:10] and arq.get("arquivo") != st["arquivo"]))
             if arq and novo:
-                rd = wp.h.get(ROTA_REL, params={"arquivo": arq["arquivo"]})
+                rd = wp.h.get(ROTA_REL, params={"arquivo": arq["arquivo"], "todas": 1})   # contrato 1.37: também as entradas (site antigo ignora)
                 if rd.status_code < 400:
                     imp = importar_saidas_mp(con, (rd.json() or {}).get("itens") or [])
                     con.execute("UPDATE mp_relatorio SET arquivo=?, baixado_em=?, linhas=?, erro=NULL WHERE periodo=?",
@@ -658,7 +672,27 @@ def estado_saidas(con) -> dict:
         except ValueError:
             prox = None
     pend = [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")]
-    return {"ligado": _cfg(con, "despesas.mp_relatorio", "1") == "1", "tem_site": fi._tem_site(con), "coleta_min": m,
+    # CAMP-FIN (Rafael: "ainda estou sentindo falta de outras despesas"): as três fontes das saídas, cada uma com o que trouxe e quando.
+    # Pix enviado, transferência e boleto NÃO são "pagamentos" no Mercado Pago: só chegam pelo relatório de liberações ou pelo Extrato.
+    em = fi.estado_mp(con)
+    x = con.execute("SELECT MAX(data) AS ate, MAX(criado_em) AS quando, COUNT(*) AS n FROM despesa WHERE chave LIKE 'mpx:%' AND apagado_em IS NULL").fetchone()
+    hoje = fi.hoje()
+    mes = hoje.strftime("%Y-%m")
+    rel_mes = next((p_ for p_ in pend if p_["periodo"] == mes and p_["baixado_em"]), None)
+    rel_ok = bool(g("ultimo_recebido")) and g("config") != "falta" and not g("erro")
+    extrato_mes = bool(x["ate"] and x["ate"] >= hoje.replace(day=1).isoformat())
+    fontes = {
+        "pagamentos": {"ultima_busca": em.get("ultima_busca") or None, "de": em.get("de") or None, "ate": em.get("ate") or None,
+                       "erro": em.get("ultimo_erro") or None, "busca_pagos": em.get("busca_pagos"), "em_andamento": em.get("em_andamento")},
+        # configurado: True (configuração conferida ou relatório recebido), False (o Mercado Pago disse que falta), None (ainda não verificado)
+        "relatorio": {"configurado": False if (g("config") == "falta" or g("erro_codigo") == "sem_config") else (True if (g("config") == "ok" or g("ultimo_recebido")) else None),
+                      "ultimo_recebido": g("ultimo_recebido") or None,
+                      "mes_recebido": bool(rel_mes), "erro": g("erro") or None},
+        "extrato": {"importado_ate": x["ate"], "ultima_importacao": x["quando"], "saidas": x["n"], "mes_importado": extrato_mes},
+        # sem o relatório do mês nem o Extrato do mês, Pix enviados, transferências e boletos deste mês ainda não estão nas despesas
+        "faltam_transferencias": not (rel_mes or extrato_mes), "mes": mes, "relatorio_ok": rel_ok,
+    }
+    return {"fontes": fontes, "ligado": _cfg(con, "despesas.mp_relatorio", "1") == "1", "tem_site": fi._tem_site(con), "coleta_min": m,
             "em_andamento": _BUSCA.locked(), "ultima_volta": g("ultima_volta") or None, "ultimo_pedido": g("ultimo_pedido") or None,
             "ultimo_recebido": g("ultimo_recebido") or None, "proxima": prox,
             "importadas": con.execute("SELECT COUNT(*) FROM despesa WHERE origem='mp' AND apagado_em IS NULL").fetchone()[0],
@@ -1173,8 +1207,14 @@ def comprovante(did: int, b: Comprovante, u: dict = Depends(auth.exige("admin"))
             raise HTTPException(400, "Comprovante grande demais (até 15 MB).")
         nm = nome_limpo(b.nome, "jpg" if ext == "jpeg" else ext)
         mime = {"pdf": "application/pdf", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+        sha = hashlib.sha256(dados).hexdigest()
+        # CAMP-FIN (Rafael: a mesma nota apareceu duas vezes): o mesmo arquivo nesta despesa não entra de novo; em OUTRA despesa entra, com aviso.
+        if con.execute("SELECT 1 FROM despesa_anexo WHERE despesa_id=? AND sha256=? AND apagado_em IS NULL", (did, sha)).fetchone():
+            raise HTTPException(409, "Este arquivo já está anexado a esta despesa.")
+        outra = con.execute("""SELECT d.id, d.data, d.valor, COALESCE(NULLIF(d.contraparte,''), d.descricao) AS quem FROM despesa_anexo a JOIN despesa d ON d.id=a.despesa_id
+                               WHERE a.sha256=? AND a.apagado_em IS NULL AND a.despesa_id<>? AND d.apagado_em IS NULL ORDER BY a.id LIMIT 1""", (sha, did)).fetchone()
         aid = con.execute("INSERT INTO despesa_anexo (despesa_id, nome, arquivo, mime, tamanho, sha256, criado_por) VALUES (?,?,?,?,?,?,?)",
-                          (did, nm, "", mime, len(dados), hashlib.sha256(dados).hexdigest(), _ator(u))).lastrowid
+                          (did, nm, "", mime, len(dados), sha, _ator(u))).lastrowid
         (pasta() / str(did)).mkdir(parents=True, exist_ok=True)
         rel = f"{did}/{aid}_{secrets.token_hex(4)}.{ext}"
         (pasta() / rel).write_bytes(dados)
@@ -1183,7 +1223,12 @@ def comprovante(did: int, b: Comprovante, u: dict = Depends(auth.exige("admin"))
         from .notas_fiscais import ao_anexar   # a nota pedida ao fornecedor chegou: limpa "nota pedida"
         ao_anexar(con, did, _ator(u))
         con.commit()
-        return _detalhe(con, did)
+        out = _detalhe(con, did)
+        if outra:
+            dd = outra["data"] or ""
+            out["aviso"] = (f"Atenção: o mesmo arquivo também está na despesa de {dd[8:10]}/{dd[5:7]}/{dd[:4]} · R$ {outra['valor']:.2f}".replace(".", ",")
+                            + (f" · {outra['quem']}" if outra["quem"] else "") + ". Se foi engano, use Tirar este comprovante.")
+        return out
     finally:
         con.close()
 
@@ -1192,7 +1237,7 @@ def comprovante(did: int, b: Comprovante, u: dict = Depends(auth.exige("admin"))
 def comprovante_baixar(did: int, aid: int, u: dict = Depends(auth.exige("admin"))):
     con = connect()
     try:
-        r = con.execute("SELECT * FROM despesa_anexo WHERE id=? AND despesa_id=?", (aid, did)).fetchone()
+        r = con.execute("SELECT * FROM despesa_anexo WHERE id=? AND despesa_id=? AND apagado_em IS NULL", (aid, did)).fetchone()
     finally:
         con.close()
     if not r:
@@ -1200,25 +1245,25 @@ def comprovante_baixar(did: int, aid: int, u: dict = Depends(auth.exige("admin")
     f = (pasta() / r["arquivo"]).resolve()
     if not r["arquivo"] or pasta().resolve() not in f.parents or not f.is_file():
         raise HTTPException(404, "Arquivo do comprovante não encontrado")
-    return FileResponse(f, media_type=r["mime"] or "application/octet-stream", filename=r["nome"], content_disposition_type="inline")
+    resp = FileResponse(f, media_type=r["mime"] or "application/octet-stream", filename=r["nome"], content_disposition_type="inline")
+    # CAMP-FIN: a prévia do PDF no painel lateral é um <iframe> da mesma origem; com o X-Frame-Options: DENY de todas as respostas o navegador
+    # mostrava o ícone de arquivo quebrado. Só esta rota permite ser mostrada pelo próprio painel (SAMEORIGIN), nunca por outro site.
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+    resp.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+    return resp
 
 
 @router.delete("/{did}/comprovante/{aid}")
 def comprovante_apagar(did: int, aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
-        r = con.execute("SELECT * FROM despesa_anexo WHERE id=? AND despesa_id=?", (aid, did)).fetchone()
+        r = con.execute("SELECT * FROM despesa_anexo WHERE id=? AND despesa_id=? AND apagado_em IS NULL", (aid, did)).fetchone()
         if not r:
             raise HTTPException(404, "Comprovante não encontrado")
-        con.execute("DELETE FROM despesa_anexo WHERE id=?", (aid,))
+        # CAMP-FIN (Rafael: "subi a nota errada"): sai da despesa, mas o arquivo e a linha ficam (apagado_em), com registro no histórico.
+        con.execute("UPDATE despesa_anexo SET apagado_em=datetime('now'), apagado_por=? WHERE id=?", (_ator(u), aid))
         _ev(con, did, "comprovante_apagado", _ator(u), {"anexo": aid, "nome": r["nome"]})
         con.commit()
-        try:
-            f = (pasta() / r["arquivo"]).resolve()
-            if pasta().resolve() in f.parents and f.is_file():
-                f.unlink()
-        except OSError:
-            pass
         return _detalhe(con, did)
     finally:
         con.close()

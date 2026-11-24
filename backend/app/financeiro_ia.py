@@ -244,7 +244,7 @@ def ler_comprovante(con, despesa_id: int, anexo_id: int) -> dict:
     fn = LEITORES.get(nome)
     if not fn:
         raise HTTPException(409, "Nenhum leitor de comprovantes configurado no painel. É preciso um leitor (cliente de visão) e o nome dele em financeiro.leitor. Nada foi enviado.")
-    r = con.execute("SELECT arquivo, mime FROM despesa_anexo WHERE id=? AND despesa_id=?", (anexo_id, despesa_id)).fetchone()
+    r = con.execute("SELECT arquivo, mime FROM despesa_anexo WHERE id=? AND despesa_id=? AND apagado_em IS NULL", (anexo_id, despesa_id)).fetchone()
     if not r:
         raise HTTPException(404, "Comprovante não encontrado")
     f = (_desp().pasta() / r["arquivo"]).resolve()

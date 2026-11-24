@@ -79,6 +79,8 @@ MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
+MODOS_RAPIDOS |= {"financeiro_mp_livro"}   # CAMP-FIN 24/11/2026: o livro da conta (relatório de liberações + Extrato, com sinal) decide entrada/saída; VINDI −1.707,34; −472,24 exato; liberações não são receita nova (linha própria)
+MODOS_RAPIDOS |= {"financeiro_comprovante_saidas"}   # CAMP-FIN 24/11/2026: prévia do PDF (SAMEORIGIN), tirar/trocar comprovante, título da saída, compra só da busca payer.id, fontes das saídas (linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_saida_sem_direcao"}   # CAMP-FIN 24/11/2026: Pix pago a empresa, Pix enviado e cartão SEM direção entravam como receita (contrato 1.36; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_direcao"}   # CAMP-FIN 24/11/2026: compra paga PELA CAMP (Anthropic* claude sub) aparecia como receita; direção do site, heurística, refazer, sem duplicar, Isto é uma saída/entrada; linha própria
 
@@ -20594,6 +20596,202 @@ def filho(modo):
         ver("referência CAMP-… é sempre recebido, mesmo com descrição de saída", fi.direcao_mp({"descricao": "Pagamento com Pix", "external_reference": "CAMP-COB-1"})[0] == "entrada")
         for l in res: print(l)
 
+    elif modo == "financeiro_comprovante_saidas":
+        # CAMP-FIN (24/11/2026). Rafael (print de uma despesa do Mercado Pago, −R$ 482,24): "subi a nota errada, e ainda estou sentindo falta de outras
+        # despesas.. paguei uma compra de mais de 1700 reais e não está lá". Prova: (1) a prévia do PDF é mostrada pelo próprio painel (a rota do
+        # comprovante responde X-Frame-Options SAMEORIGIN; o resto continua DENY); (2) "Tirar este comprovante" tira da despesa sem apagar o arquivo,
+        # com histórico; o mesmo arquivo não entra duas vezes; em outra despesa entra com aviso; (3) o título de uma saída nunca é "Recebido direto
+        # no Mercado Pago" (o rótulo da receita); linhas antigas são limpas; (4) a compra de R$ 1.749,90 que o site 1.46.0 traz pela busca payer.id
+        # vira despesa; busca_pagos guardado; "Buscar outro período" valida o período; (5) as fontes das saídas na tela de Despesas.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import sys as _s, base64 as _b64
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, despesas as dp
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        sf.semear(c)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        D = "/api/financeiro/despesas"
+        d1 = x.post(D, json={"data": "2026-11-21", "valor": 482.24, "meio": "saldo", "contraparte": "Loja de Climatização", "conta_id": 1, "categoria": "manutencao", "justificativa": "desumidificador"}).json()
+        d2 = x.post(D, json={"data": "2026-11-22", "valor": 90, "meio": "pix", "contraparte": "Papelaria", "conta_id": 1, "categoria": "materiais", "justificativa": "papel"}).json()
+        pdf = b"%PDF-1.4\n%nota 215-453\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+        b64 = _b64.b64encode(pdf).decode()
+        r1 = x.post(f"{D}/{d1['id']}/comprovante", json={"nome": "COMPRA NF 215-453 - Desumidificador.pdf", "base64": b64})
+        aid = r1.json()["anexos"][0]["id"]
+        rv = x.get(f"{D}/{d1['id']}/comprovante/{aid}")
+        ver("prévia do PDF: a rota do comprovante deixa o próprio painel mostrar (SAMEORIGIN, frame-ancestors 'self'), inline, application/pdf",
+            rv.status_code == 200 and rv.headers.get("x-frame-options") == "SAMEORIGIN" and "frame-ancestors 'self'" in rv.headers.get("content-security-policy", "")
+            and rv.headers.get("content-type", "").startswith("application/pdf") and rv.headers.get("content-disposition", "").startswith("inline"), dict(rv.headers))
+        ver("as outras respostas continuam X-Frame-Options DENY", x.get(f"{D}/{d1['id']}").headers.get("x-frame-options") == "DENY")
+        r2 = x.post(f"{D}/{d1['id']}/comprovante", json={"nome": "copia.pdf", "base64": b64})
+        ver("o mesmo arquivo na mesma despesa não entra de novo (409)", r2.status_code == 409 and "já está anexado" in r2.json().get("erro", "")
+            and len(x.get(f"{D}/{d1['id']}").json()["anexos"]) == 1, (r2.status_code, r2.text[:200]))
+        r3 = x.post(f"{D}/{d2['id']}/comprovante", json={"nome": "nota.pdf", "base64": b64})
+        ver("o mesmo arquivo em OUTRA despesa entra, com aviso de qual", r3.status_code == 200 and "também está na despesa de 21/11/2026" in (r3.json().get("aviso") or "")
+            and "Loja de Climatização" in r3.json()["aviso"], r3.json().get("aviso"))
+        arq = c.execute("SELECT arquivo FROM despesa_anexo WHERE id=?", (aid,)).fetchone()[0]
+        rt = x.request("DELETE", f"{D}/{d1['id']}/comprovante/{aid}")
+        lin = c.execute("SELECT apagado_em, apagado_por FROM despesa_anexo WHERE id=?", (aid,)).fetchone()
+        ver("Tirar este comprovante: sai da despesa (volta a faltar comprovante), mas a linha e o arquivo ficam (apagado_em/apagado_por)",
+            rt.status_code == 200 and rt.json()["anexos"] == [] and lin is not None and lin[0] and lin[1] == "adm@camp.arq.br" and (dp.pasta() / arq).is_file(), (rt.status_code, tuple(lin) if lin else None))
+        ver("a retirada fica no histórico; o arquivo tirado não abre mais pela despesa (404)", any(h["tipo"] == "comprovante_apagado" for h in rt.json().get("historico", []))
+            and x.get(f"{D}/{d1['id']}/comprovante/{aid}").status_code == 404, [h["tipo"] for h in rt.json().get("historico", [])])
+        r4 = x.post(f"{D}/{d1['id']}/comprovante", json={"nome": "nota-certa.pdf", "base64": _b64.b64encode(pdf + b"%certa\n").decode()})
+        ver("trocar: o certo entra (o tirado não conta para repetido)", r4.status_code == 200 and [a_["nome"] for a_ in r4.json()["anexos"]] == ["nota-certa.pdf"], r4.text[:200])
+        # (3) título da saída
+        c.execute("""INSERT INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, metodo, external_reference, descricao, pagador)
+                     VALUES ('190892406292', '2026-11-21 13:00:00', 'approved', 482.24, 0, 482.24, 'account_money', 'account_money', NULL, NULL, NULL)"""); c.commit()
+        rs = x.post("/api/financeiro/mp/190892406292/saida", json={})
+        dd = c.execute("SELECT contraparte FROM despesa WHERE mp_ref='190892406292' AND apagado_em IS NULL").fetchone()
+        ver("'Isto é uma saída' numa receita sem nome: a despesa NÃO ganha 'Recebido direto no Mercado Pago' como quem recebeu", rs.status_code == 200 and dd is not None
+            and (dd[0] or "") != "Recebido direto no Mercado Pago" and not fi.rotulo_generico(dd[0] or "x"), (rs.status_code, tuple(dd) if dd else None))
+        c.execute("UPDATE despesa SET contraparte='Recebido direto no Mercado Pago' WHERE mp_ref='190892406292'"); c.commit()
+        fi.reprocessar_saidas_mp(c)
+        ver("linha antiga com o rótulo no lugar de quem recebeu: o refazer limpa", (c.execute("SELECT contraparte FROM despesa WHERE mp_ref='190892406292'").fetchone()[0] or "") == "")
+        ver("rótulos nunca são quem recebeu; nomes de verdade são", all(fi.rotulo_generico(t) for t in ("Recebido direto no Mercado Pago", "Pagamento com o saldo do Mercado Pago · confira", "Pix enviado", "Doação (cobrança avulsa)"))
+            and not any(fi.rotulo_generico(t) for t in ("Danilo", "Anthropic* claude sub", "DSC - MATERIAIS PARA CONSTRUCAO LTDA")))
+        # (4) a compra só da busca payer.id (site 1.46.0)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        PEDIDOS = []
+        class H:
+            def get(s, path, params=None):
+                PEDIDOS.append(dict(params or {}))
+                return Resp(200, {"itens": [{"id": "1324001", "date_approved": "2026-11-18T14:00:00.000-03:00", "status": "approved", "transaction_amount": 1749.9, "fee_details": [],
+                                             "tarifa": 0, "net_received_amount": 1749.9, "payment_type_id": "credit_card", "payment_method_id": "visa", "external_reference": "",
+                                             "description": "Desumidificador", "pagador": "", "direcao": "saida", "contraparte": "Loja de Desumidificadores", "valor_debitado": 1749.9}],
+                                  "mais": False, "pagina": 1, "busca_pagos": "ok", "pagos": 1, "total_pagos": 1})
+        class WPF: h = H()
+        o = fi.coletar_mp(c, WPF(), de="2026-08-01", ate="2026-11-24")
+        dc = c.execute("SELECT valor, contraparte FROM despesa WHERE mp_ref='1324001' AND apagado_em IS NULL").fetchone()
+        ver("a compra de R$ 1.749,90 paga pela CAMP (site 1.46.0, busca payer.id) vira despesa com quem recebeu", not o["erro"] and dc is not None and dc[0] == 1749.9
+            and dc[1] == "Loja de Desumidificadores" and PEDIDOS[0]["desde"] == "2026-08-01", (o, tuple(dc) if dc else None))
+        em = x.get("/api/financeiro/mp/estado").json()
+        ver("estado guarda busca_pagos e o período lido", em.get("busca_pagos") == "ok" and em.get("ultimo_periodo") == "2026-08-01|2026-11-24", em)
+        ver("Buscar outro período: período inválido é recusado (antes de 2020, invertido, mais de 12 meses)", all(x.post("/api/financeiro/mp/sincronizar", json=b_).status_code == 400
+            for b_ in ({"de": "2019-12-01", "ate": "2020-01-01"}, {"de": "2026-11-10", "ate": "2026-11-01"}, {"de": "2025-01-01", "ate": "2026-11-01"}, {"de": "ontem", "ate": ""})))
+        ver("período válido: datas normalizadas (até no máximo hoje)", fi.periodo_valido("2026-08-01", "2026-12-31") == ("2026-08-01", "2026-11-24") and fi.periodo_valido("", "") == (None, None))
+        # (5) fontes das saídas
+        F = x.get(f"{D}/mp/estado").json().get("fontes") or {}
+        ver("fontes das saídas: compras (busca de pagamentos), relatório de liberações, Extrato; sem relatório nem Extrato do mês, faltam Pix enviados/transferências/boletos",
+            set(F) >= {"pagamentos", "relatorio", "extrato", "faltam_transferencias", "mes"} and F["pagamentos"]["busca_pagos"] == "ok" and F["faltam_transferencias"] is True
+            and F["extrato"]["importado_ate"] is None and F["mes"] == "2026-11" and F["relatorio"]["configurado"] is None, F)
+        CSV = ("RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE\n20-11-2026;Pix enviado Danilo;99887766;-750,00;250,00\n")
+        x.post(f"{D}/extrato-mp", json={"base64": _b64.b64encode(CSV.encode()).decode(), "aplicar": True})
+        F = x.get(f"{D}/mp/estado").json()["fontes"]
+        ver("Extrato do mês importado: diz até quando e para de avisar", F["extrato"]["importado_ate"] == "2026-11-20" and F["extrato"]["mes_importado"] is True and F["faltam_transferencias"] is False, F["extrato"])
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: Tirar este comprovante, Trocar, Buscar outro período, fontes e título 'Pago pelo Mercado Pago'", all(t in html for t in ("Tirar este comprovante", "data-fin-troca",
+            "Buscar outro período", "finFontesHTML", "Pago pelo Mercado Pago", "grid-template-columns:minmax(0,1fr)")))
+        for l in res: print(l)
+
+    elif modo == "financeiro_mp_livro":
+        # CAMP-FIN (24/11/2026). Rafael: a direção tem de vir do sistema, de forma confiável, pela documentação do Mercado Pago — não por palpite na
+        # descrição. O livro da conta = as linhas do relatório de liberações (NET_CREDIT_AMOUNT/NET_DEBIT_AMOUNT) e do Extrato (valor com sinal),
+        # juntadas pela referência (SOURCE_ID/REFERENCE_ID). Linhas reais do Extrato do Rafael: VINDI −1.707,34 (Pix pago com o saldo, id
+        # alfanumérico, não está em payments/search), "Pagamento" −472,24 (o painel mostrava −482,24), DSC −69, Danilo −750, Anthropic −569,25, e as
+        # liberações +57,02/+228,05/+427,58/+118,81 (vendas já contadas: não são receita nova).
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import sys as _s, base64 as _b64
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, despesas as dp
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        sf.semear(c)
+        ver("migração 258: o livro da conta (mp_movimento)", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='mp_movimento'").fetchone()[0] == 1)
+        def pg(mid, quando, valor, liq, meio, metodo, desc, direcao="", debitado=None, contraparte=""):
+            c.execute("""INSERT INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, metodo, external_reference, descricao, pagador, direcao, contraparte, debitado)
+                         VALUES (?,?, 'approved', ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?)""", (mid, quando, valor, round(abs(valor - liq), 2), liq, meio, metodo, desc, direcao or None, contraparte or None, debitado))
+        cols = {r[1] for r in c.execute("PRAGMA table_info(mp_pagamento)")}
+        ver("mp_pagamento guarda direção, contraparte e débito do site", {"direcao", "contraparte", "debitado"} <= cols, sorted(cols))
+        # pagamentos como vieram do site 1.45.0: a compra de 472,24 com o débito somando a tarifa do vendedor (482,24); três vendas recebidas; uma
+        # receita que a heurística chamaria de saída ("Pagamento com Pix"), mas o relatório diz crédito; uma "entrada" do site que o Extrato diz débito
+        pg("190892406292", "2026-11-21 13:00:00", 472.24, 462.24, "account_money", "account_money", "Pagamento", "saida", 482.24)
+        pg("190000000001", "2026-11-12 10:00:00", 60.0, 57.02, "bank_transfer", "pix", "Venda", "entrada")
+        pg("190000000002", "2026-11-13 10:00:00", 240.0, 228.05, "bank_transfer", "pix", "Venda", "entrada")
+        pg("190000000003", "2026-11-14 10:00:00", 450.0, 427.58, "credit_card", "visa", "Venda", "entrada")
+        pg("190000000004", "2026-11-15 10:00:00", 125.0, 118.81, "bank_transfer", "pix", "Venda com Pix", "entrada")
+        pg("190000000005", "2026-11-16 10:00:00", 300.0, 285.0, "bank_transfer", "pix", "Pagamento com Pix")
+        pg("190000000006", "2026-11-17 10:00:00", 88.0, 88.0, "account_money", "account_money", "Mensalidade", "entrada")
+        c.commit()
+        rec0 = {x["mp_id"]: x["bruto"] for x in fi.livro(c, "2026-11-01", "2026-11-30")["linhas"] if x["mp_id"]}
+        ver("sem o livro: a heurística ainda chama 'Pagamento com Pix' de saída (é só o último recurso, com 'confira')", "190000000005" not in rec0, sorted(rec0))
+        # relatório de liberações com as entradas (site 1.46.0, todas=1): o sinal decide
+        REL = [{"linha": 2, "data": "2026-11-18T22:59:00.000-03:00", "source_id": "B33MMZEM0GVXCMCKZ", "descricao": "payment", "debito": 1707.34, "credito": 0, "meio_tipo": "account_money", "meio": "pix", "direcao": "saida"},
+               {"linha": 3, "data": "2026-11-16T12:00:00.000-03:00", "source_id": "190000000005", "descricao": "payment", "debito": 0, "credito": 285.0, "direcao": "entrada"},
+               {"linha": 4, "data": "2026-11-16T12:00:00.000-03:00", "source_id": "190000000005", "descricao": "tax_withholding_collector", "debito": 1.2, "credito": 0},
+               {"linha": 5, "data": "2026-11-19T12:00:00.000-03:00", "source_id": "190000000001", "descricao": "payment", "debito": 0, "credito": 57.02, "direcao": "entrada"}]
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        PED = []
+        class H:
+            def get(s, path, params=None):
+                if path == dp.ROTA_RELS: return Resp(200, {"itens": [{"arquivo": "camp-liberacoes-2026-11-01.csv", "begin_date": "2026-11-01T03:00:00Z", "status": "processed", "criado": "2026-11-24T12:00:00Z"}]})
+                if path == dp.ROTA_REL: PED.append(dict(params or {})); return Resp(200, {"arquivo": params["arquivo"], "itens": REL, "todas": True})
+                return Resp(404, {})
+            def post(s, path, json=None): return Resp(202, {"ok": True, "pedido": True})
+        class WPF: h = H()
+        dp.rodada_mp(c, WPF(), force=True)
+        ver("o painel pede o relatório com as entradas (todas=1)", PED and all(p_.get("todas") == 1 for p_ in PED), PED)
+        mv = fi.movimentos(c)
+        ver("livro: VINDI só débito (saída); 190000000005 crédito (entrada; o imposto do recebedor não conta para a direção)",
+            mv.get("B33MMZEM0GVXCMCKZ", {}).get("direcao") == "saida" and mv["B33MMZEM0GVXCMCKZ"]["debito"] == 1707.34 and mv.get("190000000005", {}).get("direcao") == "entrada", {k: mv[k] for k in list(mv)[:4]})
+        def desp(ref): return [dict(r) for r in c.execute("SELECT * FROM despesa WHERE mp_ref=? AND apagado_em IS NULL AND COALESCE(categoria,'') NOT IN ('tarifas','impostos')", (ref,))]
+        ver("VINDI (Pix pago com o saldo, fora de payments/search) entra como despesa de R$ 1.707,34 pelo relatório", len(desp("B33MMZEM0GVXCMCKZ")) == 1 and desp("B33MMZEM0GVXCMCKZ")[0]["valor"] == 1707.34, desp("B33MMZEM0GVXCMCKZ"))
+        fi.reprocessar_saidas_mp(c)
+        R1 = {x["mp_id"]: x["bruto"] for x in fi.livro(c, "2026-11-01", "2026-11-30")["linhas"] if x["mp_id"]}
+        ver("o crédito do relatório vence a descrição: 'Pagamento com Pix' de R$ 300 recebido é RECEITA (sem 'confira'), não despesa", R1.get("190000000005") == 300.0 and not desp("190000000005"), (R1.get("190000000005"), desp("190000000005")))
+        # Extrato do Rafael (CSV, com sinal)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        CSV = ("RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE\n"
+               "18-11-2026;VINDI INTERMEDIADORA SA · Pagamento com Pix;B33MMZEM0GVXCMCKZ;-1.707,34;1.357,22\n"
+               "19-11-2026;Liberação de dinheiro;190000000001;57,02;1.414,24\n"
+               "19-11-2026;Liberação de dinheiro;190000000002;228,05;1.642,29\n"
+               "19-11-2026;Liberação de dinheiro;190000000003;427,58;2.069,87\n"
+               "19-11-2026;Venda com Pix · Liberação de dinheiro;190000000004;118,81;2.188,68\n"
+               "19-11-2026;DSC - MATERIAIS PARA CONSTRUCAO LTDA · Pagamento com Pix;55500001;-69,00;2.119,68\n"
+               "20-11-2026;Danilo · Pix enviado;55500002;-750,00;1.369,68\n"
+               "21-11-2026;Pagamento;190892406292;-472,24;897,44\n"
+               "21-11-2026;Anthropic* claude sub · Pagamento;189801616943;-569,25;328,19\n"
+               "22-11-2026;Mensalidade;190000000006;-88,00;240,19\n")
+        ri = x.post("/api/financeiro/despesas/extrato-mp", json={"base64": _b64.b64encode(CSV.encode()).decode(), "aplicar": True}).json()
+        x.get("/api/financeiro/despesas?mes=2026-11"); fi.reprocessar_saidas_mp(c)
+        ver("Extrato: VINDI não duplica (já veio do relatório: completa)", len(desp("B33MMZEM0GVXCMCKZ")) == 1, (ri.get("novas"), ri.get("completadas"), desp("B33MMZEM0GVXCMCKZ")))
+        d472 = desp("190892406292")
+        ver("'Pagamento' −472,24: a despesa fica com o valor EXATO do Extrato (era 482,24: o site somava a tarifa do vendedor), com registro", len(d472) == 1 and d472[0]["valor"] == 472.24
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='despesa' AND codigo=? AND tipo='valor_corrigido'", (str(d472[0]["id"]),)).fetchone()[0] == 1, d472)
+        ver("DSC −69, Danilo −750, Anthropic −569,25: despesas pelo valor exato", [sum(d_["valor"] for d_ in desp(r_)) for r_ in ("55500001", "55500002", "189801616943")] == [69.0, 750.0, 569.25],
+            [desp(r_) for r_ in ("55500001", "55500002", "189801616943")])
+        R2 = {x_["mp_id"]: x_["bruto"] for x_ in fi.livro(c, "2026-11-01", "2026-11-30")["linhas"] if x_["mp_id"]}
+        ver("liberações (+57,02, +228,05, +427,58, +118,81) não são receita nova: cada venda conta uma vez, pelo valor bruto do pagamento",
+            [R2.get(m) for m in ("190000000001", "190000000002", "190000000003", "190000000004")] == [60.0, 240.0, 450.0, 125.0]
+            and sum(1 for m in R2 if m.startswith("1900000000")) == sum(1 for m in R1 if m.startswith("1900000000")) - 1, sorted(R2.items()))
+        ver("o débito do Extrato vence o site: 'Mensalidade' que o site chamou de entrada saiu da conta (−88): vira despesa, sai das receitas",
+            "190000000006" not in R2 and len(desp("190000000006")) == 1 and desp("190000000006")[0]["valor"] == 88.0, (R2.get("190000000006"), desp("190000000006")))
+        ver("nenhuma saída do livro ficou com 'confira' (o aviso é só para o último recurso)", not [d_ for r_ in ("B33MMZEM0GVXCMCKZ", "190892406292", "190000000006") for d_ in desp(r_) if fi.AVISO_PROVAVEL in (d_["descricao"] or "")])
+        tot_rec = sum(x_["bruto"] for x_ in fi.livro(c, "2026-11-01", "2026-11-30")["linhas"] if x_["mp_id"] and x_["mp_id"].startswith("1900000000"))
+        ver("total das receitas destas vendas: 60 + 240 + 450 + 125 + 300 = 1.175 (sem as liberações)", round(tot_rec, 2) == 1175.0, tot_rec)
+        fi.reprocessar_saidas_mp(c); x.post("/api/financeiro/despesas/extrato-mp", json={"base64": _b64.b64encode(CSV.encode()).decode(), "aplicar": True}); fi.reprocessar_saidas_mp(c)
+        ver("importar e refazer de novo: o livro e as despesas não repetem", c.execute("SELECT COUNT(*) FROM mp_movimento WHERE fonte='extrato'").fetchone()[0] == 10
+            and all(len(desp(r_)) == 1 for r_ in ("B33MMZEM0GVXCMCKZ", "190892406292", "55500001", "55500002", "189801616943", "190000000006")))
+        for l in res: print(l)
+
     elif modo == "financeiro_mp_direcao":
         # CAMP-FIN (24/11/2026). Rafael, no print de Financeiro → Receitas: "isso é despesa… presta atenção". "Anthropic* claude sub" (assinatura
         # paga pela CAMP com o saldo do Mercado Pago, −R$ 569,25 no Extrato) aparecia como RECEITA "Recebido direto no Mercado Pago" (bruto
@@ -25232,6 +25430,24 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saída sem direção: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Financeiro · saída sem direção: todas as verificações rodaram")
+
+print("Financeiro · o livro da conta do Mercado Pago (sinal do relatório e do Extrato) decide entrada ou saída")
+rc, out = rodar("financeiro_mp_livro", f"{tmp}/financeiro_mp_livro.db")
+if rc != 0: ok(False, f"teste financeiro_mp_livro não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · livro do Mercado Pago: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 15, "Financeiro · livro do Mercado Pago: todas as verificações rodaram")
+
+print("Financeiro · comprovante (prévia, tirar, trocar), título da saída, compras pagas pela CAMP e fontes das saídas")
+rc, out = rodar("financeiro_comprovante_saidas", f"{tmp}/financeiro_comprovante_saidas.db")
+if rc != 0: ok(False, f"teste financeiro_comprovante_saidas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · comprovante e saídas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 17, "Financeiro · comprovante e saídas: todas as verificações rodaram")
 
 print("Financeiro · entrada ou saída do Mercado Pago: compra paga pela CAMP não é receita; site antigo (heurística); refazer linhas antigas; sem duplicar; Isto é uma saída/entrada")
 rc, out = rodar("financeiro_mp_direcao", f"{tmp}/financeiro_mp_direcao.db")
