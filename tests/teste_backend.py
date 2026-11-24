@@ -76,6 +76,7 @@ MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade expli
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
+MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -20218,6 +20219,24 @@ def filho(modo):
         zn = _zf.ZipFile(_io.BytesIO(zr.content)).namelist()
         ver("Exportar comprovantes do período (ZIP)", zr.status_code == 200 and len(zn) == 1 and zn[0].endswith("nota-frete.jpg"), zn)
         for l in res: print(l)
+    elif modo == "financeiro_tela_branca":
+        # CAMP-FIN-CONSERTOS (24/11/2026). Rafael: "em qualquer aba, se eu clico num item pra ter infos dele, simplesmente fica tudo branco".
+        # Causa: o painel lateral da receita tinha um <div class="fin-fila"> esquecido e ".fin-fila" era a camada FIXA de tela inteira da fila
+        # "Precisa justificar". Guarda rápida (roda no atualizar.sh); o comportamento é provado no navegador (tests/navegador_financeiro_cliques.js:
+        # clica em todos os itens de todas as abas a 1440 e 2000 px, a fila, o endereço com aba/período/conta/detalhe, recarregar e Voltar).
+        import re as _re
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("nenhum elemento com a classe da fila fora da própria fila (#fin-fila)", [m.group(0) for m in _re.finditer(r'class="fin-fila[" ][^>]*', html) if 'id="fin-fila"' not in m.group(0)] == [],
+            [m.group(0)[:60] for m in _re.finditer(r'class="fin-fila[" ][^>]*', html) if 'id="fin-fila"' not in m.group(0)])
+        ver("a camada de tela inteira é só a #fin-fila (não a classe)", "#fin-fila{position:fixed;inset:0" in html and ".fin-fila{position:fixed" not in html)
+        ver("painel lateral, fundo e fila escondidos respeitam o hidden", "#fin-lado[hidden],#fin-fundo[hidden],#fin-fila[hidden]{display:none!important}" in html)
+        ver("entrar no Financeiro pelo endereço fecha o painel lateral e a fila que ficaram abertos", "function finFecharCamadas()" in html and "finLerRota(route);finFecharCamadas();" in html)
+        ver("uma aba que falha mostra o aviso só nela, com Tentar de novo", "function finErroAba(aba,e)" in html and "data-fin-acao=\"tentar-aba\"" in html and "Object.entries(FIN_RENDER).forEach" in html)
+        ver("estado no endereço: aba, período, conta e detalhe", "function finRota()" in html and "carregarFinanceiro(a1,route)" in html and "finUrl('push')" in html)
+        for l in res: print(l)
+
     elif modo == "financeiro_nota_fiscal":
         # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor. Rafael: "preparar para criar cobrança de nota fiscal para algum fornecedor". Prova: dados
         # da CAMP vazios bloqueiam com mensagem clara; texto certo (PRONAC na conta do projeto ou na rubrica; sem PRONAC nas outras); e-mail pelo SMTP
@@ -24693,6 +24712,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · despesas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 29, "Financeiro · despesas: todas as verificações rodaram")
+
+print("Financeiro · tela branca ao clicar num item (camada fixa esquecida) e estado no endereço: guarda rápida")
+rc, out = rodar("financeiro_tela_branca", f"{tmp}/financeiro_tela_branca.db")
+if rc != 0: ok(False, f"teste financeiro_tela_branca não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · tela branca: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Financeiro · tela branca: todas as verificações rodaram")
 
 print("Financeiro · pedir nota fiscal ao fornecedor: dados da CAMP, texto com PRONAC, SMTP do painel falso, nota pedida, lembrete na Home, Pedir de novo, comprovante, memória do fornecedor, LGPD, papéis")
 rc, out = rodar("financeiro_nota_fiscal", f"{tmp}/financeiro_nota_fiscal.db")
