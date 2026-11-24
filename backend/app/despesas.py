@@ -129,7 +129,8 @@ def _linha(con, r, cats: dict, contas: dict) -> dict:
             "origem": r["origem"], "tipo": r["tipo"], "categoria": r["categoria"] or "", "categoria_nome": cats.get(r["categoria"] or "", "") if r["categoria"] else "",
             "justificativa": r["justificativa"] or "", "projeto": r["projeto"] or "", "restrito": bool(r["restrito"]), "vinculo_tipo": r["vinculo_tipo"] or "",
             "vinculo_ref": r["vinculo_ref"] or "", "tarefa_id": r["tarefa_id"], "mp_ref": r["mp_ref"] or "", "anexos": ax, "falta": pendente(r, len(ax)),
-            "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito"))}
+            "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito")),
+            "nota_pedida_em": r["nota_pedida_em"] if "nota_pedida_em" in r.keys() else None}   # CAMP-FIN pedir nota fiscal (notas_fiscais.py)
 
 
 def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pendentes: bool = False, q: str = "", com_transferencias: bool = False) -> list[dict]:
@@ -452,9 +453,21 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
                 "vinculos": VINCULOS, "contas": _fin().contas(con), "precisa_justificar": fila, "n_precisa": len(fila),
                 "transferencias": [x for x in listar(con, d1, d2, conta, com_transferencias=True) if x["tipo"] == "transferencia_propria"],
                 "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")],
-                "doacoes": _doacoes(con)}
+                "doacoes": _doacoes(con), "notas_pedidas": _notas_pedidas(con),
+                "notas_lembrete_dias": _notas_dias(con)}
     finally:
         con.close()
+
+
+def _notas_pedidas(con) -> list[dict]:
+    """CAMP-FIN pedir nota fiscal: as despesas com nota pedida que ainda não chegou, de qualquer mês (filtro Notas pedidas)."""
+    cats, contas = categorias(con), {c["id"]: c for c in _fin().contas(con)}
+    return [_linha(con, r, cats, contas) for r in con.execute("SELECT * FROM despesa WHERE apagado_em IS NULL AND nota_pedida_em IS NOT NULL ORDER BY nota_pedida_em, id")]
+
+
+def _notas_dias(con) -> int:
+    from .notas_fiscais import lembrete_dias
+    return lembrete_dias(con)
 
 
 def _doacoes(con) -> list[dict]:
@@ -701,6 +714,8 @@ def comprovante(did: int, b: Comprovante, u: dict = Depends(auth.exige("admin"))
         (pasta() / rel).write_bytes(dados)
         con.execute("UPDATE despesa_anexo SET arquivo=? WHERE id=?", (rel, aid))
         _ev(con, did, "comprovante", _ator(u), {"anexo": aid, "nome": nm, "tamanho": len(dados)})
+        from .notas_fiscais import ao_anexar   # a nota pedida ao fornecedor chegou: limpa "nota pedida"
+        ao_anexar(con, did, _ator(u))
         con.commit()
         return _detalhe(con, did)
     finally:

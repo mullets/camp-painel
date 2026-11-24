@@ -83,6 +83,8 @@ from .financeiro import router as rotas_financeiro   # CAMP-FIN 24/11/2026: Fina
 app.include_router(rotas_financeiro)
 from .despesas import router as rotas_despesas   # CAMP-FIN 24/11/2026: despesas (saídas do Mercado Pago, OFX, à mão; comprovantes)
 app.include_router(rotas_despesas)
+from .notas_fiscais import router as rotas_notas_fiscais   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel ou texto/WhatsApp)
+app.include_router(rotas_notas_fiscais)
 from .dre import router as rotas_dre   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; não substitui a demonstração do contador)
 app.include_router(rotas_dre)
 from .financeiro_ia import router as rotas_financeiro_ia   # CAMP-FIN 24/11/2026: inteligência do Financeiro (sugestões explicáveis, alertas, projeção, busca)

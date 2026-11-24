@@ -513,6 +513,16 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas = vis([{"sev": "b", "titulo": f"Justificar {nd} {'despesa' if nd == 1 else 'despesas'}", "codigo": None,
                        "detalhe": "saídas da conta sem categoria, justificativa ou comprovante", "adiar": "despesas:justificar", "espera_h": 0,
                        "acao": _acao("Justificar", "rota", "financeiro/justificar")}] if nd else [])
+        try:      # CAMP-FIN pedir nota fiscal: notas pedidas há N dias (notas.lembrete_dias) que não chegaram — prioridade baixa
+            from .notas_fiscais import atrasadas as _nf_atrasadas
+            nnf = _nf_atrasadas(con)
+        except Exception:  # noqa: BLE001
+            nnf = 0
+        linhas_nf = vis([{"sev": "b", "titulo": f"{nnf} {'nota fiscal pedida ainda não chegou' if nnf == 1 else 'notas fiscais pedidas ainda não chegaram'}", "codigo": None,
+                          "detalhe": "pedidas ao fornecedor há mais tempo que o lembrete; anexe a nota quando chegar ou use Pedir de novo",
+                          "adiar": "despesas:notas", "espera_h": 0, "acao": _acao("Ver", "rota", "financeiro/notas")}] if nnf else [])
+        linhas += linhas_nf
+        nd += len(linhas_nf)   # entra no total do grupo (nd_tot), depois do título "Justificar N despesas"
         linhas += vis(linhas_al)
         nd_tot = nd + len(vis(linhas_al))
         if linhas:
