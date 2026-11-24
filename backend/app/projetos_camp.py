@@ -238,7 +238,8 @@ def orcamento(con, p, despesas: list[dict] | None = None) -> dict:
             o = None
         if o and o["itens"]:
             itens = [{"id": None, "item": it["item"], "descricao": it["descricao"], "grupo": f"{it['produto']} · {it['etapa']}", "previsto": it["orcado"],
-                      "realizado": it["gasto"], "saldo": it["saldo"], "pct": it["pct"], "nivel": it["nivel"]} for it in o["itens"]]
+                      "realizado": it["gasto"], "saldo": it["saldo"], "pct": it["pct"], "nivel": it["nivel"]}
+                     for it in sorted(o["itens"], key=lambda x: int(x["item"] or 0))]   # pelo número do item (o Financeiro agrupa como o SALIC)
             t = o["total"]
             return {"fonte": "salic", "conta_id": p["conta_id"], "banner": o.get("banner") or "", "itens": itens,
                     "total": {"previsto": t["orcado"], "realizado": t["gasto"], "saldo": t["saldo"], "pct": t["pct"], "nivel": t["nivel"]}}

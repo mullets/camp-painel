@@ -26,7 +26,11 @@ async function entrar(browser, opts, erros) {
   await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
   return { ctx, page };
 }
-const foto = async (P, nome) => { if (PRINTS) await P.screenshot({ path: `${PRINTS}/${nome}.png`, fullPage: true }); };
+const semToast = P => P.evaluate(() => { const t = document.getElementById('toast'); if (t) { t.classList.remove('show'); t.style.display = 'none'; } });
+// a página rola dentro de .main (html/body fixos): para o print mostrar a tela inteira, solta a altura só durante a foto
+const foto = async (P, nome) => { if (PRINTS) { await semToast(P);
+  await P.addStyleTag({ content: 'html,body{overflow:visible!important;height:auto!important}.app{height:auto!important;grid-template-rows:auto!important}.main,.side{height:auto!important;overflow:visible!important;max-height:none!important}', }).then(h => h.evaluate(e => e.id = 'print-solto'));
+  await P.screenshot({ path: `${PRINTS}/${nome}.png`, fullPage: true }); await P.evaluate(() => document.getElementById('print-solto')?.remove()); } };
 const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelector('.main') || document.documentElement; return document.documentElement.scrollWidth <= innerWidth + 1 && m.scrollWidth <= m.clientWidth + 1; });
 
 (async () => {
@@ -43,7 +47,7 @@ const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelect
     // 1440 vem antes: conta a mudança de outra pessoa desde a última visita; depois de abrir o projeto (1440), o 390 já não conta nenhuma
     chk(rot === '1440' ? (/mudança/.test(home) && !/\b0 mudanças/.test(home)) : /\b0 mudanças/.test(home), `${rot}: Home conta as mudanças desde a última visita (e abrir o projeto zera)`);
     await P.$eval('#ini-projetos-camp', e => e.scrollIntoView({ block: 'center' })); await P.waitForTimeout(200);
-    if (PRINTS) { const b = await (await P.$('#ini-projetos-camp')).boundingBox(); await P.screenshot({ path: `${PRINTS}/home-bloco-${rot}.png`, clip: { x: Math.max(0, b.x - 8), y: Math.max(0, b.y - 8), width: Math.min(b.width + 16, opts.viewport.width), height: Math.min(b.height + 16, opts.viewport.height) } }); await foto(P, `home-${rot}`); }
+    if (PRINTS) { await semToast(P); const b = await (await P.$('#ini-projetos-camp')).boundingBox(); await P.screenshot({ path: `${PRINTS}/home-bloco-${rot}.png`, clip: { x: Math.max(0, b.x - 8), y: Math.max(0, b.y - 8), width: Math.min(b.width + 16, opts.viewport.width), height: Math.min(b.height + 16, opts.viewport.height) } }); await foto(P, `home-${rot}`); }
     // lista
     if (rot === '1440') { await P.keyboard.press('7'); } else { await P.evaluate(() => nav('projetos_camp')); }
     await P.waitForSelector('#v-projetos_camp.on .pc-lista tbody tr[data-pc-abrir]', { timeout: 15000 });
@@ -52,6 +56,11 @@ const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelect
     chk(/PRONAC 2613864/.test(lista) && /Captação/.test(lista) && /Mostra Arquitetura Paulista/.test(lista), `${rot}: lista com os dois projetos, código e situação`);
     chk(/atrasado/.test(lista) && /em 7 dias/.test(lista), `${rot}: lista mostra atrasos e prazos de 7 dias`);
     chk(await semRolagemLateral(P), `${rot}: lista sem rolagem lateral`);
+    // "Mostrar arquivados": caixa colada ao texto, à esquerda; o número de projetos à direita
+    const arq = await P.evaluate(() => { const l = document.querySelector('.pc-chk-l'), i = l.querySelector('input'), n = l.parentElement.querySelector('.help');
+      const rl = l.getBoundingClientRect(), ri = i.getBoundingClientRect(), rn = n.getBoundingClientRect(), rb = l.parentElement.getBoundingClientRect();
+      return { caixa: ri.width, colado: rl.width - ri.width, esq: rl.left - rb.left, numDir: rb.right - rn.right, numDepois: rn.left > rl.right }; });
+    chk(arq.caixa < 30 && arq.colado < 200 && arq.esq < 30 && arq.numDir < 30 && arq.numDepois, `${rot}: "Mostrar arquivados" à esquerda, caixa colada ao texto, número à direita ${JSON.stringify(arq)}`);
     await foto(P, `lista-${rot}`);
     // projeto do PRONAC, cada aba
     await P.click('#pc-corpo tr[data-pc-abrir="1"] .pc-nome');
@@ -63,6 +72,21 @@ const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelect
       const esperado = { geral: /A preencher|Objetivos e metas/, cronograma: /Produção do livro/, orcamento: /163\.475,31/, financeiro: /sem comprovante/, documentos: /Anexar/, historico: /Projeto criado a partir do Financeiro/ }[aba];
       chk(esperado.test(txt), `${rot}: aba ${aba} com conteúdo esperado`);
       chk(await semRolagemLateral(P), `${rot}: aba ${aba} sem rolagem lateral`);
+      if (aba === 'geral') {   // Próximos prazos: cada prazo é uma linha normal (nada de uma letra por linha)
+        const pz = await P.$$eval('.pc-card', cs => { const c = cs.find(x => /Próximos prazos/.test(x.querySelector('h2')?.textContent || '')); return c ? [...c.querySelectorAll('li span')].map(s => [s.getBoundingClientRect().width, s.getBoundingClientRect().height]) : []; });
+        chk(pz.length > 0 && pz.every(([w, h]) => w > 120 && h < 60), `${rot}: Próximos prazos com largura normal ${JSON.stringify(pz.slice(0, 3))}`);
+      }
+      if (aba === 'orcamento' && rot === '390') {   // celular: cada item em bloco, valores visíveis sem rolar de lado
+        const vis = await P.$eval('#pc-aba tbody tr', t => { const r = t.querySelector('[data-l="Saldo"]').getBoundingClientRect(); return r.right <= innerWidth && r.width > 0; });
+        chk(vis, `${rot}: orçamento mostra previsto, realizado e saldo sem rolar de lado`);
+      }
+      if (aba === 'orcamento') {   // nome do item em negrito, produto · etapa abaixo (separado), em ordem de item
+        const o = await P.$$eval('#pc-aba tbody tr', trs => trs.map(t => ({ n: +t.cells[0].textContent, b: [...(t.querySelector('.pc-desc b')?.childNodes || [])].filter(n => n.nodeType === 3).map(n => n.textContent).join(''), s: t.querySelector('.pc-desc small')?.textContent,
+          bloco: t.querySelector('.pc-desc small') ? getComputedStyle(t.querySelector('.pc-desc small')).display : '' })));
+        chk(o.length === 28 && o.every((x, i) => i === 0 || x.n > o[i - 1].n), `${rot}: orçamento em ordem de item (${o.slice(0, 6).map(x => x.n).join(', ')})`);
+        chk(o[0].b === 'Agente educativo(a): Palestrante' && /^Seminário\/Simpósio.* · Produção \/ Execução$/.test(o[0].s) && o.every(x => x.bloco === 'block'),
+          `${rot}: descrição e produto · etapa em linhas separadas ${JSON.stringify(o[0])}`);
+      }
       await foto(P, `projeto-${aba}-${rot}`);
     }
     if (rot === '1440') {
