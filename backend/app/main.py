@@ -89,6 +89,8 @@ from .dre import router as rotas_dre   # CAMP-FIN 24/11/2026: DRE gerencial (reg
 app.include_router(rotas_dre)
 from .financeiro_ia import router as rotas_financeiro_ia   # CAMP-FIN 24/11/2026: inteligência do Financeiro (sugestões explicáveis, alertas, projeção, busca)
 app.include_router(rotas_financeiro_ia)
+from .rouanet import router as rotas_rouanet   # CAMP-ROUANET 24/11/2026: orçamento do projeto incentivado e notas da CAMP para o projeto
+app.include_router(rotas_rouanet)
 from .contas_fixas import router as rotas_contas_fixas   # CAMP-FIN 24/11/2026: contas fixas (aluguel, salários, INSS, internet…; só admin e master)
 app.include_router(rotas_contas_fixas)
 from .doacoes_central import router as rotas_doacoes_central   # CAMP-DOA-CENTRAL 21/11/2026: tarefas, arquivos e contrato assinado de cada doação

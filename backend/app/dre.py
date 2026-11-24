@@ -38,6 +38,7 @@ LINHAS = [
     ("rec_patrocinios", "Patrocínios", "rec", 2),
     ("rec_servicos", "Ingressos e serviços", "rec", 2),
     ("rec_outras", "Outras receitas", "rec", 2),
+    ("rec_servicos_projeto", "Serviços prestados ao projeto incentivado (notas da CAMP)", "rec", 2),   # CAMP-ROUANET
     ("g_com", "Com restrição", "grupo", 1),
     ("rec_vinculadas", "Doações vinculadas (ex.: preservação de acervo doado)", "rec", 2),
     ("rec_projeto", "Projeto incentivado (Rouanet)", "rec", 2),
@@ -53,13 +54,18 @@ LINHAS = [
     ("desp_outras", "Outras (sem classificação)", "desp", 1),
     ("despesas_total", "(=) Total das despesas", "soma", 0),
     ("resultado", "(=) Superávit / Déficit do período", "soma", 0),
+    # CAMP-ROUANET: só informa (não soma). No Consolidado, a nota da CAMP paga pelo projeto sai das receitas e das despesas
+    ("transf_interna", "Transferência interna (notas da CAMP pagas pelo projeto): fora das receitas e despesas do Consolidado", "info", 0),
 ]
+NOTA_INTERNA = ("As notas da CAMP pagas pelo projeto incentivado são receita da conta da CAMP (visão Operacional) e despesa da conta do projeto "
+                "(visão da conta). No Consolidado são transferência interna entre contas: não entram nem como receita nem como despesa.")
 ROTULO = {k: r for k, r, _, _ in LINHAS}
 REC = [k for k, _, t, _ in LINHAS if t == "rec"]
 DESP = [k for k, _, t, _ in LINHAS if t == "desp"]
 MAPA_PADRAO = {
     "natureza:doacoes": "rec_doacoes", "natureza:contribuicoes": "rec_contribuicoes", "natureza:patrocinios": "rec_patrocinios",
     "natureza:servicos": "rec_servicos", "natureza:outras": "rec_outras", "natureza:doacoes_restricao": "rec_vinculadas",
+    "natureza:servicos_projeto": "rec_servicos_projeto",
     "categoria:materiais": "desp_atividades", "categoria:frete": "desp_atividades", "categoria:servicos": "desp_atividades",
     "categoria:eventos": "desp_atividades", "categoria:tecnologia": "desp_admin", "categoria:manutencao": "desp_admin",
     "categoria:impostos": "desp_admin", "categoria:outras": "desp_admin", "categoria:pessoal": "desp_pessoal", "categoria:tarifas": "desp_financeiras",
@@ -161,6 +167,13 @@ def classificar(con, rec: list[dict], desp: list[dict]) -> tuple[list[tuple[str,
 
 def valores(con, de: str, ate: str, visao: str = "consolidado") -> dict:
     rec, desp = _lancamentos(con, de, ate, _contas_da_visao(con, visao))
+    interna = 0.0
+    if visao in ("", "consolidado"):          # CAMP-ROUANET: transferência interna (nota da CAMP paga pelo projeto) não conta duas vezes
+        try:
+            from . import rouanet
+            rec, desp, interna = rouanet.eliminar_internas(con, rec, desp)
+        except ImportError:
+            pass
     r_cl, d_cl, avisos = classificar(con, rec, desp)
     v = {k: 0.0 for k, _, t, _ in LINHAS if t != "grupo"}
     for k, x in r_cl:
@@ -174,6 +187,7 @@ def valores(con, de: str, ate: str, visao: str = "consolidado") -> dict:
     v["receita_liquida"] = v["receita_bruta"] - v["tarifas_receb"]
     v["despesas_total"] = sum(v[k] for k in DESP)
     v["resultado"] = v["receita_liquida"] - v["despesas_total"]
+    v["transf_interna"] = interna
     v = {k: round(x, 2) for k, x in v.items()}
     avisos["tarifa_a_conferir"] = sum(1 for x in rec if x["tarifa_conferir"] and not x["estorno"])
     return {"valores": v, "avisos": avisos, "por_categoria": {k: round(x, 2) for k, x in por_cat.items()}}
@@ -204,6 +218,8 @@ def montar(con, de: str, ate: str, visao: str = "consolidado") -> dict:
             continue
         if k == "desp_outras" and not any(x["valores"]["desp_outras"] for x in (atual, ant, ytd)):
             continue
+        if k in ("rec_servicos_projeto", "transf_interna") and not any(x["valores"][k] for x in (atual, ant, ytd)):
+            continue
         if k == "resultado":
             rv = atual["valores"]["resultado"]
             rot = "(=) Superávit do período" if rv > 0 else ("(=) Déficit do período" if rv < 0 else "(=) Resultado do período (zero)")
@@ -223,7 +239,8 @@ def montar(con, de: str, ate: str, visao: str = "consolidado") -> dict:
     pend = _desp().listar(con, de, ate, so_pendentes=True)
     sem_cat = sum(1 for x in pend if not x["categoria"])
     return {"titulo": TITULO, "aviso": AVISO, "periodo": {"de": de, "ate": ate}, "anterior": {"de": a1, "ate": a2}, "ytd": {"de": y1, "ate": ate},
-            "visao": visao or "consolidado", "visoes": _visoes(con), "linhas": linhas, "resultado": atual["valores"]["resultado"],
+            "visao": visao or "consolidado", "visoes": _visoes(con), "linhas": linhas,
+            "nota_interna": NOTA_INTERNA if any(l["chave"] in ("rec_servicos_projeto", "transf_interna") for l in linhas) else "", "resultado": atual["valores"]["resultado"],
             "situacao": "superavit" if atual["valores"]["resultado"] > 0 else ("deficit" if atual["valores"]["resultado"] < 0 else "zero"),
             "avisos": dict(atual["avisos"], despesas_sem_categoria=sem_cat,
                            texto=(f"{sem_cat} despesas sem categoria: o resultado pode mudar." if sem_cat > 1 else

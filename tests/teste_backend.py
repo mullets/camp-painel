@@ -44,6 +44,7 @@ MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista d
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
+MODOS_RAPIDOS |= {"rouanet_projeto"}   # CAMP-ROUANET 24/11/2026: orçamento do projeto PRONAC 2613864, item e nota fiscal nas despesas, notas da CAMP para o projeto, DRE sem contar duas vezes, prestação de contas (linha própria)
 MODOS_RAPIDOS |= {"financeiro_contas_fixas"}   # CAMP-FIN 24/11/2026: aluguel, pessoal e contas fixas (categorias, DRE, casar com o Mercado Pago, situação do mês, projeção, privacidade, LGPD; linha própria)
 MODOS_RAPIDOS |= {"financeiro_inteligencia"}   # CAMP-FIN 24/11/2026: inteligência do Financeiro (regras aprendidas, alertas, recorrentes, projeção, busca natural, leitura desligada; linha própria)
 MODOS_RAPIDOS |= {"financeiro_dre"}   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; contas separadas; anterior e acumulado; mensal; linha própria)
@@ -20425,6 +20426,177 @@ def filho(modo):
         cv = x.get("/api/financeiro/dre/exportar.csv?mes=2026-11").content.decode("utf-8-sig").splitlines()
         ver("CSV da DRE com o aviso e as colunas", cv[2] == dre.AVISO and cv[4] == "Linha;Período;Anterior;Acumulado do ano" and any(l_.startswith("(=) Receita bruta;19395,00") for l_ in cv), cv[:5])
         for l in res: print(l)
+    elif modo == "rouanet_projeto":
+        # CAMP-ROUANET 24/11/2026. Projeto incentivado PRONAC 2613864 ("Edição do livro Arquitetura Moderna Paulista: Acervo Karazawa"). Rafael: "A CAMP
+        # emitirá nota para cobrar o projeto de Rouanet do livro". Prova: a planilha do SALIC semeada (28 itens, R$ 163.475,31, totais por produto, igual
+        # ao CSV do repositório); valor aprovado editável e importação simulada; despesa ligada ao item (gasto/saldo/%); avisos de 90% e acima do orçado;
+        # item e nota fiscal obrigatórios na conta do projeto; sugestão do item; nota da CAMP planejada → emitida → paga (casada com o débito e o crédito);
+        # "Preparar nota do mês" pelo plano mensal; DRE consolidada sem contar duas vezes; prestação de contas (XLSX e ZIP); operador 403.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, io as _io, base64 as _b64, zipfile as _zf, csv as _csv
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, rouanet as ro, dre, financeiro_ia as ia
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2027, 3, 20)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        O = ro.orcamento(c, 2)
+        arq_csv = RAIZ / "docs" / "rouanet" / "pronac-2613864-orcamento-solicitado.csv"
+        lin_csv = list(_csv.DictReader(open(arq_csv, encoding="utf-8"), delimiter=";"))
+        nbr = lambda s_: float(s_.replace(".", "").replace(",", "."))   # noqa: E731
+        ver("migração 254: 28 itens, total R$ 163.475,31 (solicitado = aprovado no começo)", len(O["itens"]) == 28 and O["total"]["orcado"] == 163475.31
+            and O["total"]["solicitado"] == 163475.31 and O["total"]["gasto"] == 0, O["total"])
+        ver("totais por produto: Seminário 10.980,00 · Livro 118.030,00 · Contrapartidas 4.200,00 · Administração 30.265,31",
+            {g["produto"]: g["orcado"] for g in O["grupos"]} == {"Seminário/Simpósio/Encontro/Congresso/Palestra/Vernissage": 10980.0, "Livro": 118030.0,
+                                                                 "Contrapartidas Sociais": 4200.0, "Administração do Projeto": 30265.31}, [(g["produto"], g["orcado"]) for g in O["grupos"]])
+        ver("igual ao CSV do repositório, item a item (qtde × ocorrências × valor unitário = solicitado)", len(lin_csv) == 28 and all(
+            next(i for i in O["itens"] if i["item"] == int(l_["item"]))["solicitado"] == nbr(l_["valor_solicitado"])
+            and abs(nbr(l_["qtde"]) * nbr(l_["ocorrencias"]) * nbr(l_["valor_unitario"]) - nbr(l_["valor_solicitado"])) < 0.01 for l_ in lin_csv))
+        g0, gl = O["grupos"][0], O["grupos"][1]
+        ver("agrupado como no SALIC: produto → etapa → município (na ordem da planilha)", [m["municipio"] for m in g0["etapas"][0]["municipios"]] == ["Presidente Prudente", "São Paulo"]
+            and [e["etapa"] for e in gl["etapas"]] == ["Pré-Produção / Preparação", "Produção / Execução", "Assessoria Contábil e Jurídica", "Recolhimentos"]
+            and g0["etapas"][0]["municipios"][0]["orcado"] == 7080.0, [e["etapa"] for e in gl["etapas"]])
+        ver("projeto: PRONAC e título do SALIC; aviso até confirmar a planilha aprovada", O["projeto"]["pronac"] == "2613864"
+            and O["projeto"]["titulo"] == "Edição do livro Arquitetura Moderna Paulista: Acervo Karazawa" and O["banner"] == "Valores solicitados: atualize com a planilha aprovada"
+            and not O["aprovado_confirmado"])
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        B = "/api/financeiro/projeto"
+        ver("operador: 403 (orçamento, aprovado, importar, plano, preparar, notas, prestação de contas)", all(r_.status_code == 403 for r_ in (
+            op.get(B), op.get(f"{B}/2"), op.put(f"{B}/2/itens/16", json={"valor_aprovado": 1}), op.post(f"{B}/2/importar", json={"texto": "x"}),
+            op.put(f"{B}/2/plano", json={"item": 7, "meses": ["2027-01"]}), op.get(f"{B}/2/preparar?mes=2027-01"), op.post(f"{B}/2/notas", json={"competencia": "2027-01", "itens": []}),
+            op.get(f"{B}/2/prestacao.xlsx"), op.get(f"{B}/2/prestacao.zip"), op.post(f"{B}/notas/1/pagar", json={"despesa_id": 1}))))
+        r = x.put(f"{B}/2/itens/16", json={"valor_aprovado": 50000})
+        i16 = next(i for i in r.json()["itens"] if i["item"] == 16)
+        ver("valor aprovado editável (admin): item 16 aprovado 50.000, o solicitado fica 51.080", r.status_code == 200 and i16["orcado"] == 50000.0 and i16["solicitado"] == 51080.0
+            and r.json()["total"]["orcado"] == 162395.31 and r.json()["total"]["solicitado"] == 163475.31, r.text[:200])
+        x.put(f"{B}/2/itens/16", json={"valor_aprovado": 51080})
+        rc_ = x.post(f"{B}/2/aprovado/confirmar")
+        ver("confirmar os valores aprovados tira o aviso", rc_.status_code == 200 and rc_.json()["banner"] == "" and rc_.json()["aprovado_confirmado"])
+        orig = open(arq_csv, encoding="utf-8").read()
+        nova = "\n".join(l_ for l_ in orig.splitlines() if not l_.startswith("26;")).replace(";2000;1;25,54;51080,00", ";2000;1;24,50;49000,00")
+        nova += "\n29;Livro;Produção / Execução;SP;São Paulo;Lançamento;Serviço;0;1;1;1500,00;1500,00\n"
+        sim = x.post(f"{B}/2/importar", json={"base64": _b64.b64encode(nova.encode()).decode()}).json()
+        ver("importar planilha atualizada: simula primeiro (1 muda, 1 novo, 1 sai, 26 iguais) e não grava nada", sim["simulado"] and sim["resumo"] == {"novo": 1, "muda": 1, "igual": 26, "sai": 1}
+            and sim["total_depois"] == 163475.31 - 51080 + 49000 - 13321 + 1500 and ro.orcamento(c, 2)["total"]["orcado"] == 163475.31, sim["resumo"])
+        ap = x.post(f"{B}/2/importar", json={"texto": nova, "aplicar": True}).json()
+        Oa = {i["item"]: i for i in ro.orcamento(c, 2)["itens"]}
+        ver("importar de verdade: item 16 = 49.000, item 26 sai (zerado, fica na lista), item 29 entra", not ap["simulado"] and Oa[16]["orcado"] == 49000.0
+            and Oa[26]["orcado"] == 0.0 and Oa[26]["fora_planilha"] and Oa[29]["orcado"] == 1500.0, (Oa[16]["orcado"], Oa[26]["orcado"]))
+        x.post(f"{B}/2/importar", json={"texto": orig, "aplicar": True})
+        Ob = ro.orcamento(c, 2)
+        ver("reimportar a planilha original volta ao total de R$ 163.475,31; formato errado = 400", Ob["total"]["orcado"] == 163475.31
+            and x.post(f"{B}/2/importar", json={"texto": "a,b\n1,2"}).status_code == 400, Ob["total"])
+        # despesas ligadas ao item
+        D = "/api/financeiro/despesas"
+        r1 = x.post(D, json={"data": "2027-02-10", "valor": 45972, "meio": "transferencia", "contraparte": "Gráfica Ipsis", "conta_id": 2, "categoria": "servicos", "justificativa": "Impressão do livro (1ª parcela)"})
+        r2 = x.post(D, json={"data": "2027-02-10", "valor": 10, "conta_id": 2, "categoria": "servicos", "justificativa": "x", "orcamento_item": 99})
+        ver("conta do projeto: sem item do orçamento = 400 'Projeto incentivado: escolha o item do orçamento'; item fora do orçamento = 400",
+            r1.status_code == 400 and r1.json()["erro"] == "Projeto incentivado: escolha o item do orçamento" and r2.status_code == 400, (r1.text, r2.text))
+        r3 = x.post(D, json={"data": "2027-02-10", "valor": 45972, "meio": "transferencia", "contraparte": "Gráfica Ipsis", "conta_id": 2, "categoria": "servicos",
+                             "justificativa": "Impressão do livro (1ª parcela)", "orcamento_item": 16, "nf_numero": "1234"})
+        dimp = r3.json()
+        rmp = x.post(D, json={"data": "2027-02-10", "valor": 12, "meio": "pix", "contraparte": "Papelaria", "conta_id": 1, "categoria": "materiais", "justificativa": "papel"}).json()
+        ver("nota fiscal obrigatória na conta do projeto (a lançada à mão também vai para Precisa justificar); na conta do Mercado Pago, não",
+            r3.status_code == 200 and dimp["falta"] == ["nota fiscal"] and dimp["orcamento_item"] == 16 and dimp["nf_numero"] == "1234" and rmp["falta"] == [], (dimp.get("falta"), rmp.get("falta")))
+        i16 = next(i for i in ro.orcamento(c, 2)["itens"] if i["item"] == 16)
+        ver("despesa ligada ao item 16: gasto R$ 45.972, saldo R$ 5.108, 90% usado (âmbar)", i16["gasto"] == 45972.0 and i16["saldo"] == 5108.0 and i16["pct"] == 0.9
+            and i16["nivel"] == "ambar", i16)
+        al = ia.alertas(c, "2027-01-01", "2027-03-31")
+        a16 = [a_ for a_ in al if a_["tipo"] == "orcamento" and a_.get("item") == 16]
+        ver("aviso âmbar no gancho de alertas do Financeiro (90% ou mais) e o total usado", a16 and a16[0]["cor"] == "ambar" and "90% usado" in a16[0]["titulo"]
+            and any(a_["tipo"] == "orcamento_total" and "% usado" in a_["titulo"] for a_ in al), [a_["titulo"] for a_ in al if a_["tipo"].startswith("orcamento")])
+        pdf = b"%PDF-1.4\n%teste\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+        rcp = x.post(f"{D}/{dimp['id']}/comprovante", json={"nome": "nf-1234.pdf", "base64": _b64.b64encode(pdf).decode()}).json()
+        ver("com a nota fiscal anexada, a despesa do projeto fica justificada", rcp["falta"] == [], rcp["falta"])
+        r4 = x.post(D, json={"data": "2027-02-12", "valor": 450, "meio": "boleto", "contraparte": "CBL", "conta_id": 2, "categoria": "servicos", "justificativa": "ISBN", "orcamento_item": 14}).json()
+        i14 = next(i for i in ro.orcamento(c, 2)["itens"] if i["item"] == 14)
+        ver("acima do orçamento: item 14 (R$ 400) com R$ 450 = vermelho e alerta 'Acima do orçamento'", i14["nivel"] == "vermelho" and i14["saldo"] == -50.0
+            and any(a_.get("item") == 14 and a_["cor"] == "vermelho" and a_["titulo"].startswith("Acima do orçamento") for a_ in ia.alertas(c, "2027-01-01", "2027-03-31")), i14)
+        c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, restrito) VALUES (2,'2027-03-01',1200,'outro','GRAFICA IPSIS LTDA','PAGTO','ofx','ofx:2:t1',1)")
+        c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, restrito) VALUES (2,'2027-03-02',80,'outro','Sedex Agência','PAGTO','ofx','ofx:2:t2',1)")
+        c.commit()
+        did_ofx = c.execute("SELECT id FROM despesa WHERE chave='ofx:2:t1'").fetchone()[0]
+        did_sdx = c.execute("SELECT id FROM despesa WHERE chave='ofx:2:t2'").fetchone()[0]
+        sg = x.get(f"/api/financeiro/ia/despesa/{did_ofx}").json()
+        sg2 = x.get(f"/api/financeiro/ia/despesa/{did_sdx}").json()
+        ver("a sugestão inteligente aprende o item (mesma contraparte → 16 · Impressão) e lê palavras (Sedex → 12 · Correios)", sg["item"] and sg["item"]["item"] == 16
+            and sg["item"]["fonte"] == "historico" and sg["item"]["rotulo"] == "16 · Impressão" and sg2["item"] and sg2["item"]["item"] == 12, (sg.get("item"), sg2.get("item")))
+        fila = x.get(f"{D}?mes=2027-03").json()["precisa_justificar"]
+        q1 = next(f_ for f_ in fila if f_["id"] == did_ofx)
+        rq = x.put(f"{D}/{did_ofx}", json={"categoria": "servicos", "justificativa": "Impressão (2ª parcela)"})
+        rq2 = x.put(f"{D}/{did_ofx}", json={"categoria": "servicos", "justificativa": "Impressão (2ª parcela)", "orcamento_item": 16})
+        ver("fila Precisa justificar: falta o item do orçamento; justificar sem o item = 400, com o item salva", "item do orçamento" in q1["falta"] and "nota fiscal" in q1["falta"]
+            and rq.status_code == 400 and rq2.status_code == 200 and rq2.json()["falta"] == ["nota fiscal"] and "orcamento" in x.get(f"{D}?mes=2027-03").json()
+            and any(o_["rotulo"] == "16 · Impressão" for o_ in x.get(f"{D}?mes=2027-03").json()["orcamento"]["2"]), (q1["falta"], rq.text))
+        # plano mensal e Preparar nota do mês
+        pc = x.put(f"{B}/2/plano", json={"item": 7, "meses": ["2027-01", "2027-02", "2027-03", "2027-04", "2027-05"]}).json()
+        pa = x.put(f"{B}/2/plano", json={"item": 27, "meses": [f"2027-{m:02d}" for m in range(1, 11)]}).json()
+        ver("plano mensal: o saldo do item dividido pelos meses (coordenação 2.600 × 5; administração 1.065,68 × 10)", set(pc["meses"].values()) == {2600.0} and pc["total"] == 13000.0
+            and set(pa["meses"].values()) == {1065.68} and pa["total"] == 10656.8, (pc, pa["total"]))
+        pr = x.get(f"{B}/2/preparar?mes=2027-02").json()
+        ver("Preparar nota do mês: as linhas do plano (item 7 R$ 2.600 + item 27 R$ 1.065,68 = R$ 3.665,68)",
+            [(l_["item"], l_["valor"]) for l_ in pr["devidas"]] == [(7, 2600.0), (27, 1065.68)] and pr["total"] == 3665.68, pr["devidas"])
+        ver("texto pronto para a NFS-e: PRONAC, título, itens, competência, valor; o que falta preencher", "Projeto PRONAC 2613864 · Edição do livro Arquitetura Moderna Paulista: Acervo Karazawa · item 7 (Coordenação Editorial), item 27 (Custos de Administração) · competência 02/2027" in pr["texto"]
+            and "Competência: 02/2027" in pr["texto"] and "Valor total dos serviços: R$ 3.665,68" in pr["texto"] and "CNPJ da CAMP" in pr["faltam"]
+            and pr["aviso_lei"].startswith("Pagamentos do projeto à própria proponente seguem as regras da Lei Rouanet e do MinC") and "prefeitura" in pr["aviso_nfse"], pr["faltam"])
+        c.execute("UPDATE configuracao SET valor='00.000.000/0001-00' WHERE chave='faturamento.cnpj'"); c.commit()
+        pr = x.get(f"{B}/2/preparar?mes=2027-02").json()
+        ver("dados da CAMP da configuração entram no texto", "CNPJ do prestador: 00.000.000/0001-00" in pr["texto"] and "CNPJ da CAMP" not in pr["faltam"])
+        nn = x.post(f"{B}/2/notas", json={"competencia": "2027-02", "itens": pr["devidas"]}).json()
+        ver("nota planejada a partir do rascunho; o mês fica sem nada a cobrar", nn["situacao"] == "planejada" and nn["valor"] == 3665.68
+            and "item 27" in nn["descricao"] and x.get(f"{B}/2/preparar?mes=2027-02").json()["devidas"] == [], nn)
+        nid = nn["id"]
+        e1 = x.post(f"{B}/notas/{nid}/pagar", json={"despesa_id": 1})
+        e2 = x.post(f"{B}/notas/{nid}/emitir", json={"nf_numero": "57", "nf_data": "2027-03-01"})
+        e3 = x.post(f"{B}/notas/{nid}/emitir", json={"nf_numero": "57", "nf_data": "2027-03-01", "nome": "nfse-57.pdf", "base64": _b64.b64encode(pdf).decode()})
+        ver("ciclo: pagar antes de emitir = 409; emitir sem o PDF = 400; emitida com número, data e PDF", e1.status_code == 409 and e2.status_code == 400
+            and e3.status_code == 200 and e3.json()["situacao"] == "emitida" and e3.json()["tem_pdf"] and x.get(f"{B}/notas/{nid}/nota.pdf").content == pdf, (e1.status_code, e2.status_code, e3.text[:120]))
+        c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, restrito) VALUES (2,'2027-03-05',3665.68,'transferencia','CAMP','TED','ofx','ofx:2:t3',1)")
+        c.execute("INSERT INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, external_reference, descricao, pagador) VALUES ('mp-9001','2027-03-05 15:00:00','approved',3665.68,0,3665.68,'bank_transfer','','Pix recebido','CAMP')")
+        c.commit()
+        deb = c.execute("SELECT id FROM despesa WHERE chave='ofx:2:t3'").fetchone()[0]
+        cd = x.get(f"{B}/notas/{nid}/candidatos").json()
+        ver("casar: o débito na conta do projeto e o crédito no Mercado Pago com o mesmo valor", [d_["id"] for d_ in cd["debitos"]] == [deb] and [c_["mp_id"] for c_ in cd["creditos"]] == ["mp-9001"], cd)
+        ap_ = x.post(f"{B}/notas/{nid}/pagar", json={"despesa_id": deb, "receita_mp": "mp-9001"})
+        dd = x.get(f"{D}/{deb}").json()
+        Op = {i["item"]: i for i in ro.orcamento(c, 2)["itens"]}
+        ver("paga: o débito fica ligado (item, categoria, nº da nota; o PDF da nota vale como nota fiscal) e o gasto vai item a item",
+            ap_.status_code == 200 and ap_.json()["situacao"] == "paga" and dd["orcamento_item"] == 7 and dd["categoria"] == "servicos" and dd["nf_numero"] == "57"
+            and dd["falta"] == [] and Op[7]["gasto"] == 2600.0 and Op[27]["gasto"] == 1065.68, (ap_.text[:150], dd.get("falta"), Op[7]["gasto"]))
+        lv = fi.livro(c, "2027-03-01", "2027-03-31")["linhas"]
+        ver("receita da conta da CAMP: 'Serviços prestados ao projeto incentivado' (o Pix no Mercado Pago não vira doação)",
+            [(l_["natureza"], l_["conta_id"], l_["bruto"]) for l_ in lv] == [("servicos_projeto", 1, 3665.68)], [(l_["natureza"], l_["origem"], l_["bruto"]) for l_ in lv])
+        Mc, Mo, Mp = dre.montar(c, "2027-03-01", "2027-03-31"), dre.montar(c, "2027-03-01", "2027-03-31", "operacional"), dre.montar(c, "2027-03-01", "2027-03-31", "2")
+        vc, vo, vp = ({l_["chave"]: l_["atual"] for l_ in M_["linhas"]} for M_ in (Mc, Mo, Mp))
+        ver("DRE: linha própria na visão Operacional; despesa na conta do projeto", vo.get("rec_servicos_projeto") == 3665.68 and vo["receita_bruta"] == 3665.68
+            and vp["despesas_total"] == 3665.68 + 1200 + 80 and "rec_servicos_projeto" not in vp, (vo.get("rec_servicos_projeto"), vp["despesas_total"]))
+        ver("DRE consolidada não conta duas vezes: sem a receita e sem o débito da nota, com a transferência interna informada e a nota",
+            "rec_servicos_projeto" not in vc and vc["receita_bruta"] == 0 and vc["despesas_total"] == 1200 + 80 and vc["transf_interna"] == 3665.68
+            and vc["resultado"] == round(vo["resultado"] + vp["resultado"], 2) and "transferência interna" in Mc["nota_interna"], (vc.get("receita_bruta"), vc.get("despesas_total"), vc.get("transf_interna")))
+        dz = x.post(f"{B}/notas/{nid}/desfazer-pagamento").json()
+        ver("desfazer o pagamento volta para emitida e tira o gasto", dz["situacao"] == "emitida" and next(i for i in ro.orcamento(c, 2)["itens"] if i["item"] == 7)["gasto"] == 0
+            and fi.livro(c, "2027-03-01", "2027-03-31")["linhas"][0]["natureza"] == "doacoes", (dz, [(l_["natureza"], l_["origem"]) for l_ in fi.livro(c, "2027-03-01", "2027-03-31")["linhas"]]))
+        x.post(f"{B}/notas/{nid}/pagar", json={"despesa_id": deb, "receita_mp": "mp-9001"})
+        ver("nota paga não se cancela; outra nota não usa o mesmo débito", x.post(f"{B}/notas/{nid}/cancelar", json={"motivo": "teste de cancelar"}).status_code == 409)
+        # prestação de contas
+        from openpyxl import load_workbook
+        wb = load_workbook(_io.BytesIO(x.get(f"{B}/2/prestacao.xlsx").content))
+        s1 = [[c_.value for c_ in r_] for r_ in wb["Orçado × gasto"].iter_rows()]
+        s2 = [[c_.value for c_ in r_] for r_ in wb["Despesas por item"].iter_rows()]
+        r16 = next(r_ for r_ in s1 if r_[0] == 16)
+        ver("prestação de contas (XLSX): orçado × gasto × saldo por item, despesas por item com nº da NF, notas da CAMP", wb.sheetnames == ["Orçado × gasto", "Despesas por item", "Notas da CAMP"]
+            and r16[10] == 51080.0 and r16[11] == 47172.0 and r16[12] == 3908.0 and any(r_[0] == 16 and r_[4] == "1234" and r_[3] == "Gráfica Ipsis" for r_ in s2)
+            and any(r_[0] == 7 and r_[8] == "nota da CAMP" and r_[4] == "57" for r_ in s2) and [r_[1] for r_ in wb["Notas da CAMP"].iter_rows(values_only=True)][1] == "57", r16)
+        z = _zf.ZipFile(_io.BytesIO(x.get(f"{B}/2/prestacao.zip").content))
+        nm = z.namelist()
+        ver("prestação de contas (ZIP): a planilha, os comprovantes numa pasta por item e os PDFs das notas da CAMP", "prestacao-de-contas.xlsx" in nm
+            and any(n_.startswith("item-16-impressao/2027-02-10_despesa") and "nf1234" in n_ for n_ in nm) and any(n_.startswith("notas-da-camp/2027-02_nf57_") for n_ in nm), nm)
+        for l in res: print(l)
     elif modo == "financeiro_inteligencia":
         # CAMP-FIN inteligência 24/11/2026. Rafael: "Capriche na inteligência do sistema". Tudo explicável e nada aplicado sozinho. Prova: 3 escolhas
         # iguais → regra sugerida; confiança e motivo; regra vence o histórico; palavra-chave; justificativa por despesa parecida e por tarefa de doação;
@@ -24548,6 +24720,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · inteligência: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Financeiro · inteligência: todas as verificações rodaram")
+
+print("Projeto incentivado (Rouanet): orçamento do SALIC, aprovado e importação simulada, item e nota fiscal nas despesas, avisos, notas da CAMP, preparar nota do mês, DRE sem contar duas vezes, prestação de contas, papéis")
+rc, out = rodar("rouanet_projeto", f"{tmp}/rouanet_projeto.db")
+if rc != 0: ok(False, f"teste rouanet_projeto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projeto incentivado: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 34, "Projeto incentivado: todas as verificações rodaram")
 
 print("Financeiro · contas fixas: categorias novas, DRE (Pessoal e Ocupação), casar com o Mercado Pago, pago/a vencer/atrasado/valor diferente, um clique na fila, projeção, sugestão, exportação sem nomes, 403, Home, LGPD")
 rc, out = rodar("financeiro_contas_fixas", f"{tmp}/financeiro_contas_fixas.db")
