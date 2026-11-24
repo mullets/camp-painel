@@ -79,6 +79,8 @@ from .doacoes_acervo import router as rotas_doacoes_acervo   # CAMP-DOA-ACERVO 2
 app.include_router(rotas_doacoes_acervo)
 from .patrocinios import router as rotas_patrocinios   # CAMP-PAT-EMPRESA 23/11/2026: patrocínio de empresas pelo site (contrato 1.31)
 app.include_router(rotas_patrocinios)
+from .financeiro import router as rotas_financeiro   # CAMP-FIN 24/11/2026: Financeiro (receitas para o contador; conta do Mercado Pago pelo site, contrato 1.33)
+app.include_router(rotas_financeiro)
 from .doacoes_central import router as rotas_doacoes_central   # CAMP-DOA-CENTRAL 21/11/2026: tarefas, arquivos e contrato assinado de cada doação
 app.include_router(rotas_doacoes_central)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)
@@ -252,6 +254,11 @@ async def _coleta_pedidos_site_periodica() -> None:
             try:                # CAMP-PAT-EMPRESA: propostas de patrocínio (contrato 1.31), no ritmo próprio (patrocinios.coleta_min; nunca levanta)
                 from . import patrocinios
                 await asyncio.to_thread(patrocinios.rodada)
+            except Exception:  # noqa: BLE001
+                pass
+            try:                # CAMP-FIN: pagamentos da conta do Mercado Pago (contrato 1.33), no ritmo próprio (financeiro.mp_coleta_min; nunca levanta)
+                from . import financeiro
+                await asyncio.to_thread(financeiro.rodada)
             except Exception:  # noqa: BLE001
                 pass
             try:                # CAMP-EMAIL: e-mails que o site mandou (contrato 1.14), no ritmo próprio (emails.coleta_min; nunca levanta)

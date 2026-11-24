@@ -44,6 +44,7 @@ MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista d
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
+MODOS_RAPIDOS |= {"financeiro_receitas"}   # CAMP-FIN 24/11/2026: Financeiro, receitas para o contador + conta do Mercado Pago pelo site (site e Mercado Pago falsos; contrato 1.33; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_painel"}   # CAMP-PAT-EMPRESA 23/11/2026: patrocínio de empresas do site, etapas, pagamento (site falso; contrato 1.31)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
@@ -19923,6 +19924,156 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@exemplo.com.br", "Ana Diretora", "beto@grande.com")))
         for l in res: print(l)
+    elif modo == "financeiro_receitas":
+        # CAMP-FIN 24/11/2026 · Financeiro: receitas para o contador (ITG 2002) + a conta INTEIRA do Mercado Pago pelo site (contrato 1.33; site
+        # e Mercado Pago FALSOS). Rafael: "Estamos recebendo bastante doação pelo Mercado Pago", "Temos como interligar com o Mercado Pago?".
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, io as _io, sys as _s
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = {r[0]: (r[1], r[2]) for r in c.execute("SELECT chave, valor, sensivel FROM configuracao WHERE chave LIKE 'financeiro.%'")}
+        ver("migração 249: tabelas, conta Mercado Pago operacional, conta do PRONAC 2613864 (com restrição, desativada) e configurações (busca 60 min, início 2026-01-01, mapa)",
+            c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('mp_pagamento','financeiro_estado','financeiro_nota','financeiro_conta')").fetchone()[0] == 4
+            and cf.get("financeiro.mp_coleta_min") == ("60", 0) and cf.get("financeiro.mp_inicio", ("",))[0] == "2026-01-01"
+            and _j.loads(cf["financeiro.naturezas"][0])["direto_mp"] == "doacoes"
+            and tuple(c.execute("SELECT nome, tipo, restrito FROM financeiro_conta WHERE id=1").fetchone()) == ("Mercado Pago", "operacional", 0)
+            and tuple(c.execute("SELECT nome, banco, tipo, restrito, ativa, projeto FROM financeiro_conta WHERE id=2").fetchone()) == ("Banco do Brasil · Projeto Rouanet · PRONAC 2613864 · Livro Karazawa", None, "projeto_incentivado", 1, 0, "PRONAC 2613864 · Livro Karazawa"), cf)
+        sf.semear(c)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        gets = []
+        itens = sf.conta_mp()
+        class H:
+            def get(s, path, params=None):
+                gets.append((path, dict(params or {}))); p_ = params["pagina"]
+                return Resp(200, {"itens": itens[:6] if p_ == 1 else itens[6:], "mais": p_ == 1, "pagina": p_, "access_token": sf.TOKEN_FALSO, "agora": "2026-11-24T12:00:00Z"})
+        class WPF: h = H()
+        o = fi.coletar_mp(c, WPF(), de="2026-11-01", ate="2026-11-30")
+        ver("Mercado Pago: lê as 2 páginas da rota do site (desde, até, página) e guarda os 11 pagamentos", o["paginas"] == 2 and o["novos"] == 11 and not o["erro"]
+            and gets[0] == (fi.ROTA_MP, {"desde": "2026-11-01", "ate": "2026-11-30", "pagina": 1}) and gets[1][1]["pagina"] == 2, (o, gets[:2]))
+        c.execute("UPDATE mp_pagamento SET classificar='patrocinios', nota='confirmado com a pessoa' WHERE mp_id='9004'"); c.commit()
+        o2 = fi.coletar_mp(c, WPF(), de="2026-11-01", ate="2026-11-30")
+        ver("buscar de novo não duplica (único pelo id) e guarda o 'Classificar como…' e a nota", o2["novos"] == 0 and c.execute("SELECT COUNT(*) FROM mp_pagamento").fetchone()[0] == 11
+            and tuple(c.execute("SELECT classificar, nota FROM mp_pagamento WHERE mp_id='9004'").fetchone()) == ("patrocinios", "confirmado com a pessoa"), o2)
+        c.execute("UPDATE mp_pagamento SET classificar=NULL, nota=NULL WHERE mp_id='9004'"); c.commit()
+        dump = "\n".join(str(tuple(r)) for r in c.execute("SELECT * FROM mp_pagamento"))
+        ver("a chave do Mercado Pago (se o site mandasse por engano) não é guardada", sf.TOKEN_FALSO not in dump)
+        class H404:
+            def get(s, path, params=None): return Resp(404, {})
+        class H409:
+            def get(s, path, params=None): return Resp(409, {"code": "camp_mp_desligado"})
+        class W4: h = H404()
+        class W9: h = H409()
+        ver("site antigo (404) e Mercado Pago desligado no site (409): não quebra, diz o motivo", fi.coletar_mp(c, W4(), de="2026-11-01", ate="2026-11-30")["sem_rota"]
+            and fi.coletar_mp(c, W9(), de="2026-11-01", ate="2026-11-30")["desligado"])
+        fi.coletar_mp(c, WPF(), de="2026-11-01", ate="2026-11-30")
+        L = fi.livro(c, "2026-11-01", "2026-11-30")
+        ls, cf_ = L["linhas"], L["conferencia"]
+        def um(mid, est=False): return [x for x in ls if x["mp_id"] == mid and x["estorno"] == est]
+        ver("sem contar duas vezes: o pagamento 6003 (na cobrança E no patrocínio) aparece uma vez", len(um("6003")) == 1 and cf_["duplicados_ignorados"] == ["6003"]
+            and um("6003")[0]["origem"] == "patrocinio" and um("6003")[0]["pagador"] == "Construtora Exemplo", cf_["duplicados_ignorados"])
+        a = um("5001")[0]
+        ver("Amigos (anuidade): Contribuições, com a tarifa e o líquido exatos do Mercado Pago", a["natureza"] == "contribuicoes" and a["tarifa"] == 22.45 and a["liquido"] == 427.55
+            and not a["tarifa_conferir"] and a["external_reference"] == "CAMP-AMIGO-11" and a["meio"] == "cartão de crédito" and a["data"] == "2026-11-05", a)
+        mn = [x for x in ls if x["fora_mp"]]
+        ver("pagamento registrado à mão (Pix): fora do Mercado Pago, sem tarifa", len(mn) == 1 and mn[0]["bruto"] == 200 and mn[0]["tarifa"] == 0 and mn[0]["mp_id"] == "" and mn[0]["meio"] == "Pix", mn)
+        e1 = um("5009", True)
+        ver("estorno: linha positiva no dia do pagamento e NEGATIVA no dia do estorno (Mercado Pago)", len(um("5009")) == 1 and um("5009")[0]["data"] == "2026-11-03"
+            and len(e1) == 1 and e1[0]["bruto"] == -45 and e1[0]["data"] == "2026-11-20", e1)
+        e2 = um("6006", True)
+        ver("cobrança de doação estornada: negativa em 21/11 nas Doações", len(e2) == 1 and e2[0]["bruto"] == -250 and e2[0]["data"] == "2026-11-21" and e2[0]["natureza"] == "doacoes", e2)
+        d1, d4 = um("9001")[0], um("9004")[0]
+        ver("sem referência nossa (Pix/QR direto na conta) = 'Recebido direto no Mercado Pago', Doações", d1["origem"] == "direto_mp" and d1["natureza"] == "doacoes"
+            and d1["pagador"] == "Gabi Pix" and d4["origem"] == "direto_mp" and d1["classificavel"], (d1, d4["origem"]))
+        ver("pagamento recusado/cancelado não entra", not um("9003") and not [x for x in ls if x["mp_id"] == "5010"])
+        s2 = um("9002")[0]
+        ver("referência da CAMP sem registro no painel: entra (Amigos) e aparece na conferência", s2["sem_par_painel"] and s2["natureza"] == "contribuicoes"
+            and [x["mp_id"] for x in cf_["mp_sem_painel"]] == ["9002"], cf_["mp_sem_painel"])
+        ad = um("5003")[0]
+        ver("sem a tarifa (a busca do Mercado Pago não trouxe): 'a conferir no extrato'; adoção = Doações com restrição", ad["tarifa"] is None and ad["tarifa_conferir"]
+            and "a conferir no extrato" in ad["observacao"] and ad["natureza"] == "doacoes_restricao", ad)
+        da = um("6002")[0]
+        ver("contribuição da doação de acervo: Doações com restrição, com o protocolo da doação", da["natureza"] == "doacoes_restricao" and "CAMP-2026-000901" in da["descricao"], da)
+        ver("ingresso: Receitas de serviços; data em São Paulo", um("8001")[0]["natureza"] == "servicos" and um("8001")[0]["data"] == "2026-11-16")
+        ver("fora do período (outubro) não entra", not um("5000"))
+        ver("conferência: painel sem o Mercado Pago, cobrança paga sem pagamento, fora do Mercado Pago, diretos", sorted(x["mp_id"] for x in cf_["painel_sem_mp"]) == ["5003", "6002", "6004", "6005", "7001"]
+            and [x["registro"] for x in cf_["sem_confirmacao"]] == ["cobrança CAMP-COB-807"] and cf_["fora_mp"] == 1 and cf_["diretos_mp"] == 2, cf_)
+        T = fi.totais(ls)
+        pn = {n["natureza"]: (n["bruto"], n["n"]) for n in T["por_natureza"]}
+        ver("totais por natureza (bruto, recebimentos)", pn == {"doacoes": (530.0, 4), "doacoes_restricao": (3000.0, 2), "contribuicoes": (1145.0, 5), "patrocinios": (14000.0, 2),
+            "servicos": (620.0, 2), "outras": (100.0, 1)}, pn)
+        ver("Doações recebidas no período: R$ 3.530,00 (6 doações), tarifas e estornos", T["doacoes"]["bruto"] == 3530.0 and T["doacoes"]["n"] == 6 and T["geral"]["tarifa"] == 306.51
+            and T["estornos"] == {"valor": -295.0, "n": 2}, (T["doacoes"], T["geral"], T["estornos"]))
+        La = fi.livro(c, "2026-01-01", "2026-12-31")["linhas"]
+        ver("totais por mês (ano 2026: outubro e novembro)", [(m_["mes"], m_["bruto"]) for m_ in fi.totais(La)["por_mes"]] == [("2026-10", 450.0), ("2026-11", 19395.0)], fi.totais(La)["por_mes"])
+        ver("período: mês, ano, de/até", fi.periodo(mes="2026-02") == ("2026-02-01", "2026-02-28") and fi.periodo(ano="2026") == ("2026-01-01", "2026-12-31")
+            and fi.periodo(de="2026-11-10", ate="2026-11-20") == ("2026-11-10", "2026-11-20"))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("sem login: 401; operador: 403 em tudo (ver, exportar, mapa, classificar, sincronizar, nota, contas)", x0.get("/api/financeiro").status_code == 401
+            and all(r_.status_code == 403 for r_ in (op.get("/api/financeiro?mes=2026-11"), op.get("/api/financeiro/exportar.csv?mes=2026-11"), op.get("/api/financeiro/exportar.xlsx?mes=2026-11"),
+                    op.put("/api/financeiro/mapa", json={"mapa": {}}), op.post("/api/financeiro/mp/9001/classificar", json={"natureza": "outras"}), op.post("/api/financeiro/mp/sincronizar"),
+                    op.put("/api/financeiro/nota", json={"de": "2026-11-01", "ate": "2026-11-30", "texto": "x"}), op.get("/api/financeiro/contas"), op.get("/api/financeiro/mp/estado"))))
+        r_ = x.get("/api/financeiro?mes=2026-11")
+        J = r_.json() if r_.status_code == 200 else {}
+        ver("tela (admin): período, totais, linhas, conferência e rascunho factual", r_.status_code == 200 and J["periodo"] == {"de": "2026-11-01", "ate": "2026-11-30"} and J["n_total"] == 18
+            and "R$ 19.395,00" in J["rascunho"] and "deve ser confirmada pelo contador" in J["rascunho"] and len(J["naturezas"]) == 6, (r_.status_code, J.get("periodo"), J.get("n_total")))
+        ver("sem CPF/CNPJ por padrão; só com documento=1", "12345678909" not in r_.text and "11.222.333/0001-81" not in r_.text and "documento" not in J["linhas"][0]
+            and "12345678909" in x.get("/api/financeiro?mes=2026-11&documento=1").text)
+        ver("filtros por natureza e origem", {l_["natureza"] for l_ in x.get("/api/financeiro?mes=2026-11&natureza=doacoes").json()["linhas"]} == {"doacoes"}
+            and {l_["origem"] for l_ in x.get("/api/financeiro?mes=2026-11&origem=ingresso").json()["linhas"]} == {"ingresso"})
+        ver("período inválido: 400", x.get("/api/financeiro?mes=2026-13").status_code == 400 and x.get("/api/financeiro?de=2026-11-20&ate=2026-11-01").status_code == 400)
+        rm = x.put("/api/financeiro/mapa", json={"mapa": {"amigos_anual": "doacoes"}})
+        pn2 = {n["natureza"]: n["bruto"] for n in x.get("/api/financeiro?mes=2026-11").json()["totais"]["por_natureza"]}
+        ver("mapa editável: Amigos (anuidade) → Doações muda os totais; origem/natureza desconhecida = 400", rm.status_code == 200 and pn2["doacoes"] == 530 + 1100 and pn2["contribuicoes"] == 45.0
+            and x.put("/api/financeiro/mapa", json={"mapa": {"xyz": "doacoes"}}).status_code == 400 and x.put("/api/financeiro/mapa", json={"mapa": {"ingresso": "lucro"}}).status_code == 400, pn2)
+        x.put("/api/financeiro/mapa", json={"mapa": {"amigos_anual": "contribuicoes"}})
+        rc_ = x.post("/api/financeiro/mp/9001/classificar", json={"natureza": "patrocinios", "nota": "patrocínio pontual"})
+        l9 = [l_ for l_ in x.get("/api/financeiro?mes=2026-11").json()["linhas"] if l_["mp_id"] == "9001"][0]
+        ver("'Classificar como…' na linha: lembra a escolha e a nota; natureza inválida 400; pagamento que não existe 404", rc_.status_code == 200 and l9["natureza"] == "patrocinios"
+            and l9["nota"] == "patrocínio pontual" and l9["classificado"] and x.post("/api/financeiro/mp/9001/classificar", json={"natureza": "x"}).status_code == 400
+            and x.post("/api/financeiro/mp/000/classificar", json={"natureza": "doacoes"}).status_code == 404, l9)
+        x.post("/api/financeiro/mp/9001/classificar", json={"natureza": ""})
+        rn = x.put("/api/financeiro/nota", json={"de": "2026-11-01", "ate": "2026-11-30", "texto": "Doações de novembro: campanha do acervo."})
+        ver("Notas para o contador: guardadas por período", rn.status_code == 200 and x.get("/api/financeiro?mes=2026-11").json()["nota"]["texto"] == "Doações de novembro: campanha do acervo."
+            and x.get("/api/financeiro?mes=2026-10").json()["nota"]["texto"] == "")
+        cv = x.get("/api/financeiro/exportar.csv?mes=2026-11")
+        tx = cv.content.decode("utf-8-sig")
+        lin = tx.splitlines()
+        ver("CSV: cabeçalho com período e data de geração, colunas, sem fórmula, sem CPF", cv.status_code == 200 and "Período: 01/11/2026 a 30/11/2026" in lin[1] and lin[2].startswith("Gerado em:")
+            and lin[5].split(";") == fi.COLUNAS and "'=cmd" in tx and "12345678909" not in tx and len(lin) == 6 + 18 and "camp-receitas-2026-11-01-a-2026-11-30.csv" in cv.headers.get("content-disposition", ""), lin[:6])
+        xl = x.get("/api/financeiro/exportar.xlsx?mes=2026-11")
+        from openpyxl import load_workbook
+        wb = load_workbook(_io.BytesIO(xl.content))
+        nomes = wb.sheetnames
+        aba_doa = [[c_.value for c_ in r__] for r__ in wb["Doações"].iter_rows()]
+        resumo = " ".join(str(c_.value) for r__ in wb["Resumo"].iter_rows() for c_ in r__ if c_.value is not None)
+        ver("XLSX: Resumo + uma aba por natureza, cabeçalho do período, Doações recebidas, sem fórmula", xl.status_code == 200 and nomes[:7] == ["Resumo", "Doações", "Doações com restrição", "Contribuições (Amigos)", "Patrocínios", "Serviços e ingressos", "Outras receitas"]
+            and "01/11/2026 a 30/11/2026" in str(wb["Resumo"]["A2"].value) and "Doações recebidas no período: R$ 3.530,00 (6 doações)" in resumo
+            and aba_doa[1] == fi.COLUNAS and len(aba_doa) == 2 + 5 and all(not str(c_.value or "").startswith("=") for sh in wb.worksheets for r__ in sh.iter_rows() for c_ in r__), (nomes, aba_doa[:2]))
+        rcn = x.post("/api/financeiro/contas", json={"nome": "Banco do Brasil · projeto", "banco": "Banco do Brasil", "tipo": "projeto_incentivado"})
+        Jc = x.get("/api/financeiro?mes=2026-11").json()
+        pc = {c_["nome"]: (c_["bruto"], c_["restrito"]) for c_ in Jc["totais"]["por_conta"]}
+        ver("contas: Mercado Pago com tudo; conta de projeto sempre com restrição e separada; filtro por conta", rcn.status_code == 200 and pc == {"Mercado Pago": (19395.0, False), "Banco do Brasil · Projeto Rouanet · PRONAC 2613864 · Livro Karazawa": (0.0, True), "Banco do Brasil · projeto": (0.0, True)}
+            and x.get(f"/api/financeiro?mes=2026-11&conta={rcn.json()['id']}").json()["n_total"] == 0
+            and x.put("/api/financeiro/contas/1", json={"nome": "Mercado Pago", "restrito": True}).status_code == 400
+            and x.post("/api/financeiro/contas", json={"nome": "mercado pago"}).status_code == 409, pc)
+        ver("sincronizar sem a senha do site: 409 (nada roda)", x.post("/api/financeiro/mp/sincronizar").status_code == 409)
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        todas = r_.text + x.get("/api/financeiro/mp/estado").text + tx
+        ver("a chave do Mercado Pago nunca aparece (respostas, CSV, log); log sem nomes", sf.TOKEN_FALSO not in todas and sf.TOKEN_FALSO not in log_ and "Gabi Pix" not in log_)
+        for l in res: print(l)
     elif modo == "patrocinios_autentique":
         # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
         # Autentique (mesmo token), link no e-mail do site (enviar-contrato, contrato 1.32) com o pagamento junto; reaproveita o documento se o
@@ -23729,6 +23880,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Patrocínios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 27, "Patrocínios: todas as verificações rodaram")
+
+print("Financeiro: receitas para o contador (ITG 2002), conta do Mercado Pago pelo site, sem contar duas vezes, estornos, mapa, exportação, contas, papéis")
+rc, out = rodar("financeiro_receitas", f"{tmp}/financeiro_receitas.db")
+if rc != 0: ok(False, f"teste financeiro_receitas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 33, "Financeiro: todas as verificações rodaram")
 
 print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
 rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")

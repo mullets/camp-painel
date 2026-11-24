@@ -26,7 +26,7 @@ Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: os
 | 2 | Projetos | I · W · X | Arquitetos · Onde está guardado · Ler etiqueta |
 | 3 | Fundos | T · O | Etiquetas · Empréstimos |
 | 4 | Pedidos de alta resolução | U · L · A | Downloads (admin) · Relatórios · Histórico de ações (admin) |
-| 5 | Máquinas (admin) | Q · C · M · G | Qualidade do CAMP Vision · Configurações (admin) · Como o material anda · Glossário |
+| 5 · 6 | Máquinas · Financeiro (admin) | Q · C · M · G | Qualidade do CAMP Vision · Configurações (admin) · Como o material anda · Glossário |
 A tecla de um item do "Mais" funciona com o "Mais" fechado; só o papel esconde de verdade. Conferindo uma folha, as letras do menu não valem
 (R gira, K recorta, Enter confere): por isso Arquitetos é I, não R.
 **Visualizador da folha (CAMP-VIEW, 21/11/2026, pedido do Rafael: "mantenha as views meio padronizadas"):** a MESMA barra (`visorBarraHTML`) e as mesmas teclas (`VISOR_TECLAS`) na página da folha (#item), na gaveta "Revisar folha", na tela cheia e na tela de conferir: ← → anterior/próxima, R gira à direita, L à esquerda, C (ou K, fora da tela cheia) recorta, + − 0 ampliam. Nessas telas as letras do menu não valem (R não vai para Cobranças, C não vai para Configurações, L não vai para Relatórios); Shift+letra continua indo para as telas.
@@ -76,7 +76,7 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Acervo**: Fundos (3) · Arquitetos (I) · Onde está guardado (W) · Ler etiqueta (X) · Etiquetas (T) · Empréstimos (O).
 - **Público**: Pedidos de alta resolução (4) · Downloads (U, só admin).
 - **Acompanhamento**: Relatórios (L) · Histórico de ações (A, só admin) · Qualidade do CAMP Vision (Q, só admin).
-- **Administração** (só admin; o título do grupo some para os outros): Máquinas (5) · Configurações (C).
+- **Administração** (só admin; o título do grupo some para os outros): Máquinas (5) · Financeiro (6, CAMP-FIN: não sobrou letra livre) · Configurações (C).
 - **Ajuda**: Como o material anda (M) · Glossário (G).
 - Sempre à vista no computador: o Topo, Fundos, Arquitetos, Pedidos de alta resolução e Máquinas; o resto aparece ao abrir o **"Mais"** (que abre e
   fecha, o navegador lembra, e abre sozinho quando a tela atual é um item dele). No celular: a gaveta do ☰ com o menu inteiro (redesenho §19).
@@ -175,3 +175,15 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Resolver exige conclusão + evidência ou justificativa; **autoria e crédito exigem fonte** (o painel nunca sugere autoria nem fonte).
 - **Revisão por outra pessoa** (`problemas.revisao_outra_pessoa`) nasce **desligada**.
 - Reusa a Home (§15): responsável em `tarefa_responsavel` (`erro:<id>`, mesmas regras de "Pegar para mim"/admin "Atribuir a…"), a nota de prioridade de `home_trabalho.prioridade` e UM sistema de pontos (`home_trabalho.eventos_validados`, recontado do estado; meta `meta.semana`; Ranking da equipe do mês `jogo.ranking_equipe`, ligado por padrão). Detalhe: `COMO_FUNCIONA.md` D.2.4 e D.4.3b.
+
+## 19. Financeiro (CAMP-FIN, 24/11/2026, pedido do Rafael: "relatório de receitas para o contador"; "Temos como interligar com o Mercado Pago?")
+- Tela **Financeiro** em Administração (tecla 6; só admin e master; `financeiro.py`). Junta num livro só cada pagamento confirmado: Amigos da CAMP,
+  cobranças avulsas (pela finalidade), doação de acervo, ingressos, patrocínios e a **conta inteira do Mercado Pago** (pelo site, contrato 1.33:
+  a chave fica no site e nunca vem ao painel; `mp_pagamento`, único pelo id do pagamento). Um pagamento conta uma vez (id do Mercado Pago).
+- Natureza no espírito da ITG 2002 (R1), num mapa editável (`financeiro.naturezas`): Doações · Doações com restrição · Contribuições de associados ·
+  Patrocínios · Receitas de serviços e ingressos · Outras. Texto sempre cauteloso: **a classificação final é do contador**.
+- Sem referência da CAMP (Pix, link ou QR direto na conta) = "Recebido direto no Mercado Pago", Doações por padrão, com "Classificar como…" que fica lembrado.
+- Estorno/contestação = linha negativa na data do estorno. Sem a tarifa lida: "a conferir no extrato". Nenhum CPF/CNPJ no relatório (só `documento=1`).
+- Contas (`financeiro_conta`): Mercado Pago (operacional) e, já cadastrada e desativada, a do Banco do Brasil do projeto Rouanet (PRONAC 2613864 ·
+  Livro Karazawa), com restrição. Conta com restrição aparece SEMPRE separada da operacional. Sem rubricas/SALIC por enquanto.
+- A leitura da conta do Mercado Pago roda em segundo plano (`financeiro.mp_coleta_min`, 60; 0 desliga) e no botão, também em segundo plano.
