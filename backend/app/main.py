@@ -83,12 +83,16 @@ from .financeiro import router as rotas_financeiro   # CAMP-FIN 24/11/2026: Fina
 app.include_router(rotas_financeiro)
 from .despesas import router as rotas_despesas   # CAMP-FIN 24/11/2026: despesas (saídas do Mercado Pago, OFX, à mão; comprovantes)
 app.include_router(rotas_despesas)
+from .notas_fiscais import router as rotas_notas_fiscais   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel ou texto/WhatsApp)
+app.include_router(rotas_notas_fiscais)
 from .dre import router as rotas_dre   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; não substitui a demonstração do contador)
 app.include_router(rotas_dre)
 from .financeiro_ia import router as rotas_financeiro_ia   # CAMP-FIN 24/11/2026: inteligência do Financeiro (sugestões explicáveis, alertas, projeção, busca)
 app.include_router(rotas_financeiro_ia)
 from .rouanet import router as rotas_rouanet   # CAMP-ROUANET 24/11/2026: orçamento do projeto incentivado e notas da CAMP para o projeto
 app.include_router(rotas_rouanet)
+from .contas_fixas import router as rotas_contas_fixas   # CAMP-FIN 24/11/2026: contas fixas (aluguel, salários, INSS, internet…; só admin e master)
+app.include_router(rotas_contas_fixas)
 from .doacoes_central import router as rotas_doacoes_central   # CAMP-DOA-CENTRAL 21/11/2026: tarefas, arquivos e contrato assinado de cada doação
 app.include_router(rotas_doacoes_central)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)

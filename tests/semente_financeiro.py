@@ -92,6 +92,17 @@ def semear_despesas(con) -> None:
     con.commit()
 
 
+def semear_contas_fixas(con) -> None:
+    """CAMP-FIN contas fixas (navegador): saídas do Mercado Pago do aluguel (out e nov), do salário (nov) e de uma hospedagem mensal (4 meses,
+    vira a sugestão "transformar em conta fixa?"). Nomes inventados."""
+    ds = [("2026-10-05", 3000.0, "IMOBILIARIA SOL LTDA", "aluguel", "Aluguel da sede · outubro/2026"), ("2026-11-05", 3000.0, "IMOBILIARIA SOL LTDA", None, None),
+          ("2026-11-05", 2500.0, "ANA SOUZA", None, None)] + [(f"2026-{m:02d}-12", 89.9, "Hospedagem Web Ltda", "tecnologia", "Hospedagem do site") for m in (8, 9, 10, 11)]
+    for i, (d, v, q, cat, just) in enumerate(ds):
+        con.execute("INSERT INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa, mp_ref) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (d, v, "pix", q, "Pix enviado ou saque", "mp", f"cf:{i}", cat, just, f"CF{i}"))
+    con.commit()
+
+
 def semear_demo(con) -> None:
     """Para as capturas de tela: agosto a novembro de 2026 com algumas dezenas de linhas realistas (inventadas, sem pessoas reais)."""
     import random
@@ -146,6 +157,8 @@ if __name__ == "__main__":
         h = _H()
     f.coletar_mp(c, _W(), de="2026-11-01", ate="2026-11-30")
     semear_despesas(c)
+    if "--contas-fixas" in sys.argv:
+        semear_contas_fixas(c)
     if "--demo" in sys.argv:
         semear_demo(c)
         c.execute("INSERT OR REPLACE INTO financeiro_estado (chave, valor) VALUES ('mp_de', '2026-08-01')")

@@ -56,13 +56,12 @@ NOME_RECEITA = "Serviços prestados ao projeto incentivado"
 SITUACOES = ("planejada", "emitida", "paga", "cancelada")
 AMBAR = 0.9
 COLUNAS_CSV = ["item", "produto", "etapa", "uf", "municipio", "descricao", "unidade", "dias", "qtde", "ocorrencias", "valor_unitario", "valor_solicitado"]
-# chaves de dados da CAMP para nota fiscal: as daqui (migração 254) e nomes que outro ramo pode criar (a primeira preenchida vale)
-CHAVES_CAMP = {
-    "razao_social": ("financeiro.camp_razao_social", "camp.razao_social", "nota.razao_social", "empresa.razao_social"),
-    "cnpj": ("financeiro.camp_cnpj", "camp.cnpj", "nota.cnpj", "empresa.cnpj"),
-    "im": ("financeiro.camp_im", "camp.inscricao_municipal", "nota.inscricao_municipal", "empresa.inscricao_municipal"),
-    "endereco": ("financeiro.camp_endereco", "camp.endereco", "nota.endereco", "empresa.endereco"),
-    "email": ("financeiro.camp_email", "camp.email", "nota.email", "empresa.email"),
+CHAVES_CAMP = {   # dados da CAMP (faturamento.*, migração 253: os mesmos da tela "Pedir nota fiscal"); aqui a CAMP é a prestadora
+    "razao_social": ("faturamento.razao_social",),
+    "cnpj": ("faturamento.cnpj",),
+    "im": ("faturamento.inscricao_municipal",),
+    "endereco": ("faturamento.endereco",),
+    "email": ("faturamento.email_notas",),
 }
 PALAVRAS_ITEM = [   # (trecho normalizado na despesa, trecho normalizado na descrição do item)
     ("grafica", "impressao"), ("impress", "impressao"), ("correio", "correios"), ("sedex", "correios"), ("frete", "frete"), ("transport", "frete"),

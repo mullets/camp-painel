@@ -139,6 +139,8 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_emkt = contatos_emkt.apagar_por_email(con, em)
     from . import emails_enviados   # CAMP-EMAIL 18/11/2026: o e-mail e o nome nas linhas da tela E-mails enviados
     n_em = emails_enviados.apagar_por_email(con, em)
+    from . import notas_fiscais   # CAMP-FIN 24/11/2026: contato guardado do fornecedor e os pedidos de nota fiscal (contam em email_enviado)
+    n_em += notas_fiscais.apagar_por_email(con, em)
     from . import ingressos   # CAMP-INGRESSOS 19/11/2026: compradores de ingresso (anonimiza; os valores ficam para a receita)
     n_ing = ingressos.anonimizar_por_email(con, em)
     n_ing_p = ingressos.anonimizar_pessoas_por_email(con, em)   # 20/11/2026: as pessoas de cada ingresso (contrato 1.24)
@@ -148,8 +150,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_doa = doacoes_acervo.anonimizar_por_email(con, em)
     from . import patrocinios   # CAMP-PAT-EMPRESA 23/11/2026: responsável da proposta de patrocínio (empresa e valores ficam)
     n_pat = patrocinios.anonimizar_por_email(con, em)
+    from . import contas_fixas   # CAMP-FIN 24/11/2026: nome da pessoa nas contas fixas (salário) e nas despesas ligadas (os valores ficam)
+    n_cf = contas_fixas.anonimizar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "ingresso_pessoa": n_ing_p, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa, "patrocinio": n_pat}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "ingresso_pessoa": n_ing_p, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa, "patrocinio": n_pat, "conta_fixa": n_cf}
 
 
 def chamar_site(con, email: str) -> dict:

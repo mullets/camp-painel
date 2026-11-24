@@ -46,9 +46,14 @@ router = APIRouter(prefix="/api/financeiro/despesas", tags=["despesas"])
 
 ROTA_REL = "/wp-json/camp/v1/painel/mp/relatorio"
 ROTA_RELS = "/wp-json/camp/v1/painel/mp/relatorios"
-CATEGORIAS_PADRAO = {"materiais": "Materiais de conservação e acondicionamento", "frete": "Frete e transporte", "servicos": "Serviços de terceiros",
+CATEGORIAS_PADRAO = {"materiais": "Materiais de conservação e acondicionamento", "frete": "Frete e transporte", "servicos": "Serviços de terceiros (PJ)",
                      "pessoal": "Pessoal e estagiários", "tecnologia": "Tecnologia e software", "tarifas": "Tarifas bancárias e do Mercado Pago",
-                     "eventos": "Eventos e visitas", "manutencao": "Manutenção do espaço", "impostos": "Impostos e taxas", "outras": "Outras despesas"}
+                     "eventos": "Eventos e visitas", "manutencao": "Manutenção do espaço", "impostos": "Impostos e taxas", "outras": "Outras despesas",
+                     # CAMP-FIN contas fixas (migração 252): aluguel, consumo e Pessoal em quatro
+                     "aluguel": "Aluguel e condomínio", "consumo": "Contas de consumo (luz, água, internet, telefone)", "salarios": "Salários",
+                     "encargos": "Encargos (INSS, FGTS, férias, 13º)", "bolsas": "Bolsas e estágio", "autonomos": "Autônomos e RPA"}
+# Pessoal: salário é dado sensível. Na exportação, "agrupar pessoal" (padrão ligado) junta estas categorias numa linha por categoria, sem nomes.
+PESSOAL = ("salarios", "encargos", "bolsas", "autonomos", "pessoal")
 MEIOS = {"pix": "Pix", "debito": "cartão de débito", "credito": "cartão de crédito", "boleto": "boleto", "dinheiro": "dinheiro", "tarifa": "tarifa",
          "saldo": "saldo do Mercado Pago", "transferencia": "transferência", "outro": "outro"}
 VINCULOS = {"doacao": "Doação de acervo", "patrocinio": "Patrocínio", "evento": "Evento", "projeto": "Projeto"}
@@ -143,7 +148,8 @@ def _linha(con, r, cats: dict, contas: dict) -> dict:
             "justificativa": r["justificativa"] or "", "projeto": r["projeto"] or "", "restrito": bool(r["restrito"]), "vinculo_tipo": r["vinculo_tipo"] or "",
             "vinculo_ref": r["vinculo_ref"] or "", "tarefa_id": r["tarefa_id"], "mp_ref": r["mp_ref"] or "", "anexos": ax, "falta": pendente(r, len(ax) + nota_pdf, proj),
             "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito")),
-            "conta_projeto": proj, "orcamento_item": r["orcamento_item"], "nf_numero": r["nf_numero"] or "", "nota_camp": bool(nota_pdf)}
+            "conta_projeto": proj, "orcamento_item": r["orcamento_item"], "nf_numero": r["nf_numero"] or "", "nota_camp": bool(nota_pdf),
+            "nota_pedida_em": r["nota_pedida_em"] if "nota_pedida_em" in r.keys() else None}   # CAMP-FIN pedir nota fiscal (notas_fiscais.py)
 
 
 def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pendentes: bool = False, q: str = "", com_transferencias: bool = False) -> list[dict]:
@@ -232,7 +238,22 @@ def _linha_xlsx(x: dict) -> list:
     return [seg(v) for v in (f"{x['data'][8:10]}/{x['data'][5:7]}/{x['data'][:4]}", x["conta_nome"], x["categoria_nome"] or "sem categoria", x["contraparte"],
                              x["descricao"], x["justificativa"], x["meio_nome"], x["valor"], x["projeto"], "sim" if x["restrito"] else "não",
                              (VINCULOS.get(x["vinculo_tipo"], "") + " " + x["vinculo_ref"]).strip(), ", ".join(a["nome"] for a in x["anexos"]),
-                             {"mp": "Mercado Pago", "ofx": "extrato OFX", "manual": "lançada à mão"}.get(x["origem"], x["origem"]), x["mp_ref"])]
+                             {"mp": "Mercado Pago", "ofx": "extrato OFX", "manual": "lançada à mão", "agrupado": "agrupado (pessoal)"}.get(x["origem"], x["origem"]), x["mp_ref"])]
+
+
+def agrupar_pessoal(ls: list[dict], cats: dict, de: str, ate: str) -> list[dict]:
+    """Pessoal sem nomes: as despesas das categorias de PESSOAL viram UMA linha por categoria no período (total), sem contraparte nem
+    justificativa (que trazem o nome da pessoa). As outras ficam como estão."""
+    fora = [x for x in ls if x["categoria"] not in PESSOAL]
+    grupos = []
+    for k in PESSOAL:
+        xs = [x for x in ls if x["categoria"] == k]
+        if xs:
+            grupos.append({"id": 0, "data": ate, "conta_nome": "", "categoria": k, "categoria_nome": cats.get(k, k), "contraparte": "",
+                           "descricao": f"{len(xs)} {'pagamento' if len(xs) == 1 else 'pagamentos'} de {de[8:10]}/{de[5:7]}/{de[:4]} a {ate[8:10]}/{ate[5:7]}/{ate[:4]}",
+                           "justificativa": "Pessoal agrupado: total sem nomes", "meio_nome": "", "valor": round(sum(x["valor"] for x in xs), 2),
+                           "projeto": "", "restrito": any(x["restrito"] for x in xs), "vinculo_tipo": "", "vinculo_ref": "", "anexos": [], "origem": "agrupado", "mp_ref": ""})
+    return fora + grupos
 
 
 def abas_xlsx(wb, rel: dict) -> None:
@@ -242,6 +263,8 @@ def abas_xlsx(wb, rel: dict) -> None:
     con = connect()
     try:
         ls = listar(con, rel["periodo"]["de"], rel["periodo"]["ate"], rel.get("conta") or 0)
+        if rel.get("agrupar_pessoal", True):
+            ls = agrupar_pessoal(ls, categorias(con), rel["periodo"]["de"], rel["periodo"]["ate"])
     finally:
         con.close()
     p = rel["periodo"]
@@ -469,7 +492,8 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
                 "vinculos": VINCULOS, "contas": _fin().contas(con), "precisa_justificar": fila, "n_precisa": len(fila),
                 "transferencias": [x for x in listar(con, d1, d2, conta, com_transferencias=True) if x["tipo"] == "transferencia_propria"],
                 "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")],
-                "doacoes": _doacoes(con), "orcamento": _orcamento_opcoes(con)}
+                "doacoes": _doacoes(con), "notas_pedidas": _notas_pedidas(con),
+                "notas_lembrete_dias": _notas_dias(con), "orcamento": _orcamento_opcoes(con)}
     finally:
         con.close()
 
@@ -481,6 +505,17 @@ def _orcamento_opcoes(con) -> dict:
         return rouanet.opcoes_todas(con)
     except Exception:  # noqa: BLE001 (banco sem a migração 254)
         return {}
+
+
+def _notas_pedidas(con) -> list[dict]:
+    """CAMP-FIN pedir nota fiscal: as despesas com nota pedida que ainda não chegou, de qualquer mês (filtro Notas pedidas)."""
+    cats, contas = categorias(con), {c["id"]: c for c in _fin().contas(con)}
+    return [_linha(con, r, cats, contas) for r in con.execute("SELECT * FROM despesa WHERE apagado_em IS NULL AND nota_pedida_em IS NOT NULL ORDER BY nota_pedida_em, id")]
+
+
+def _notas_dias(con) -> int:
+    from .notas_fiscais import lembrete_dias
+    return lembrete_dias(con)
 
 
 def _doacoes(con) -> list[dict]:
@@ -648,6 +683,33 @@ def ofx(b: dict, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+@router.get("/exportar.csv")
+def exportar_csv(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = "", conta: int = 0, agrupar_pessoal: int = 1,
+                 u: dict = Depends(auth.exige("admin"))):
+    """Despesas do período em CSV. "Agrupar pessoal" (padrão ligado): Salários, Encargos, Bolsas e Autônomos numa linha por categoria, sem nomes."""
+    import csv
+    d1, d2 = _periodo(de, ate, mes, ano, tri)
+    con = connect()
+    try:
+        ls = listar(con, d1, d2, conta)
+        if agrupar_pessoal:
+            ls = agrupar_pessoal_fn(ls, categorias(con), d1, d2)
+    finally:
+        con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow([f"CAMP — Despesas · {d1[8:10]}/{d1[5:7]}/{d1[:4]} a {d2[8:10]}/{d2[5:7]}/{d2[:4]}" + (" · pessoal agrupado, sem nomes" if agrupar_pessoal else "")])
+    w.writerow(COLS)
+    num = lambda v: f"{v:.2f}".replace(".", ",") if isinstance(v, float) else v   # noqa: E731
+    for x in ls:
+        w.writerow([num(v) for v in _linha_xlsx(x)])
+    return Response(("\ufeff" + buf.getvalue()).encode("utf-8"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="camp-despesas-{d1}-a-{d2}.csv"'})
+
+
+agrupar_pessoal_fn = agrupar_pessoal
+
+
 @router.get("/comprovantes.zip")
 def comprovantes_zip(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = "", conta: int = 0, u: dict = Depends(auth.exige("admin"))):
     d1, d2 = _periodo(de, ate, mes, ano, tri)
@@ -745,6 +807,8 @@ def comprovante(did: int, b: Comprovante, u: dict = Depends(auth.exige("admin"))
         (pasta() / rel).write_bytes(dados)
         con.execute("UPDATE despesa_anexo SET arquivo=? WHERE id=?", (rel, aid))
         _ev(con, did, "comprovante", _ator(u), {"anexo": aid, "nome": nm, "tamanho": len(dados)})
+        from .notas_fiscais import ao_anexar   # a nota pedida ao fornecedor chegou: limpa "nota pedida"
+        ao_anexar(con, did, _ator(u))
         con.commit()
         return _detalhe(con, did)
     finally:

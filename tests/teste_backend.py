@@ -45,6 +45,7 @@ MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) a
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
 MODOS_RAPIDOS |= {"rouanet_projeto"}   # CAMP-ROUANET 24/11/2026: orçamento do projeto PRONAC 2613864, item e nota fiscal nas despesas, notas da CAMP para o projeto, DRE sem contar duas vezes, prestação de contas (linha própria)
+MODOS_RAPIDOS |= {"financeiro_contas_fixas"}   # CAMP-FIN 24/11/2026: aluguel, pessoal e contas fixas (categorias, DRE, casar com o Mercado Pago, situação do mês, projeção, privacidade, LGPD; linha própria)
 MODOS_RAPIDOS |= {"financeiro_inteligencia"}   # CAMP-FIN 24/11/2026: inteligência do Financeiro (regras aprendidas, alertas, recorrentes, projeção, busca natural, leitura desligada; linha própria)
 MODOS_RAPIDOS |= {"financeiro_dre"}   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; contas separadas; anterior e acumulado; mensal; linha própria)
 MODOS_RAPIDOS |= {"financeiro_despesas"}   # CAMP-FIN 24/11/2026: despesas (relatório de liberações do Mercado Pago pelo site, OFX, à mão, comprovantes; linha própria)
@@ -74,6 +75,7 @@ MODOS_RAPIDOS |= {"central_problemas"}   # CAMP-PROB-UX 22/11/2026: Central de P
 MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade explicável, responsável/Minha fila, meta da semana, pontos só validados e reversíveis, ranking da equipe ligado por padrão (linha própria)
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
+MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -20097,7 +20099,7 @@ def filho(modo):
         c = connect()
         cf = c.execute("SELECT valor FROM configuracao WHERE chave='despesas.categorias'").fetchone()
         ver("migração 250: tabelas e as 10 categorias padrão (ITG 2002)", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('despesa','despesa_anexo','mp_relatorio')").fetchone()[0] == 3
-            and cf is not None and len(_j.loads(cf[0])) == 10 and "Tarifas bancárias e do Mercado Pago" in _j.loads(cf[0]).values())
+            and cf is not None and len(_j.loads(cf[0])) >= 10 and "Tarifas bancárias e do Mercado Pago" in _j.loads(cf[0]).values())
         c.execute("UPDATE configuracao SET valor='2026-10-01' WHERE chave='financeiro.mp_inicio'"); c.commit()
         sf.semear(c)
         class Resp:
@@ -20215,6 +20217,133 @@ def filho(modo):
         zr = x.get("/api/financeiro/despesas/comprovantes.zip?mes=2026-11")
         zn = _zf.ZipFile(_io.BytesIO(zr.content)).namelist()
         ver("Exportar comprovantes do período (ZIP)", zr.status_code == 200 and len(zn) == 1 and zn[0].endswith("nota-frete.jpg"), zn)
+        for l in res: print(l)
+    elif modo == "financeiro_nota_fiscal":
+        # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor. Rafael: "preparar para criar cobrança de nota fiscal para algum fornecedor". Prova: dados
+        # da CAMP vazios bloqueiam com mensagem clara; texto certo (PRONAC na conta do projeto ou na rubrica; sem PRONAC nas outras); e-mail pelo SMTP
+        # do painel FALSO (nenhum e-mail real); "nota pedida" e lembrete na Home depois de N dias; Pedir de novo; comprovante limpa; memória do
+        # fornecedor; falha do e-mail não marca; sem SMTP só texto/WhatsApp; E-mails enviados; LGPD apaga o contato; operador 403.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import base64 as _b64, smtplib as _smtp
+        from fastapi.testclient import TestClient
+        from app import auth, email_envio, notas_fiscais as nf, pendencias, lgpd, emails_enviados as ee
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        def _sem_smtp_real(*a, **k): raise AssertionError("tentou abrir SMTP de verdade")
+        _smtp.SMTP = _smtp.SMTP_SSL = _sem_smtp_real
+        enviados = []
+        def falso(cfg, para, assunto, corpo, responder_para=None, timeout=20): enviados.append({"para": para, "assunto": assunto, "corpo": corpo, "responder": responder_para})
+        email_envio.enviar = falso
+        c = connect()
+        cfg = {r[0]: r[1] for r in c.execute("SELECT chave, valor FROM configuracao WHERE chave LIKE 'faturamento.%' OR chave='notas.lembrete_dias'")}
+        ver("migração: tabelas, coluna nota_pedida_em e os dados da CAMP VAZIOS (nada inventado); lembrete 7 dias",
+            c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('nota_pedido','fornecedor_contato')").fetchone()[0] == 2
+            and "nota_pedida_em" in {r[1] for r in c.execute("PRAGMA table_info(despesa)")}
+            and {k: v for k, v in cfg.items() if k.startswith("faturamento.")} == {f"faturamento.{k}": "" for k in ("razao_social", "cnpj", "inscricao_municipal", "endereco", "email_notas")}
+            and cfg.get("notas.lembrete_dias") == "7", cfg)
+        c.execute("UPDATE financeiro_conta SET ativa=1 WHERE id=2")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('smtp.host','smtp.falso.invalid'),('smtp.remetente','painel@camp.arq.br')")
+        def desp(conta, data, valor, quem, just, ref, projeto=None):
+            return c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, origem, chave, justificativa, mp_ref, projeto) VALUES (?,?,?,?,?,'mp',?,?,?,?)",
+                             (conta, data, valor, "pix", quem, f"t:{quem}:{data}:{valor}", just, ref, projeto)).lastrowid
+        d1 = desp(1, "2026-11-06", 320.0, "Papelaria Alfa", "Caixas de papel alcalino para o acervo doado", "S9")
+        d2 = desp(2, "2026-11-10", 230.0, "Gráfica Beta", "Impressão das provas do livro", None, "PRONAC 2613864 · Livro Karazawa")
+        d3 = desp(1, "2026-11-11", 99.0, "Revisora Gama", "Revisão de texto", "S10", "PRONAC 2613864 · Livro Karazawa")
+        d5 = desp(1, "2026-11-12", 45.0, "papelaria  ALFA", "Etiquetas", "S11")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador recebe 403 (preparar, prévia, pedir, dados da CAMP, lista)", [op.get(f"/api/financeiro/notas/{d1}").status_code, op.post(f"/api/financeiro/notas/{d1}/previa", json={}).status_code,
+            op.post(f"/api/financeiro/notas/{d1}/pedir", json={"email": "a@b.com", "canal": "email"}).status_code, op.put("/api/financeiro/notas/dados-camp", json={}).status_code,
+            op.get("/api/financeiro/notas/pedidas").status_code] == [403] * 5)
+        p = x.get(f"/api/financeiro/notas/{d1}").json()
+        ver("sem os dados da CAMP: o formulário diz o que falta", p["faltam"] == ["razão social", "CNPJ", "endereço", "e-mail que recebe as notas"], p.get("faltam"))
+        r = x.post(f"/api/financeiro/notas/{d1}/pedir", json={"email": "vendas@alfa.com.br", "canal": "email"})
+        ver("sem os dados da CAMP o pedido NÃO sai, com mensagem clara, e a despesa não fica pedida", r.status_code == 400 and "Faltam os dados da CAMP para a nota fiscal: razão social, CNPJ" in r.json()["erro"]
+            and not enviados and c.execute("SELECT nota_pedida_em FROM despesa WHERE id=?", (d1,)).fetchone()[0] is None, r.text)
+        ver("CNPJ inválido e e-mail inválido recusados", x.put("/api/financeiro/notas/dados-camp", json={"cnpj": "11.111.111/1111-11"}).status_code == 400
+            and x.put("/api/financeiro/notas/dados-camp", json={"email_notas": "financeiro@"}).status_code == 400)
+        r = x.put("/api/financeiro/notas/dados-camp", json={"razao_social": "Associação Teste", "cnpj": "11.222.333/0001-81", "inscricao_municipal": "", "endereco": "Rua Teste, 1 · São Paulo", "email_notas": "financeiro@camp.arq.br"})
+        ver("dados da CAMP guardados (uma vez só; inscrição municipal opcional)", r.status_code == 200 and r.json()["faltam"] == [], r.text)
+        r = x.post(f"/api/financeiro/notas/{d1}/pedir", json={"email": "Vendas@Alfa.com.br", "canal": "email"})
+        e1 = enviados[-1] if enviados else {}
+        ver("pedido pelo SMTP do painel (falso): para o fornecedor, responder para o e-mail das notas", r.status_code == 200 and len(enviados) == 1 and e1["para"] == "vendas@alfa.com.br"
+            and e1["responder"] == "financeiro@camp.arq.br" and e1["assunto"] == "Pedido de nota fiscal · CAMP · pagamento de 06/11/2026 (R$ 320,00)", (r.text, e1))
+        cp = e1.get("corpo", "")
+        ver("texto: justificativa na descrição, valor, data, referência do Mercado Pago e os dados da CAMP (sem PRONAC fora de projeto)",
+            all(t in cp for t in ("Olá, Papelaria Alfa,", "Caixas de papel alcalino para o acervo doado", "- Valor: R$ 320,00", "- Data do pagamento: 06/11/2026", "- Referência do Mercado Pago: S9",
+                                  "- Razão social: Associação Teste", "- CNPJ: 11.222.333/0001-81", "- Endereço: Rua Teste, 1 · São Paulo", "envie a nota fiscal para financeiro@camp.arq.br"))
+            and "PRONAC" not in cp and "Inscrição municipal" not in cp, cp)
+        row = c.execute("SELECT nota_pedida_em FROM despesa WHERE id=?", (d1,)).fetchone()
+        J = x.get("/api/financeiro/despesas?mes=2026-11").json()
+        it = {i["id"]: i for i in J["itens"]}
+        ver("a despesa fica 'nota pedida' (lista, filtro Notas pedidas, histórico)", row[0] is not None and it[d1]["nota_pedida_em"] == row[0] and [n["id"] for n in J["notas_pedidas"]] == [d1]
+            and J["notas_lembrete_dias"] == 7 and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='despesa' AND codigo=? AND tipo='nota_pedida'", (str(d1),)).fetchone()[0] == 1, J.get("notas_pedidas"))
+        p2 = x.get(f"/api/financeiro/notas/{d2}").json()
+        ver("conta do projeto (Banco do Brasil · PRONAC): a descrição leva 'Projeto PRONAC 2613864 · Livro Karazawa' e o texto diz 'conforme orientação do projeto'",
+            p2["pronac"] == "Projeto PRONAC 2613864 · Livro Karazawa" and p2["descricao"] == "Impressão das provas do livro · Projeto PRONAC 2613864 · Livro Karazawa"
+            and "Descrição para a nota:\nImpressão das provas do livro · Projeto PRONAC 2613864 · Livro Karazawa" in p2["texto"] and "Conforme orientação do projeto" in p2["texto"], p2.get("texto"))
+        p3 = x.post(f"/api/financeiro/notas/{d3}/previa", json={"descricao": "Revisão do texto do livro"}).json()
+        ver("rubrica com PRONAC (mesmo na conta do Mercado Pago): a descrição editada ganha a identificação do projeto", "Revisão do texto do livro · Projeto PRONAC 2613864 · Livro Karazawa" in p3["texto"], p3.get("texto"))
+        p3b = x.post(f"/api/financeiro/notas/{d3}/previa", json={"descricao": "Revisão · Projeto PRONAC 2613864 · Livro Karazawa"}).json()
+        ver("a identificação não se repete quando já está na descrição", p3b["texto"].count("PRONAC 2613864") == 2, p3b.get("texto"))
+        r = x.post(f"/api/financeiro/notas/{d2}/pedir", json={"email": "contato@beta.com.br", "whatsapp": "(11) 98765-4321", "canal": "copiado"})
+        ver("Copiar texto + 'Já mandei': marca como pedida sem mandar e-mail; guarda o texto com PRONAC", r.status_code == 200 and r.json()["situacao"] == "registrado" and len(enviados) == 1
+            and c.execute("SELECT pronac FROM nota_pedido WHERE despesa_id=?", (d2,)).fetchone()[0] == 1, r.text)
+        # lembrete na Home depois de N dias
+        def home():
+            return [i["titulo"] for g in pendencias.tarefas(c, "admin") if g["id"] == "despesas" for i in g["itens"]]
+        ver("nota pedida há menos de 7 dias: nada na Home", not any("notas fiscais" in t or "nota fiscal" in t for t in home()), home())
+        c.execute("UPDATE despesa SET nota_pedida_em=datetime('now','-8 days') WHERE id=?", (d1,)); c.commit()
+        ver("depois de 7 dias: 'N notas fiscais pedidas ainda não chegaram' na Home do admin (prioridade baixa), operador não vê",
+            "1 nota fiscal pedida ainda não chegou" in home() and not any("nota fiscal" in i["titulo"] for g in pendencias.tarefas(c, "operador") for i in g["itens"])
+            and [i["sev"] for g in pendencias.tarefas(c, "admin") if g["id"] == "despesas" for i in g["itens"] if "nota fiscal" in i["titulo"]] == ["b"], home())
+        c.execute("UPDATE despesa SET nota_pedida_em=datetime('now','-8 days') WHERE id=?", (d2,)); c.commit()
+        ver("plural", "2 notas fiscais pedidas ainda não chegaram" in home(), home())
+        c.execute("UPDATE configuracao SET valor='10' WHERE chave='notas.lembrete_dias'"); c.commit()
+        ver("o prazo do lembrete é configurável (10 dias: ainda não)", not any("nota fiscal" in t for t in home()) and x.get("/api/financeiro/notas/pedidas").json()["atrasadas"] == 0)
+        c.execute("UPDATE configuracao SET valor='7' WHERE chave='notas.lembrete_dias'"); c.commit()
+        # Pedir de novo
+        r = x.post(f"/api/financeiro/notas/{d1}/pedir", json={"email": "vendas@alfa.com.br", "whatsapp": "11 98765-0000", "canal": "email"})
+        ver("Pedir de novo: reenvia, conta 2 pedidos e o lembrete recomeça", r.status_code == 200 and r.json()["de_novo"] and r.json()["n_pedidos"] == 2 and not r.json()["atrasada"]
+            and len(enviados) == 2 and "1 nota fiscal pedida ainda não chegou" in home(), r.text)
+        # memória do fornecedor
+        p5 = x.get(f"/api/financeiro/notas/{d5}").json()
+        ver("memória do fornecedor: o mesmo nome (maiúsculas/espaços) volta com e-mail e WhatsApp, e o link wa.me tem o texto",
+            p5["email"] == "vendas@alfa.com.br" and p5["whatsapp"] == "11987650000" and p5["contato_guardado"] and p5["whatsapp_link"].startswith("https://wa.me/5511987650000?text=Pedido%20de%20nota%20fiscal"), p5)
+        # falha do e-mail não marca
+        def quebra(*a, **k): raise email_envio.EnvioErro("SMTPServerDisconnected: conexão caiu")
+        email_envio.enviar = quebra
+        r = x.post(f"/api/financeiro/notas/{d5}/pedir", json={"email": "vendas@alfa.com.br", "canal": "email"})
+        ver("e-mail que falha: 502 com o motivo, a despesa NÃO fica pedida, o pedido fica como 'falhou'", r.status_code == 502 and "conexão caiu" in r.json()["erro"]
+            and c.execute("SELECT nota_pedida_em FROM despesa WHERE id=?", (d5,)).fetchone()[0] is None
+            and c.execute("SELECT situacao FROM nota_pedido WHERE despesa_id=? ORDER BY id DESC", (d5,)).fetchone()[0] == "falhou", r.text)
+        email_envio.enviar = falso
+        lin = [l for l in ee.todas(c) if l["origem"] == "financeiro"]
+        ver("E-mails enviados: os pedidos por e-mail aparecem (SMTP do painel, Financeiro), com a falha; o texto copiado não",
+            len(lin) == 3 and {l["situacao"] for l in lin} == {"enviado", "falhou"} and all(l["canal"] == "smtp" and l["modelo_nome"] == "Pedido de nota fiscal ao fornecedor" for l in lin), lin[:1])
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='smtp.host'"); c.commit()
+        r = x.post(f"/api/financeiro/notas/{d5}/pedir", json={"email": "vendas@alfa.com.br", "canal": "email"})
+        rw = x.post(f"/api/financeiro/notas/{d5}/pedir", json={"whatsapp": "11987650000", "canal": "whatsapp"})
+        ver("sem SMTP: e-mail recusado com mensagem clara; WhatsApp (mandado por conta própria) marca como pedida", r.status_code == 400 and "SMTP" in r.json()["erro"]
+            and rw.status_code == 200 and c.execute("SELECT nota_pedida_em FROM despesa WHERE id=?", (d5,)).fetchone()[0] is not None, (r.text, rw.text))
+        # o comprovante chega
+        png = _b64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 200).decode()
+        rc_ = x.post(f"/api/financeiro/despesas/{d1}/comprovante", json={"nome": "nota-fiscal.png", "base64": png})
+        J = x.get("/api/financeiro/despesas?mes=2026-11").json()
+        ver("anexar o comprovante limpa 'nota pedida' (e sai da Home e do filtro)", rc_.status_code == 200 and rc_.json()["nota_pedida_em"] is None
+            and d1 not in [n["id"] for n in J["notas_pedidas"]] and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='despesa' AND codigo=? AND tipo='nota_chegou'", (str(d1),)).fetchone()[0] == 1, rc_.text[:200])
+        ver("despesa com comprovante: pedir de novo é recusado (409)", x.post(f"/api/financeiro/notas/{d1}/pedir", json={"email": "vendas@alfa.com.br", "canal": "email"}).status_code == 409)
+        # LGPD
+        out = lgpd.apagar_pessoa_local(c, "vendas@alfa.com.br")
+        p5b = x.get(f"/api/financeiro/notas/{d5}").json()
+        ver("LGPD: apagar a pessoa apaga o contato guardado (e-mail e WhatsApp) e tira e-mail/texto dos pedidos", out.get("email_enviado", 0) >= 3 and p5b["email"] == "" and p5b["whatsapp"] == ""
+            and c.execute("SELECT COUNT(*) FROM nota_pedido WHERE lower(para)='vendas@alfa.com.br' OR (para='(removido)' AND texto IS NOT NULL)").fetchone()[0] == 0
+            and c.execute("SELECT COUNT(*) FROM fornecedor_contato WHERE email='vendas@alfa.com.br'").fetchone()[0] == 0, (out, p5b.get("email")))
+        ver("nenhum e-mail real foi aberto (SMTP falso o tempo todo)", len(enviados) == 2)
         for l in res: print(l)
     elif modo == "financeiro_dre":
         # CAMP-FIN DRE gerencial 24/11/2026. Rafael: "Já podemos fazer DRE nisso tudo?". Só com o livro do Financeiro (receitas semeadas + conta do
@@ -20415,7 +20544,7 @@ def filho(modo):
         ver("texto pronto para a NFS-e: PRONAC, título, itens, competência, valor; o que falta preencher", "Projeto PRONAC 2613864 · Edição do livro Arquitetura Moderna Paulista: Acervo Karazawa · item 7 (Coordenação Editorial), item 27 (Custos de Administração) · competência 02/2027" in pr["texto"]
             and "Competência: 02/2027" in pr["texto"] and "Valor total dos serviços: R$ 3.665,68" in pr["texto"] and "CNPJ da CAMP" in pr["faltam"]
             and pr["aviso_lei"].startswith("Pagamentos do projeto à própria proponente seguem as regras da Lei Rouanet e do MinC") and "prefeitura" in pr["aviso_nfse"], pr["faltam"])
-        c.execute("UPDATE configuracao SET valor='00.000.000/0001-00' WHERE chave='financeiro.camp_cnpj'"); c.commit()
+        c.execute("UPDATE configuracao SET valor='00.000.000/0001-00' WHERE chave='faturamento.cnpj'"); c.commit()
         pr = x.get(f"{B}/2/preparar?mes=2027-02").json()
         ver("dados da CAMP da configuração entram no texto", "CNPJ do prestador: 00.000.000/0001-00" in pr["texto"] and "CNPJ da CAMP" not in pr["faltam"])
         nn = x.post(f"{B}/2/notas", json={"competencia": "2027-02", "itens": pr["devidas"]}).json()
@@ -20587,6 +20716,158 @@ def filho(modo):
         from app import pendencias
         g = [g_ for g_ in pendencias.tarefas(c, "admin") if g_["id"] == "despesas"]
         ver("Home do admin: alertas do Financeiro com o porquê (prioridade baixa)", g and any("cobrança repetida" in i["titulo"] and i["sev"] == "b" and i["detalhe"] for i in g[0]["itens"]), g[0]["itens"] if g else None)
+        for l in res: print(l)
+    elif modo == "financeiro_contas_fixas":
+        # CAMP-FIN contas fixas 24/11/2026. Rafael: "Aluguel, funcionário?". Prova: categorias novas (as antigas ficam; migração idempotente e
+        # sem trocar nome que o admin mudou); DRE com Pessoal (salários, encargos, bolsas, autônomos) e Ocupação (aluguel, consumo), configurável;
+        # conta fixa casada pela pista + valor (± 5%) + data, com a categoria e a justificativa sugeridas e confirmadas num clique; situações
+        # pago / a vencer / atrasado (vencimento + 3 dias) / valor diferente; projeção pelas contas fixas; sugestão do detector de recorrentes;
+        # exportação com o pessoal agrupado sem nomes (padrão); 403 fora de admin; nome fora da Home e do operador; exclusão LGPD tira o nome.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, io as _io
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, financeiro_ia as ia, despesas as dp, dre, pendencias, lgpd
+        from app import contas_fixas as cfx
+        from app.db import executar_script_idempotente
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cats = dp.categorias(c)
+        ver("migração 252: categorias novas (aluguel, consumo, Pessoal em quatro) e as 10 de antes ficam", cats.get("aluguel") == "Aluguel e condomínio"
+            and cats.get("consumo") == "Contas de consumo (luz, água, internet, telefone)" and cats.get("salarios") == "Salários" and cats.get("encargos") == "Encargos (INSS, FGTS, férias, 13º)"
+            and cats.get("bolsas") == "Bolsas e estágio" and cats.get("autonomos") == "Autônomos e RPA" and cats.get("servicos") == "Serviços de terceiros (PJ)"
+            and {"materiais", "frete", "pessoal", "tecnologia", "tarifas", "eventos", "manutencao", "impostos", "outras"} <= set(cats) and len(cats) == 16, cats)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='despesas.categorias'", (_j.dumps({"materiais": "Materiais", "aluguel": "Meu aluguel", "servicos": "Terceiros"}),))
+        executar_script_idempotente(c, (RAIZ / "db" / "migrations" / "252_contas_fixas.sql").read_text(encoding="utf-8")); c.commit()
+        c2 = dp.categorias(c)
+        ver("migração 252 de novo: idempotente, não troca o nome que o admin mudou", c2["aluguel"] == "Meu aluguel" and c2["materiais"] == "Materiais" and c2["servicos"] == "Terceiros"
+            and c2["salarios"] == "Salários" and len(c2) == 8, c2)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='despesas.categorias'", (_j.dumps(dict(dp.CATEGORIAS_PADRAO, servicos="Serviços de terceiros (PJ)"), ensure_ascii=False),)); c.commit()
+        n = [0]
+        def d(data, valor, quem, desc="Pix enviado ou saque", cat=None, just=None):
+            n[0] += 1
+            return c.execute("INSERT INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (data, valor, "pix", quem, desc, "mp", f"cf{n[0]}", cat, just)).lastrowid
+        for dt in ("2026-09-05", "2026-10-06"):
+            d(dt, 3000.0, "IMOBILIARIA SOL LTDA")
+        alu = d("2026-11-05", 3050.0, "IMOBILIARIA SOL LTDA")
+        net = d("2026-11-10", 199.9, "Vivo Telefonica", "Pix enviado · CNPJ 02558157000162")
+        sal = d("2026-11-05", 2500.0, "ANA SOUZA")
+        for dt in ("2026-08-12", "2026-09-12", "2026-10-12", "2026-11-12"):
+            d(dt, 89.9, "Hospedagem Web Ltda")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def novo(**k): return x.post("/api/financeiro/contas-fixas", json=dict({"inicio": "2026-01-01", "periodicidade": "mensal"}, **k))
+        r_alu = novo(nome="Aluguel da sede", categoria="aluguel", valor=3000, dia=5, pista="Imobiliária Sol")
+        r_net = novo(nome="Internet", categoria="consumo", valor=150, dia=10, pista="02.558.157/0001-62")
+        r_sal = novo(nome="Salário · Ana Souza", categoria="salarios", valor=2500, dia=5, pista="Ana Souza", pessoa_nome="Ana Souza", pessoa_email="ana@exemplo.com")
+        r_inss = novo(nome="INSS", categoria="encargos", valor=700, dia=20, pista="INSS")
+        r_con = novo(nome="Condomínio", categoria="aluguel", valor=380, valor_max=420, dia=28, pista="Condominio Edificio Azul")
+        r_13 = novo(nome="13º · Ana Souza", categoria="salarios", valor=2500, periodicidade="decimo_terceiro", pista="Ana Souza", pessoa_nome="Ana Souza", pessoa_email="ana@exemplo.com")
+        ids = {k: r_.json().get("id") for k, r_ in (("alu", r_alu), ("net", r_net), ("sal", r_sal), ("inss", r_inss), ("con", r_con), ("13", r_13))}
+        ver("Novo compromisso: 6 contas fixas (mensal, faixa de valor, 13º com dia 20 por padrão), com histórico sem o nome da pessoa",
+            all(r_.status_code == 200 for r_ in (r_alu, r_net, r_sal, r_inss, r_con, r_13)) and r_13.json()["dia"] == 20 and r_con.json()["esperado"] == 400.0
+            and r_sal.json()["pessoal"] and "Ana Souza" not in "".join(r[0] for r in c.execute("SELECT detalhe FROM evento WHERE entidade='conta_fixa'")), [r_.text[:120] for r_ in (r_alu, r_13)])
+        ver("validação: categoria desconhecida, fim antes do começo, dia 0 = 400", novo(nome="X", categoria="xyz", valor=1, dia=1).status_code == 400
+            and novo(nome="X", categoria="aluguel", valor=1, dia=1, fim="2025-01-01").status_code == 400 and novo(nome="X", categoria="aluguel", valor=1, dia=0).status_code == 400)
+        cas = cfx.casamentos(c, _date(2026, 11, 1), _date(2026, 11, 30))
+        ca = cas.get((ids["alu"], "2026-11"))
+        ver("casa a saída do Mercado Pago pela pista + valor (± 5%: R$ 3.050 de R$ 3.000) + data, sem gravar nada", ca and ca["despesa"]["id"] == alu and ca["valor_ok"]
+            and not ca["confirmado"] and "Imobiliária Sol" in ca["motivo"] and c.execute("SELECT categoria FROM despesa WHERE id=?", (alu,)).fetchone()[0] is None, ca)
+        sg = x.get(f"/api/financeiro/ia/despesa/{alu}").json().get("conta_fixa") or {}
+        ver("fila Precisa justificar: sugere a conta fixa com a categoria e a justificativa prontas ('Aluguel da sede · novembro/2026')", sg.get("conta_fixa_id") == ids["alu"]
+            and sg.get("categoria") == "aluguel" and sg.get("justificativa") == "Aluguel da sede · novembro/2026" and sg.get("competencia") == "2026-11" and sg.get("motivo"), sg)
+        G = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        cel = lambda k, m: next(l_ for l_ in G["contas"] if l_["id"] == ids[k])["meses"][m - 1]
+        ver("situação: pago (a confirmar) com a despesa; valor diferente (a pista do CNPJ, R$ 199,90 de R$ 150)", cel("alu", 11)["situacao"] == "pago" and cel("alu", 11)["despesa_id"] == alu
+            and not cel("alu", 11)["confirmado"] and cel("net", 11)["situacao"] == "valor_diferente" and cel("net", 11)["despesa_id"] == net, (cel("alu", 11), cel("net", 11)))
+        ver("situação: atrasado depois do vencimento + 3 dias (INSS dia 20, hoje 24/11; salário de outubro sem pagamento)", cel("inss", 11)["situacao"] == "atrasado"
+            and cel("sal", 10)["situacao"] == "atrasado" and cel("sal", 11)["situacao"] == "pago", (cel("inss", 11), cel("sal", 10)))
+        ver("situação: a vencer (condomínio dia 28; 13º só em dezembro; sem célula antes do começo nem nos outros meses do 13º)", cel("con", 11)["situacao"] == "a_vencer"
+            and cel("13", 12)["situacao"] == "a_vencer" and cel("13", 11) is None and cel("alu", 12)["situacao"] == "a_vencer", (cel("con", 11), cel("13", 12)))
+        fi._HOJE = _date(2026, 11, 23)
+        G23 = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        ver("no 3º dia depois do vencimento ainda é 'a vencer'", next(l_ for l_ in G23["contas"] if l_["id"] == ids["inss"])["meses"][10]["situacao"] == "a_vencer")
+        fi._HOJE = _date(2026, 11, 24)
+        tn = G["totais"][10]
+        ver("Este mês e o total do mês: comprometido × pago", G["este_mes"]["texto"] == "Este mês: 3 contas fixas pagas de 5 · R$ 1.100,00 a pagar" and G["este_mes"]["atrasadas"] == 1
+            and tn["comprometido"] == 6750.0 and tn["pago"] == round(3050 + 199.9 + 2500, 2), (G["este_mes"], tn))
+        rc_ = x.post(f"/api/financeiro/contas-fixas/{ids['alu']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"})
+        dd = c.execute("SELECT categoria, justificativa FROM despesa WHERE id=?", (alu,)).fetchone()
+        G2 = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        ver("um clique confirma: a despesa ganha a categoria e a justificativa e o mês fica pago e confirmado, com histórico", rc_.status_code == 200 and tuple(dd) == ("aluguel", "Aluguel da sede · novembro/2026")
+            and next(l_ for l_ in G2["contas"] if l_["id"] == ids["alu"])["meses"][10]["confirmado"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='conta_fixa' AND tipo='pagamento_confirmado'").fetchone()[0] == 1, (rc_.text[:200], tuple(dd)))
+        ver("confirmar a mesma despesa em outra conta fixa: 409; mês em que não vence: 400", x.post(f"/api/financeiro/contas-fixas/{ids['inss']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"}).status_code == 409
+            and x.post(f"/api/financeiro/contas-fixas/{ids['13']}/confirmar", json={"despesa_id": sal, "competencia": "2026-11"}).status_code == 400)
+        x.post(f"/api/financeiro/contas-fixas/{ids['sal']}/confirmar", json={"despesa_id": sal, "competencia": "2026-11"})
+        sgd = {s_["nome"]: s_ for s_ in G["sugeridas"]}
+        ver("detector de recorrentes: 'Parece um pagamento mensal: transformar em conta fixa?' (hospedagem), e não o aluguel, que já é conta fixa",
+            "Hospedagem Web Ltda" in sgd and sgd["Hospedagem Web Ltda"]["texto"] == "Parece um pagamento mensal: transformar em conta fixa?" and sgd["Hospedagem Web Ltda"]["dia"] == 12
+            and not any("IMOBILIARIA" in k_.upper() for k_ in sgd), list(sgd))
+        P = ia.projecao(c, "2026-11-30")
+        pm = {m["mes"]: m for m in P["meses"]}
+        ver("projeção de 3 meses pelas contas fixas (dezembro com o 13º) + a recorrente que não é conta fixa, sem contar o aluguel duas vezes",
+            pm["2026-12"]["despesas"] == round(3000 + 150 + 2500 + 700 + 400 + 2500 + 89.9, 2) and pm["2027-01"]["despesas"] == round(3000 + 150 + 2500 + 700 + 400 + 89.9, 2)
+            and any(e_.startswith("conta fixa (Aluguel da sede)") for e_ in pm["2026-12"]["explica"]) and not any("IMOBILIARIA" in e_ for e_ in pm["2026-12"]["explica"]), pm["2026-12"])
+        Hm = [g_ for g_ in pendencias.tarefas(c, "admin") if g_["id"] == "despesas"]
+        hi = [i_ for i_ in (Hm[0]["itens"] if Hm else []) if "contas fixas atrasadas" in i_["titulo"]]
+        ver("Home do admin: as contas atrasadas numa linha (vencimento + 3 dias); pessoal pela categoria, sem o nome da pessoa", len(hi) == 1 and hi[0]["titulo"] == "5 contas fixas atrasadas"
+            and hi[0]["detalhe"].startswith("Condomínio, Encargos (INSS, FGTS, férias, 13º), Internet, Salários ·") and "Ana Souza" not in _j.dumps(Hm, ensure_ascii=False)
+            and hi[0]["acao"]["alvo"] == "financeiro/contas-fixas" and hi[0]["sev"] == "a", hi)
+        Ho = pendencias.tarefas(c, "operador")
+        ver("operador: nada do Financeiro na Home e nenhum nome", not [g_ for g_ in Ho if g_["id"] == "despesas"] and "Ana Souza" not in _j.dumps(Ho, ensure_ascii=False))
+        ver("operador: 403 em contas fixas (ver, criar, mudar, apagar, confirmar) e na exportação das despesas", all(r_.status_code == 403 for r_ in (
+            op.get("/api/financeiro/contas-fixas"), op.post("/api/financeiro/contas-fixas", json={"nome": "x"}), op.put(f"/api/financeiro/contas-fixas/{ids['alu']}", json={"nome": "x"}),
+            op.delete(f"/api/financeiro/contas-fixas/{ids['alu']}"), op.post(f"/api/financeiro/contas-fixas/{ids['alu']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"}),
+            op.get("/api/financeiro/despesas/exportar.csv?mes=2026-11"), op.get("/api/financeiro/despesas?mes=2026-11"))))
+        cv1 = x.get("/api/financeiro/despesas/exportar.csv?mes=2026-11").content.decode("utf-8-sig")
+        cv0 = x.get("/api/financeiro/despesas/exportar.csv?mes=2026-11&agrupar_pessoal=0").content.decode("utf-8-sig")
+        lsal = [l_ for l_ in cv1.splitlines() if ";Salários;" in l_]
+        ver("exportação CSV: 'agrupar pessoal' ligado por padrão (Salários numa linha, total, sem nomes); desligado mostra as linhas", "ANA SOUZA" not in cv1 and "Ana Souza" not in cv1
+            and len(lsal) == 1 and "2500,00" in lsal[0] and "Pessoal agrupado: total sem nomes" in lsal[0] and "pessoal agrupado, sem nomes" in cv1.splitlines()[0]
+            and "ANA SOUZA" in cv0 and "IMOBILIARIA SOL LTDA" in cv1, lsal)
+        from openpyxl import load_workbook
+        def aba_desp(q):
+            wb = load_workbook(_io.BytesIO(x.get("/api/financeiro/exportar.xlsx?mes=2026-11" + q).content))
+            return "\n".join(" ".join(str(v_) for v_ in r__ if v_ is not None) for r__ in wb["Despesas"].iter_rows(values_only=True))
+        a1, a0 = aba_desp(""), aba_desp("&agrupar_pessoal=0")
+        ver("exportação XLSX: pessoal agrupado sem nomes por padrão; com agrupar_pessoal=0, as linhas", "ANA SOUZA" not in a1 and "Ana Souza" not in a1 and "Pessoal agrupado" in a1 and "ANA SOUZA" in a0, a1[-300:])
+        for i, (cat, v) in enumerate((("aluguel", 3000), ("consumo", 150), ("salarios", 2500), ("encargos", 700), ("bolsas", 800), ("autonomos", 300), ("servicos", 400), ("pessoal", 100))):
+            c.execute("INSERT INTO despesa (data, valor, origem, chave, categoria, justificativa) VALUES (?,?,?,?,?,?)", (f"2026-12-0{i + 1}", v, "manual", f"dre{i}", cat, "ok"))
+        c.commit()
+        M = dre.montar(c, "2026-12-01", "2026-12-31")
+        L = {l_["chave"]: l_ for l_ in M["linhas"]}
+        ordem = [l_["chave"] for l_ in M["linhas"]]
+        ver("DRE: Pessoal soma salários, encargos, bolsas, autônomos (e o 'pessoal' antigo); Ocupação soma aluguel e consumo; PJ em atividades",
+            L["desp_pessoal"]["atual"] == 4400.0 and L["desp_ocupacao"]["atual"] == 3150.0 and L["desp_atividades"]["atual"] == 400.0 and L["despesas_total"]["atual"] == 7950.0
+            and L["desp_pessoal"]["rotulo"].startswith("Pessoal") and L["desp_ocupacao"]["rotulo"] == "Ocupação (aluguel, condomínio e contas de consumo)", {k: L[k]["atual"] for k in L if k.startswith("desp")})
+        ver("DRE: as linhas de Pessoal e Ocupação abertas por categoria logo abaixo (só mostram, não somam de novo)", L["categoria:salarios"]["atual"] == 2500.0
+            and L["categoria:encargos"]["tipo"] == "det" and L["categoria:encargos"]["nivel"] == 2 and ordem.index("categoria:salarios") == ordem.index("desp_pessoal") + 1
+            and L["categoria:aluguel"]["atual"] == 3000.0 and ordem.index("categoria:aluguel") > ordem.index("desp_ocupacao") and L["categoria:autonomos"]["rotulo"] == "Autônomos e RPA", ordem)
+        dl = x.get("/api/financeiro/dre/linha?linha=categoria:salarios&mes=2026-12").json()
+        ver("DRE: clicar na linha da categoria abre os lançamentos", dl.get("total") == 2500.0 and len(dl.get("itens") or []) == 1 and dl.get("rotulo") == "Salários", dl)
+        x.put("/api/financeiro/dre/mapa", json={"mapa": {"categoria:aluguel": "desp_admin", "categoria:consumo": "desp_admin"}})
+        L2 = {l_["chave"]: l_ for l_ in dre.montar(c, "2026-12-01", "2026-12-31")["linhas"]}
+        ver("DRE configurável: aluguel e consumo em Administrativas; a linha Ocupação some", L2["desp_admin"]["atual"] == 3150.0 and "desp_ocupacao" not in L2
+            and L2["despesas_total"]["atual"] == 7950.0, {k: L2[k]["atual"] for k in L2 if k.startswith("desp")})
+        lg = lgpd.apagar_pessoa_local(c, "ana@exemplo.com")
+        tudo = _j.dumps([tuple(r) for r in c.execute("SELECT * FROM conta_fixa")] + [tuple(r) for r in c.execute("SELECT * FROM despesa")], ensure_ascii=False)
+        ver("exclusão LGPD da pessoa: o nome sai das contas fixas e das despesas ligadas; os valores ficam", lg.get("conta_fixa") == 2 and "Ana Souza" not in tudo and "ANA SOUZA" not in tudo
+            and tuple(c.execute("SELECT contraparte, valor FROM despesa WHERE id=?", (sal,)).fetchone()) == ("(nome removido)", 2500.0)
+            and c.execute("SELECT nome FROM conta_fixa WHERE id=?", (ids["sal"],)).fetchone()[0] == "Salário · (nome removido)"
+            and c.execute("SELECT valor FROM conta_fixa WHERE id=?", (ids["sal"],)).fetchone()[0] == 2500.0, lg)
+        ver("busca natural entende as categorias novas ('aluguel outubro', 'salários 2026')", ia.interpretar("aluguel outubro", dp.categorias(c)).get("categoria") == "aluguel"
+            and ia.interpretar("salários 2026", dp.categorias(c)).get("categoria") == "salarios")
+        ver("palavra-chave: conta de energia vai para consumo (não para manutenção)", (ia.sugerir_categoria(c, {"contraparte": "ENEL ENERGIA ELETRICA", "descricao": "", "valor": 300}) or {}).get("categoria") == "consumo")
+        rd = x.delete(f"/api/financeiro/contas-fixas/{ids['con']}")
+        ver("apagar uma conta fixa: sai da grade", rd.status_code == 200 and ids["con"] not in [l_["id"] for l_ in x.get("/api/financeiro/contas-fixas?ano=2026").json()["contas"]])
         for l in res: print(l)
     elif modo == "patrocinios_autentique":
         # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
@@ -24413,6 +24694,15 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · despesas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 29, "Financeiro · despesas: todas as verificações rodaram")
 
+print("Financeiro · pedir nota fiscal ao fornecedor: dados da CAMP, texto com PRONAC, SMTP do painel falso, nota pedida, lembrete na Home, Pedir de novo, comprovante, memória do fornecedor, LGPD, papéis")
+rc, out = rodar("financeiro_nota_fiscal", f"{tmp}/financeiro_nota_fiscal.db")
+if rc != 0: ok(False, f"teste financeiro_nota_fiscal não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · nota fiscal: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Financeiro · nota fiscal: todas as verificações rodaram")
+
 print("Financeiro · DRE gerencial: linhas, tarifas e estorno, superávit e déficit, contas separadas, anterior e acumulado do ano, mensal, fora do mapa, detalhe, exportação, papéis")
 rc, out = rodar("financeiro_dre", f"{tmp}/financeiro_dre.db")
 if rc != 0: ok(False, f"teste financeiro_dre não rodou -> {out[-1500:]}")
@@ -24439,6 +24729,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projeto incentivado: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 34, "Projeto incentivado: todas as verificações rodaram")
+
+print("Financeiro · contas fixas: categorias novas, DRE (Pessoal e Ocupação), casar com o Mercado Pago, pago/a vencer/atrasado/valor diferente, um clique na fila, projeção, sugestão, exportação sem nomes, 403, Home, LGPD")
+rc, out = rodar("financeiro_contas_fixas", f"{tmp}/financeiro_contas_fixas.db")
+if rc != 0: ok(False, f"teste financeiro_contas_fixas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · contas fixas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 28, "Financeiro · contas fixas: todas as verificações rodaram")
 
 print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
 rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")

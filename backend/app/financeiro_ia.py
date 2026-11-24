@@ -33,6 +33,11 @@ router = APIRouter(prefix="/api/financeiro/ia", tags=["financeiro_ia"])
 MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 SUFIXOS = {"ltda", "me", "mei", "epp", "eireli", "sa", "s/a", "s.a.", "cia", "comercio", "com", "de", "da", "do", "e", "servicos"}
 PALAVRAS = [   # (trecho normalizado, categoria): na ordem; o primeiro que aparecer vale
+    # CAMP-FIN contas fixas: aluguel, consumo e pessoal (antes de "eletric", que é manutenção)
+    ("aluguel", "aluguel"), ("condominio", "aluguel"), ("imobiliaria", "aluguel"), ("energia", "consumo"), ("enel", "consumo"), ("sabesp", "consumo"),
+    ("conta de agua", "consumo"), ("internet", "consumo"), ("telefon", "consumo"), ("vivo", "consumo"), ("claro", "consumo"), ("comgas", "consumo"),
+    ("salario", "salarios"), ("folha de pagamento", "salarios"), ("inss", "encargos"), ("fgts", "encargos"), ("ferias", "encargos"),
+    ("decimo terceiro", "encargos"), ("rpa", "autonomos"), ("autonomo", "autonomos"), ("estagi", "bolsas"), ("bolsa", "bolsas"),
     ("correios", "frete"), ("sedex", "frete"), ("frete", "frete"), ("transport", "frete"), ("mudanca", "frete"), ("uber", "frete"),
     ("kalunga", "materiais"), ("tyvek", "materiais"), ("papel neutro", "materiais"), ("papel alcalino", "materiais"), ("caixa arquivo", "materiais"),
     ("poliester", "materiais"), ("mylar", "materiais"), ("acondicion", "materiais"), ("conserva", "materiais"), ("papelaria", "materiais"),
@@ -42,7 +47,7 @@ PALAVRAS = [   # (trecho normalizado, categoria): na ordem; o primeiro que apare
     ("buffet", "eventos"), ("cafe", "eventos"), ("evento", "eventos"),
 ]
 RE_CNPJ = re.compile(r"\b(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})\b")
-AVISO_PROJECAO = "Estimativa simples, só com o que se repete (mensalidades, renovações e despesas recorrentes). Não é previsão garantida."
+AVISO_PROJECAO = "Estimativa simples, só com o que se repete (mensalidades, renovações, contas fixas e despesas recorrentes). Não é previsão garantida."
 
 
 def _fin():
@@ -399,7 +404,15 @@ def projecao(con, ate: str, meses: int = 3) -> dict:
             if i < falta and r["valor_anual"]:
                 out[m]["receitas"] += r["valor_anual"] / 12
                 out[m]["explica"].append(f"patrocínio em 12 meses: {_reais(r['valor_anual'] / 12)}")
+    from . import contas_fixas as cfx   # CAMP-FIN contas fixas: o que está combinado vale mais que o que só se repetiu
+    todas_cf = cfx.contas(con, com_inativas=False)
+    for m in futuros:
+        v, ex, _ = cfx.previsao(con, m)
+        out[m]["despesas"] += v
+        out[m]["explica"] += ex
     for r in recorrentes(con):
+        if any(cfx._cobre(cf, r) for cf in todas_cf):
+            continue
         for m in futuros:
             out[m]["despesas"] += r["valor"]
             out[m]["explica"].append(f"despesa recorrente ({r['nome']}): {_reais(r['valor'])}")
@@ -458,7 +471,9 @@ def interpretar(q: str, categorias: dict[str, str] | None = None) -> dict:
             break
     sinon = {"frete": "frete", "fretes": "frete", "material": "materiais", "materiais": "materiais", "tecnologia": "tecnologia", "software": "tecnologia",
              "pessoal": "pessoal", "estagio": "pessoal", "tarifa": "tarifas", "tarifas": "tarifas", "eventos": "eventos", "evento": "eventos",
-             "manutencao": "manutencao", "impostos": "impostos", "imposto": "impostos", "servicos": "servicos"}
+             "manutencao": "manutencao", "impostos": "impostos", "imposto": "impostos", "servicos": "servicos",
+             "aluguel": "aluguel", "condominio": "aluguel", "salario": "salarios", "salarios": "salarios", "inss": "encargos", "fgts": "encargos",
+             "encargos": "encargos", "internet": "consumo", "luz": "consumo", "agua": "consumo", "bolsas": "bolsas", "rpa": "autonomos"}
     for k, nome in cats.items():
         sinon.setdefault(sem_acento(nome).split()[0], k)
     for pal, cat in sinon.items():
@@ -482,8 +497,10 @@ def ver_sugestoes(did: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(404, "Despesa não encontrada")
         d = dict(r)
         hist = _historico(con, did)
+        from . import contas_fixas as cfx
         from . import rouanet
-        return {"categoria": sugerir_categoria(con, d, hist), "justificativas": sugerir_justificativa(con, d, hist), "item": rouanet.sugerir_item(con, d),
+        return {"categoria": sugerir_categoria(con, d, hist), "justificativas": sugerir_justificativa(con, d, hist), "conta_fixa": cfx.sugestao_para(con, d),
+                "item": rouanet.sugerir_item(con, d),
                 "leitura_ligada": leitura_ligada(con), "leitor": bool(LEITORES.get(_cfg(con, "financeiro.leitor", "")))}
     finally:
         con.close()

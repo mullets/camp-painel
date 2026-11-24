@@ -75,12 +75,8 @@ CREATE TABLE IF NOT EXISTS nota_camp (                  -- notas que a CAMP emit
 CREATE INDEX IF NOT EXISTS idx_nota_camp ON nota_camp (conta_id, competencia);
 ALTER TABLE despesa ADD COLUMN orcamento_item INTEGER;   -- número do item do orçamento (conta de projeto)
 ALTER TABLE despesa ADD COLUMN nf_numero TEXT;           -- número da nota fiscal (prestação de contas)
+-- os dados da CAMP (razão social, CNPJ, inscrição municipal, endereço, e-mail) são os faturamento.* da 253
 INSERT OR IGNORE INTO configuracao (chave, valor, descricao, sensivel) VALUES
- ('financeiro.camp_razao_social', '', 'Dados da CAMP para notas fiscais: razão social', 0),
- ('financeiro.camp_cnpj', '', 'Dados da CAMP para notas fiscais: CNPJ', 0),
- ('financeiro.camp_im', '', 'Dados da CAMP para notas fiscais: inscrição municipal', 0),
- ('financeiro.camp_endereco', '', 'Dados da CAMP para notas fiscais: endereço', 0),
- ('financeiro.camp_email', '', 'Dados da CAMP para notas fiscais: e-mail', 0),
  ('financeiro.nfse_servico', '', 'Nota fiscal da CAMP para o projeto: código do serviço (lista da LC 116 / código municipal); confirme com o contador', 0),
  ('financeiro.nfse_iss', '', 'Nota fiscal da CAMP para o projeto: alíquota do ISS (%); confirme com o contador', 0),
  ('financeiro.projeto_conta_camp', '1', 'Conta da CAMP que recebe o pagamento das notas da CAMP para o projeto (financeiro_conta.id)', 0);

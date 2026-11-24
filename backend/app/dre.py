@@ -48,7 +48,8 @@ LINHAS = [
     ("g_despesas", "DESPESAS", "grupo", 0),
     ("desp_atividades", "Com atividades e projetos (conservação, frete, serviços ligados ao acervo e a eventos)", "desp", 1),
     ("desp_admin", "Administrativas (tecnologia, manutenção, impostos e taxas, outras)", "desp", 1),
-    ("desp_pessoal", "Pessoal e estagiários", "desp", 1),
+    ("desp_ocupacao", "Ocupação (aluguel, condomínio e contas de consumo)", "desp", 1),
+    ("desp_pessoal", "Pessoal (salários, encargos, bolsas e estágio, autônomos e RPA)", "desp", 1),
     ("desp_financeiras", "Financeiras (tarifas bancárias que não são de recebimento)", "desp", 1),
     ("desp_outras", "Outras (sem classificação)", "desp", 1),
     ("despesas_total", "(=) Total das despesas", "soma", 0),
@@ -68,7 +69,12 @@ MAPA_PADRAO = {
     "categoria:materiais": "desp_atividades", "categoria:frete": "desp_atividades", "categoria:servicos": "desp_atividades",
     "categoria:eventos": "desp_atividades", "categoria:tecnologia": "desp_admin", "categoria:manutencao": "desp_admin",
     "categoria:impostos": "desp_admin", "categoria:outras": "desp_admin", "categoria:pessoal": "desp_pessoal", "categoria:tarifas": "desp_financeiras",
+    # CAMP-FIN contas fixas: Pessoal em quatro, todas na linha Pessoal; aluguel e consumo na Ocupação (o admin pode mandar para Administrativas)
+    "categoria:salarios": "desp_pessoal", "categoria:encargos": "desp_pessoal", "categoria:bolsas": "desp_pessoal", "categoria:autonomos": "desp_pessoal",
+    "categoria:aluguel": "desp_ocupacao", "categoria:consumo": "desp_ocupacao",
 }
+# Linhas da DRE abertas por categoria logo abaixo (só mostram; não somam de novo). Muda em `dre.detalhar` (JSON com as chaves das linhas).
+DETALHAR_PADRAO = ["desp_pessoal", "desp_ocupacao"]
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
 
 
@@ -93,6 +99,15 @@ def mapa(con) -> dict[str, str]:
         if v in REC + DESP:
             m[str(k)] = v
     return m
+
+
+def detalhar(con) -> list[str]:
+    r = con.execute("SELECT valor FROM configuracao WHERE chave='dre.detalhar'").fetchone()
+    try:
+        d = json.loads(r[0]) if r and r[0] else DETALHAR_PADRAO
+    except ValueError:
+        d = DETALHAR_PADRAO
+    return [k for k in (d if isinstance(d, list) else DETALHAR_PADRAO) if k in DESP]
 
 
 def _visoes(con) -> list[dict]:
@@ -163,8 +178,10 @@ def valores(con, de: str, ate: str, visao: str = "consolidado") -> dict:
     v = {k: 0.0 for k, _, t, _ in LINHAS if t != "grupo"}
     for k, x in r_cl:
         v[k] += x["bruto"]
+    por_cat: dict[str, float] = {}
     for k, x in d_cl:
         v[k] += x["valor"]
+        por_cat[x["categoria"] or ""] = por_cat.get(x["categoria"] or "", 0.0) + x["valor"]
     v["tarifas_receb"] = sum(x["tarifa"] or 0 for x in rec)
     v["receita_bruta"] = sum(v[k] for k in REC)
     v["receita_liquida"] = v["receita_bruta"] - v["tarifas_receb"]
@@ -173,7 +190,7 @@ def valores(con, de: str, ate: str, visao: str = "consolidado") -> dict:
     v["transf_interna"] = interna
     v = {k: round(x, 2) for k, x in v.items()}
     avisos["tarifa_a_conferir"] = sum(1 for x in rec if x["tarifa_conferir"] and not x["estorno"])
-    return {"valores": v, "avisos": avisos}
+    return {"valores": v, "avisos": avisos, "por_categoria": {k: round(x, 2) for k, x in por_cat.items()}}
 
 
 def periodo_anterior(de: str, ate: str) -> tuple[str, str]:
@@ -206,8 +223,19 @@ def montar(con, de: str, ate: str, visao: str = "consolidado") -> dict:
         if k == "resultado":
             rv = atual["valores"]["resultado"]
             rot = "(=) Superávit do período" if rv > 0 else ("(=) Déficit do período" if rv < 0 else "(=) Resultado do período (zero)")
+        if k == "desp_ocupacao" and not any(x["valores"]["desp_ocupacao"] for x in (atual, ant, ytd)) and "desp_ocupacao" not in mapa(con).values():
+            continue
         linhas.append({"chave": k, "rotulo": rot, "tipo": t, "nivel": nv, "atual": atual["valores"].get(k), "anterior": ant["valores"].get(k),
                        "ytd": ytd["valores"].get(k), "clicavel": t in ("rec", "desp", "tarifa")})
+        if t == "desp" and k in detalhar(con):
+            cats = _desp().categorias(con)
+            ordem_cat = ["salarios", "encargos", "bolsas", "autonomos", "pessoal", "aluguel", "consumo"]
+            for cat in sorted([c_[len("categoria:"):] for c_, l_ in mapa(con).items() if l_ == k and c_.startswith("categoria:")],
+                              key=lambda c_: (ordem_cat.index(c_) if c_ in ordem_cat else 99, c_)):
+                vs = [x["por_categoria"].get(cat, 0.0) for x in (atual, ant, ytd)]
+                if any(vs) or cat in ("salarios", "encargos", "bolsas", "autonomos", "aluguel", "consumo"):
+                    linhas.append({"chave": "categoria:" + cat, "rotulo": cats.get(cat, cat), "tipo": "det", "nivel": nv + 1, "atual": vs[0], "anterior": vs[1],
+                                   "ytd": vs[2], "clicavel": True})
     pend = _desp().listar(con, de, ate, so_pendentes=True)
     sem_cat = sum(1 for x in pend if not x["categoria"])
     return {"titulo": TITULO, "aviso": AVISO, "periodo": {"de": de, "ate": ate}, "anterior": {"de": a1, "ate": a2}, "ytd": {"de": y1, "ate": ate},
@@ -237,6 +265,8 @@ def detalhe_linha(con, linha: str, de: str, ate: str, visao: str) -> list[dict]:
     if linha == "tarifas_receb":
         return [dict(x, tipo_lanc="receita") for x in rec if x["tarifa"]]
     r_cl, d_cl, _ = classificar(con, rec, desp)
+    if linha.startswith("categoria:"):
+        return [dict(x, tipo_lanc="despesa") for _, x in d_cl if (x["categoria"] or "") == linha[len("categoria:"):]]
     return [dict(x, tipo_lanc="receita") for k, x in r_cl if k == linha] + [dict(x, tipo_lanc="despesa") for k, x in d_cl if k == linha]
 
 
@@ -320,13 +350,14 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
 
 @router.get("/linha")
 def linha(linha: str, de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = "", visao: str = "consolidado", u: dict = Depends(auth.exige("admin"))) -> dict:
-    if linha not in REC + DESP + ["tarifas_receb"]:
-        raise HTTPException(400, "Linha da DRE desconhecida")
     d1, d2 = _periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
+        cats = _desp().categorias(con)
+        if linha not in REC + DESP + ["tarifas_receb"] and not (linha.startswith("categoria:") and linha[len("categoria:"):] in cats):
+            raise HTTPException(400, "Linha da DRE desconhecida")
         ls = detalhe_linha(con, linha, d1, d2, visao)
-        return {"linha": linha, "rotulo": ROTULO[linha], "periodo": {"de": d1, "ate": d2}, "itens": ls,
+        return {"linha": linha, "rotulo": ROTULO.get(linha) or cats.get(linha[len("categoria:"):], linha), "periodo": {"de": d1, "ate": d2}, "itens": ls,
                 "total": round(sum((x["tarifa"] if linha == "tarifas_receb" else x.get("bruto", x.get("valor"))) or 0 for x in ls), 2)}
     finally:
         con.close()
