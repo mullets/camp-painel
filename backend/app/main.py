@@ -145,6 +145,8 @@ from .bloqueio_folha import router as rotas_bloqueio_folha   # CAMP-BLOQUEIO: mo
 app.include_router(rotas_bloqueio_folha)
 from .central_problemas import router as rotas_central_problemas   # CAMP-PROB-UX: Central de Problemas
 app.include_router(rotas_central_problemas)
+from .projetos_camp import router as rotas_projetos_camp   # CAMP-PROJ: Projetos da CAMP (projetos institucionais: Rouanet, editais, patrocínios)
+app.include_router(rotas_projetos_camp)
 
 
 @app.on_event("startup")
@@ -339,6 +341,15 @@ async def _resumo_diario_periodico() -> None:
                     if "motivo" not in r:
                         log_registrar(logging.INFO if r.get("enviado") else logging.WARNING, "resumo_diario",
                                       "Resumo do dia enviado" if r.get("enviado") else "Resumo do dia não saiu", para=r.get("para"), erro=r.get("erro"))
+                    try:   # CAMP-PROJ: resumo diário dos Projetos da CAMP (desligado até alguém escolher quem recebe)
+                        from .projetos_camp import resumo_email
+                        rp = resumo_email(c2)
+                        if "motivo" not in rp:
+                            log_registrar(logging.INFO if rp.get("enviado") else logging.WARNING, "projetos_camp_email",
+                                          "Resumo dos Projetos da CAMP enviado" if rp.get("enviado") else "Resumo dos Projetos da CAMP não saiu",
+                                          enviados=rp.get("enviados"), erro=rp.get("erro"))
+                    except Exception as e2:  # noqa: BLE001
+                        log_registrar(logging.WARNING, "projetos_camp_email_falhou", str(e2)[:200])
                 finally:
                     c2.close()
             await asyncio.to_thread(_rodar)

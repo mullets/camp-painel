@@ -837,3 +837,31 @@ ou saída) vem do sinal que o próprio Mercado Pago dá no relatório de libera�
 - Painel lateral **Buscar outro período**: "Lê de novo no Mercado Pago as compras, os pagamentos e os recebimentos desse período (até 12 meses de cada
   vez). Nada se repete."; campos **De**, **Até**; botão **Buscar** (**Buscando…**); toasts "Buscando o período no Mercado Pago…", "Período lido no Mercado
   Pago.", "A busca falhou: …". Erros: "Período inválido: use datas no formato AAAA-MM-DD", "Período longo demais: busque até 12 meses de cada vez".
+
+## Projetos da CAMP (CAMP-PROJ, 24/11/2026)
+Rafael: "vamos ter uma área de projetos no sistema, interligados aos outros módulos dele, que vai ter os objetivos e prazos, e precisa sempre me
+avisar tudo." Modelo: a proposta do SALIC.
+- Nome da área: **Projetos da CAMP** (menu em Administração, tecla 7, só admin e master; endereço `#projetos_camp/<id>/<aba>`). São os projetos
+  institucionais (Lei Rouanet, editais, patrocínios, projetos internos). **Nunca** chamar só de "projeto" onde puder confundir com o projeto do
+  acervo (F0xx-P000x).
+- Tipos: **Lei Rouanet**, **Edital**, **Patrocínio**, **Projeto interno**. Situações: **Planejamento**, **Captação**, **Execução**, **Prestação de
+  contas**, **Concluído**, **Arquivado**. Etapas e tarefas: **A fazer**, **Fazendo**, **Feita**, **Não se aplica** (o mesmo da doação de acervo);
+  **marco** = entrega ou data institucional.
+- Abas: **Visão geral**, **Cronograma**, **Orçamento**, **Financeiro do projeto**, **Documentos**, **Histórico**. Blocos: **Avisos**, **Mudou desde
+  a sua última visita**, **Objetivo geral**, **Objetivos e metas**, **Identificação**, **Próximos prazos**. Prazos institucionais: **Prazo de
+  captação**, **Fim da execução**, **Prestação de contas**. Campo vazio: "a preencher" (no Rouanet: "veja na proposta do SALIC").
+- Botões: **Novo projeto**, **Editar dados**, **Novo objetivo**, **Nova etapa**, **Nova tarefa**, **Novo item**, **Lançar entrada**, **Ligar
+  despesa**, **Ligar patrocínio**, **Tirar do projeto**, **Abrir no Financeiro**, **Anexar**, **Tirar** (documento), **Ver o que será criado** /
+  **Criar o projeto** (projeto do PRONAC a partir do Financeiro, simulado antes), **Enviar um teste agora**, **Mostrar arquivados**.
+- Avisos: "Tarefa X: atrasado há N dias (dd/mm/aaaa)", "vence hoje", "vence em N dias" (tarefas e etapas em 7 dias; prazos institucionais em 30),
+  "Acima do previsto: …", "Perto do limite: … (N% usado)", "N despesas sem comprovante", "A preencher: …".
+- Home (admin): bloco **Projetos da CAMP** com "N atrasados · N em 7 dias · N mudanças desde a sua última visita" e os avisos.
+- **Resumo diário por e-mail** (`projetos_camp.email_diario`, vazio = desligado; `projetos_camp.email_hora`, padrão 8): seções "Atrasado", "Vence
+  nos próximos dias", "Orçamento e comprovantes", "Mudou nas últimas 24 horas".
+- **Proposta do SALIC** (CAMP-PROJ, 24/11/2026; dados em `docs/rouanet/pronac-2613864-proposta.json`, sem dado pessoal): o projeto do PRONAC já
+  nasce com resumo, objetivo geral, objetivos específicos com meta, marcos (**Proposta enviada ao MinC**, **Enquadramento: Artigo 18**), etapas com
+  **duração** e tarefas, **Ficha técnica** e **Obrigações da proposta** (grupos **Documentos enviados ao SALIC**, **Acessibilidade**,
+  **Democratização de acesso**, **Direitos**; "N de M cumpridas"). Projeto que já existe: aviso "A proposta do SALIC tem informações que ainda não
+  estão aqui: …" com **Ver o que será completado** → **Completar** (só o vazio; nada da equipe é trocado). Etapa sem data: "duração: 3 meses ·
+  começa quando a captação for liberada"; com **Execução começa em** (Editar dados) as datas aparecem ("pela duração (3 meses), a partir do início
+  da execução"). Trecho ilegível na cópia: "Trecho ilegível na cópia da proposta: confira o texto na proposta do SALIC." Nunca inventar data.
