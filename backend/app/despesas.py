@@ -293,46 +293,211 @@ def abas_xlsx(wb, rel: dict) -> None:
 
 
 # ---------------------------------------------------------------- saídas do Mercado Pago (relatório de liberações, pelo site)
-def _classificar_mp(desc: str, meio_tipo: str) -> tuple[str | None, str, str | None]:
-    """(tipo, meio, categoria automática) de uma linha de saída; tipo None = não é despesa."""
-    d = (desc or "").lower()
-    if any(k in d for k in NAO_DESPESA):
-        return None, "", None
-    if d == "withdrawal":
-        return "transferencia_propria", "transferencia", None
-    if d == "payout":
-        return "despesa", "pix", None
-    if "fee" in d or "tax" in d or "shipping" in d:
-        return "despesa", "tarifa", "tarifas"
+def _classificar_mp(desc: str, meio_tipo: str, meio: str = "", tags: str = "") -> tuple[str | None, str, str | None, str]:
+    """(tipo, meio, categoria automática, rótulo como no Extrato do Mercado Pago) de uma linha de saída do relatório; tipo None = não é despesa.
+    CAMP-FIN-CONSERTOS (Rafael: "saída de Pix, boleto, transferências"): o rótulo segue o Extrato (Pix enviado, Pagamento com Pix,
+    Pagamento de boleto/conta, Compra no cartão de débito, Transferência enviada, Saque, Tarifa)."""
+    d = (desc or "").lower().strip()
     m = (meio_tipo or "").lower()
-    return "despesa", {"debit_card": "debito", "credit_card": "credito", "account_money": "saldo", "ticket": "boleto", "bank_transfer": "pix"}.get(m, "outro"), None
+    mm = (meio or "").lower()
+    tg = (tags or "").upper()
+    if any(k in d for k in NAO_DESPESA):
+        return None, "", None, ""
+    if d == "withdrawal":
+        return "transferencia_propria", "transferencia", None, "Saque (transferência para a conta bancária da CAMP)"
+    if d == "payout":   # "saque em dinheiro ou transferência por PIX de saldo disponível" (glossário do relatório de liberações)
+        return "despesa", "pix", None, "Pix enviado"
+    if d.startswith("tax") or "imposto" in d:
+        return "despesa", "tarifa", "impostos", "Imposto retido pelo Mercado Pago"
+    if "fee" in d or "shipping" in d or "tarifa" in d:
+        return "despesa", "tarifa", "tarifas", "Tarifa do Mercado Pago"
+    if d in ("money_transfer", "transfer", "bank_transfer"):
+        return "despesa", "transferencia", None, "Transferência enviada"
+    if d == "credit_payment":
+        return "despesa", "outro", None, "Pagamento de crédito do Mercado Pago"
+    if "PIX" in tg or m == "bank_transfer" or mm == "pix":
+        return "despesa", "pix", None, "Pagamento com Pix"
+    if m == "ticket" or "bol" in mm or "boleto" in d or "bill" in d or "utility" in d:
+        return "despesa", "boleto", None, "Pagamento de boleto/conta"
+    if m in ("debit_card", "prepaid_card"):
+        return "despesa", "debito", None, "Compra no cartão de débito"
+    if m == "credit_card":
+        return "despesa", "credito", None, "Compra no cartão de crédito"
+    if m == "account_money":
+        return "despesa", "saldo", None, "Pagamento com o saldo do Mercado Pago"
+    return "despesa", "outro", None, "Pagamento" if d == "payment" else (_txt(desc, 80) or "Saída do Mercado Pago")
 
 
 def importar_saidas_mp(con, itens: list[dict]) -> dict:
-    out = {"lidas": 0, "novas": 0, "ignoradas": 0, "transferencias": 0}
+    """Linhas de SAÍDA do relatório (o site já tirou as entradas: vendas e liberações nunca viram receita por aqui; as receitas vêm de
+    payments/search). Única pelo movimento; se o movimento já veio pelo Extrato importado (mesma referência e valor), não duplica."""
+    out = {"lidas": 0, "novas": 0, "ignoradas": 0, "transferencias": 0, "ja_no_extrato": 0}
     for x in itens:
         if not isinstance(x, dict):
             continue
         out["lidas"] += 1
         valor = _num(x.get("debito"))
         dia = _fin().dia_sp(x.get("data"))
-        tipo, meio, cat = _classificar_mp(str(x.get("descricao") or ""), str(x.get("meio_tipo") or ""))
+        tipo, meio, cat, rotulo = _classificar_mp(str(x.get("descricao") or ""), str(x.get("meio_tipo") or ""), str(x.get("meio") or ""), str(x.get("tags") or ""))
         if not valor or valor <= 0 or not dia or not tipo:
             out["ignoradas"] += 1
             continue
         sid = _txt(x.get("source_id"), 60) or f"linha{int(x.get('linha') or 0)}"
+        if x.get("source_id") and con.execute("SELECT 1 FROM despesa WHERE mp_ref=? AND chave LIKE 'mpx:%' AND ABS(valor-?)<0.005", (sid, valor)).fetchone():
+            out["ja_no_extrato"] += 1
+            continue
         chave = f"mp:{sid}:{_txt(x.get('descricao'), 40).lower()}:{dia}:{valor:.2f}"
-        desc = {"payout": "Pix enviado ou saque", "withdrawal": "Retirada para a conta bancária da CAMP", "payment": "Compra no Mercado Pago"}.get(
-            str(x.get("descricao") or "").lower(), "Tarifa do Mercado Pago" if cat == "tarifas" else (_txt(x.get("descricao"), 80) or "Saída do Mercado Pago"))
+        desc = rotulo
         if x.get("external_reference"):
             desc += f" · {_txt(x.get('external_reference'), 80)}"
         n = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, categoria, justificativa, mp_ref, criado_por)
                            VALUES (?,?,?,?,?,?, 'mp', ?,?,?,?,?, 'Mercado Pago')""",
                         (_fin().CONTA_MP, dia, valor, meio, _txt(x.get("contraparte"), 160) or None, desc, chave, tipo, cat,
-                         "Tarifa cobrada pelo Mercado Pago" if cat == "tarifas" else None, _txt(x.get("source_id"), 60) or None)).rowcount
+                         {"tarifas": "Tarifa cobrada pelo Mercado Pago", "impostos": "Imposto retido pelo Mercado Pago"}.get(cat), _txt(x.get("source_id"), 60) or None)).rowcount
         out["novas"] += n
         out["transferencias"] += n if tipo == "transferencia_propria" else 0
     return out
+
+
+# ---------------------------------------------------------------- Extrato da conta do Mercado Pago (CSV baixado pelo Rafael)
+_EXTRATO_COLS = {"data": ("RELEASE_DATE", "DATA", "DATA DE LIBERACAO", "DATE"), "tipo": ("TRANSACTION_TYPE", "DESCRICAO", "TIPO DE TRANSACAO", "DESCRIPTION"),
+                 "ref": ("REFERENCE_ID", "ID DA OPERACAO", "REFERENCIA", "ID DA OPERACAO NO MERCADO PAGO", "SOURCE_ID"),
+                 "valor": ("TRANSACTION_NET_AMOUNT", "VALOR", "VALOR LIQUIDO", "NET_AMOUNT")}
+
+
+def _sem_acento(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s or "") if unicodedata.category(c) != "Mn")
+
+
+def _valor_br(v) -> float | None:
+    t = str(v or "").strip().replace("R$", "").replace("\u00a0", "").replace(" ", "")
+    if not t:
+        return None
+    if re.fullmatch(r"[-+]?\d{1,3}(\.\d{3})*,\d+|[-+]?\d+,\d+", t):
+        t = t.replace(".", "").replace(",", ".")
+    try:
+        return round(float(t), 2)
+    except ValueError:
+        return None
+
+
+def _data_br(v) -> str:
+    t = str(v or "").strip()
+    m = re.match(r"(\d{2})[/-](\d{2})[/-](\d{4})", t)
+    if m:
+        try:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1))).isoformat()
+        except ValueError:
+            return ""
+    return _fin().dia_sp(t) if re.match(r"\d{4}-\d{2}-\d{2}", t) else ""
+
+
+# (começo do texto do Extrato, sem acento e minúsculo) → (tipo, meio, categoria, rótulo). A ordem importa: o mais específico primeiro.
+_EXTRATO_TIPOS = [
+    ("pagamento com pix", ("despesa", "pix", None, "Pagamento com Pix")),
+    ("pix enviado", ("despesa", "pix", None, "Pix enviado")),
+    ("transferencia pix enviada", ("despesa", "pix", None, "Pix enviado")),
+    ("pagamento de boleto", ("despesa", "boleto", None, "Pagamento de boleto/conta")),
+    ("pagamento de conta", ("despesa", "boleto", None, "Pagamento de boleto/conta")),
+    ("pagamento de contas", ("despesa", "boleto", None, "Pagamento de boleto/conta")),
+    ("boleto pago", ("despesa", "boleto", None, "Pagamento de boleto/conta")),
+    ("compra com cartao de debito", ("despesa", "debito", None, "Compra no cartão de débito")),
+    ("compra no cartao", ("despesa", "debito", None, "Compra no cartão de débito")),
+    ("compra", ("despesa", "debito", None, "Compra no cartão de débito")),
+    ("transferencia enviada", ("despesa", "transferencia", None, "Transferência enviada")),
+    ("transferencia para", ("despesa", "transferencia", None, "Transferência enviada")),
+    ("saque", ("transferencia_propria", "transferencia", None, "Saque (transferência para a conta bancária da CAMP)")),
+    ("retirada", ("transferencia_propria", "transferencia", None, "Saque (transferência para a conta bancária da CAMP)")),
+    ("tarifa", ("despesa", "tarifa", "tarifas", "Tarifa do Mercado Pago")),
+    ("imposto", ("despesa", "tarifa", "impostos", "Imposto retido pelo Mercado Pago")),
+    ("pagamento", ("despesa", "debito", None, "Compra no cartão de débito")),   # "Pagamento Anthropic* claude sub"; "Pagamento" sozinho = conta (abaixo)
+]
+
+
+def classificar_extrato(texto: str) -> tuple[str | None, str, str | None, str, str]:
+    """Uma linha de SAÍDA do Extrato → (tipo, meio, categoria, rótulo, contraparte). Aceita "Pix enviado Fulano", "Fulano · Pix enviado" e
+    "Fulano - Pagamento com Pix". "Pagamento" sozinho (com o logo do Mercado Pago) é pagamento de conta/boleto."""
+    bruto = re.sub(r"\s+", " ", str(texto or "")).strip()
+    nome, tipo_txt = "", bruto
+    for sep in (" · ", " | "):
+        if sep in bruto:
+            a, b = bruto.rsplit(sep, 1)
+            if any(_sem_acento(b).lower().startswith(k) for k, _ in _EXTRATO_TIPOS):
+                nome, tipo_txt = a.strip(), b.strip()
+            break
+    t = _sem_acento(tipo_txt).lower()
+    for k, v in _EXTRATO_TIPOS:
+        if t.startswith(k):
+            resto = tipo_txt[len(k):].strip(" -·:") if not nome else ""
+            quem = (nome or resto).strip()
+            if k == "pagamento" and not quem:
+                return "despesa", "boleto", None, "Pagamento de boleto/conta", ""
+            return v[0], v[1], v[2], v[3], quem
+    return "despesa", "outro", None, _txt(bruto, 80) or "Saída do Mercado Pago", ""
+
+
+def ler_extrato_mp(texto: str) -> list[dict]:
+    """CSV do Extrato da conta do Mercado Pago (RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE, ou os nomes
+    em português). As linhas de resumo antes do cabeçalho (saldo inicial, créditos, débitos) são puladas."""
+    import csv
+    linhas = [l for l in re.split(r"\r\n|\n|\r", (texto or "").lstrip("\ufeff")) if l.strip()]
+    for i, l in enumerate(linhas):
+        sep = ";" if l.count(";") >= l.count(",") else ","
+        cab = [_sem_acento(c).strip().strip('"').upper() for c in next(csv.reader([l], delimiter=sep))]
+        idx = {k: next((cab.index(n) for n in nomes if n in cab), None) for k, nomes in _EXTRATO_COLS.items()}
+        if idx["data"] is not None and idx["tipo"] is not None and idx["valor"] is not None:
+            break
+    else:
+        return []
+    out = []
+    for n, l in enumerate(linhas[i + 1:], start=i + 2):
+        v = next(csv.reader([l], delimiter=sep))
+        g = lambda k: v[idx[k]].strip() if idx[k] is not None and idx[k] < len(v) else ""   # noqa: E731
+        valor, dia = _valor_br(g("valor")), _data_br(g("data"))
+        if valor is None or not dia:
+            continue
+        out.append({"linha": n, "data": dia, "texto": g("tipo"), "ref": _txt(g("ref"), 60), "valor": valor})
+    return out
+
+
+def importar_extrato_mp(con, texto: str, aplicar: bool, ator: str) -> dict:
+    """Simular primeiro, depois importar. Só as SAÍDAS (valor negativo) viram despesa; entradas (Liberação de dinheiro, Venda com Pix, Pix
+    recebido) ficam de fora: as receitas já vêm de payments/search e não podem contar duas vezes. Única pela referência do movimento; se o
+    relatório de liberações já trouxe o mesmo movimento, completa o nome de quem recebeu e o tipo, sem duplicar."""
+    trs = ler_extrato_mp(texto)
+    if not trs:
+        raise HTTPException(400, "Não achei as colunas do Extrato do Mercado Pago (data, descrição, referência e valor): confira se é o CSV do Extrato")
+    linhas = []
+    for t in trs:
+        if t["valor"] >= 0:
+            linhas.append(dict(t, situacao="entrada"))
+            continue
+        tipo, meio, cat, rotulo, quem = classificar_extrato(t["texto"])
+        valor = abs(t["valor"])
+        chave = f"mpx:{t['ref']}" if t["ref"] else "mpx:h:" + hashlib.sha256(f"{t['data']}|{valor:.2f}|{t['texto'].lower()}".encode()).hexdigest()[:24]
+        ja = con.execute("SELECT id FROM despesa WHERE chave=?", (chave,)).fetchone()
+        rel = None if ja or not t["ref"] else con.execute("SELECT id, contraparte FROM despesa WHERE mp_ref=? AND chave LIKE 'mp:%' AND ABS(valor-?)<0.005", (t["ref"], valor)).fetchone()
+        linhas.append(dict(t, valor=valor, tipo=tipo, meio=meio, categoria=cat, descricao=rotulo, contraparte=quem, chave=chave,
+                           situacao="ja_importada" if ja else ("completa" if rel else "nova"), despesa_id=(ja or rel or [None])[0]))
+    if aplicar:
+        for x in linhas:
+            if x["situacao"] == "nova":
+                did = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, categoria, justificativa, mp_ref, criado_por)
+                                     VALUES (?,?,?,?,?,?, 'mp', ?,?,?,?,?,?)""",
+                                  (_fin().CONTA_MP, x["data"], x["valor"], x["meio"], _txt(x["contraparte"], 160) or None, x["descricao"], x["chave"], x["tipo"], x["categoria"],
+                                   {"tarifas": "Tarifa cobrada pelo Mercado Pago", "impostos": "Imposto retido pelo Mercado Pago"}.get(x["categoria"] or ""), x["ref"] or None, ator)).lastrowid
+                if did:
+                    _ev(con, did, "importada", ator, {"origem": "extrato do Mercado Pago", "ref": x["ref"]})
+            elif x["situacao"] == "completa":
+                con.execute("UPDATE despesa SET contraparte=COALESCE(NULLIF(contraparte,''), ?), descricao=?, meio=?, alterado_por=? WHERE id=?",
+                            (_txt(x["contraparte"], 160) or None, x["descricao"], x["meio"], ator, x["despesa_id"]))
+                _ev(con, x["despesa_id"], "alterada", ator, {"origem": "extrato do Mercado Pago", "ref": x["ref"]})
+        con.commit()
+    sai = [x for x in linhas if x["situacao"] != "entrada"]
+    return {"simulado": not aplicar, "linhas": linhas[:500], "novas": sum(1 for x in sai if x["situacao"] == "nova"),
+            "completadas": sum(1 for x in sai if x["situacao"] == "completa"), "ja_importadas": sum(1 for x in sai if x["situacao"] == "ja_importada"),
+            "entradas_ignoradas": sum(1 for x in linhas if x["situacao"] == "entrada"), "total_saidas": round(sum(x["valor"] for x in sai), 2)}
 
 
 def _meses(inicio: str, fim: date) -> list[tuple[str, str, str]]:
@@ -346,25 +511,65 @@ def _meses(inicio: str, fim: date) -> list[tuple[str, str, str]]:
     return out
 
 
+ROTA_CFG = "/wp-json/camp/v1/painel/mp/relatorio/config"   # contrato 1.34 (plugin 1.43.0): ver e criar a configuração do relatório
+
+
+def _erro_site(r, acao: str) -> tuple[str, str]:
+    """(código, mensagem exata) de uma resposta de erro do site/Mercado Pago, para mostrar na tela do jeito que veio."""
+    try:
+        j = r.json() or {}
+    except Exception:  # noqa: BLE001
+        j = {}
+    j = j if isinstance(j, dict) else {}
+    cod = _txt(j.get("code"), 60)
+    msg = _txt(j.get("message"), 240)
+    dados = j.get("data") if isinstance(j.get("data"), dict) else {}
+    mp = _txt(dados.get("mp_mensagem"), 200)
+    if dados.get("mp_http") is not None:
+        msg += f" (Mercado Pago: HTTP {int(dados.get('mp_http') or 0)}{', ' + mp if mp else ''})"
+    if r.status_code in (401, 403):
+        return "senha_site", f"O site recusou a senha do painel ao {acao} (HTTP {r.status_code}). Confira a senha do site em Configurações."
+    if r.status_code == 404 and not cod.startswith("camp_mp"):
+        return "sem_rota", f"O site ainda não tem a rota para {acao} (HTTP 404): atualize o plugin da CAMP no site."
+    if r.status_code == 409 or cod == "camp_mp_desligado":
+        return "desligado", msg or "O Mercado Pago está desligado ou sem a chave no site."
+    if cod == "camp_mp_sem_config":
+        return "sem_config", msg or "Falta configurar o relatório no Mercado Pago."
+    return cod or f"http_{r.status_code}", msg or f"O site respondeu {r.status_code} ao {acao}."
+
+
+def _est(con, k: str, v) -> None:
+    _fin()._estado_set(con, "saidas_" + k, "" if v is None else str(v))
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def rodada_mp(con, wp=None, force: bool = False, max_pedidos: int = 3) -> dict:
-    """Uma volta das saídas do Mercado Pago (chamada pelo coletor do Financeiro, nunca numa requisição). Nunca levanta."""
-    out = {"pedidos": 0, "baixados": 0, "novas": 0, "sem_rota": False, "desligado": False, "erro": None}
+    """Uma volta das saídas do Mercado Pago (chamada pelo coletor do Financeiro ou pelo botão "Buscar saídas agora", nunca dentro de uma
+    requisição). force: pede de novo o mês corrente e o anterior sem esperar as 6 h/20 h. Grava o estado e o erro EXATO para a tela
+    (CAMP-FIN-CONSERTOS: Rafael não achava as saídas e nada dizia por quê). Nunca levanta."""
+    out = {"pedidos": 0, "baixados": 0, "novas": 0, "sem_rota": False, "desligado": False, "erro": None, "codigo": ""}
     if _cfg(con, "despesas.mp_relatorio", "1") != "1":
         out["desligado_config"] = True
         return out
+    fi = _fin()
     try:
-        fi = _fin()
+        _est(con, "ultima_volta", _agora())
+        con.commit()
         wp = wp or fi._wp()
         hoje = fi.hoje()
         r = wp.h.get(ROTA_RELS, params={})
-        if r.status_code == 404:
-            out["sem_rota"] = True
-            return out
-        if r.status_code == 409:
-            out["desligado"] = True
-            return out
         if r.status_code >= 400:
-            raise RuntimeError(f"O site respondeu {r.status_code} à lista dos relatórios")
+            cod, msg = _erro_site(r, "listar os relatórios do Mercado Pago")
+            out.update(codigo=cod, erro=msg, sem_rota=cod == "sem_rota", desligado=cod == "desligado")
+            if cod == "sem_config":
+                _est(con, "config", "falta")
+            _est(con, "erro", msg)
+            _est(con, "erro_codigo", cod)
+            con.commit()
+            return out
         prontos = {}
         for x in (r.json() or {}).get("itens") or []:
             if isinstance(x, dict) and str(x.get("status") or "processed").lower() in ("processed", "ready", "enabled", ""):
@@ -373,7 +578,8 @@ def rodada_mp(con, wp=None, force: bool = False, max_pedidos: int = 3) -> dict:
                     prontos[d0] = x
         agora = datetime.now(timezone.utc)
         recentes = {m[0] for m in _meses(fi._cfg(con, "financeiro.mp_inicio", "2026-01-01"), hoje)[-2:]}
-        for per, de, ate in _meses(fi._cfg(con, "financeiro.mp_inicio", "2026-01-01"), hoje):
+        erros = []
+        for per, de, ate in reversed(_meses(fi._cfg(con, "financeiro.mp_inicio", "2026-01-01"), hoje)):   # o mês corrente primeiro: é o que o Rafael procura
             st = con.execute("SELECT * FROM mp_relatorio WHERE periodo=?", (per,)).fetchone()
             if not st:
                 con.execute("INSERT INTO mp_relatorio (periodo, de, ate) VALUES (?,?,?)", (per, de, ate))
@@ -388,23 +594,85 @@ def rodada_mp(con, wp=None, force: bool = False, max_pedidos: int = 3) -> dict:
                                 (arq["arquivo"], agora.strftime("%Y-%m-%d %H:%M:%S"), imp["lidas"], per))
                     out["baixados"] += 1
                     out["novas"] += imp["novas"]
+                    _est(con, "ultimo_recebido", agora.strftime("%Y-%m-%d %H:%M:%S"))
                     con.commit()
                     continue
+                cod, msg = _erro_site(rd, f"baixar o relatório de {per[5:7]}/{per[:4]}")
+                con.execute("UPDATE mp_relatorio SET erro=? WHERE periodo=?", (msg, per))
+                erros.append((cod, msg))
             precisa = not st["pedido_em"] or (not st["baixado_em"] and agora - datetime.fromisoformat(st["pedido_em"]).replace(tzinfo=timezone.utc) > timedelta(hours=6)) \
                 or (per in recentes and st["baixado_em"] and agora - datetime.fromisoformat(st["baixado_em"]).replace(tzinfo=timezone.utc) > timedelta(hours=20)
-                    and (not st["pedido_em"] or st["pedido_em"] < st["baixado_em"]))
+                    and (not st["pedido_em"] or st["pedido_em"] < st["baixado_em"])) \
+                or (force and per in recentes and not (arq and novo))
             if precisa and out["pedidos"] < max_pedidos:
                 rp = wp.h.post(ROTA_REL, json={"desde": de, "ate": ate})
                 if rp.status_code < 400:
                     con.execute("UPDATE mp_relatorio SET pedido_em=?, erro=NULL WHERE periodo=?", (agora.strftime("%Y-%m-%d %H:%M:%S"), per))
                     out["pedidos"] += 1
+                    _est(con, "ultimo_pedido", agora.strftime("%Y-%m-%d %H:%M:%S"))
+                    _est(con, "config", "ok")
                 else:
-                    con.execute("UPDATE mp_relatorio SET erro=? WHERE periodo=?", (f"o site respondeu {rp.status_code}", per))
+                    cod, msg = _erro_site(rp, f"pedir o relatório de {per[5:7]}/{per[:4]}")
+                    con.execute("UPDATE mp_relatorio SET erro=? WHERE periodo=?", (msg, per))
+                    erros.append((cod, msg))
+                    if cod == "sem_config":
+                        _est(con, "config", "falta")
+                        break                      # sem configuração, nenhum mês sai: não adianta pedir os outros
+        if erros:
+            out["codigo"], out["erro"] = erros[0]
+        _est(con, "erro", out["erro"] or "")
+        _est(con, "erro_codigo", out["codigo"] or "")
+        _est(con, "novas_ultima", out["novas"])
         con.commit()
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:200]
+        out["codigo"] = "falha"
+        try:
+            _est(con, "erro", "A busca das saídas falhou: " + out["erro"])
+            _est(con, "erro_codigo", "falha")
+            con.commit()
+        except Exception:  # noqa: BLE001
+            pass
         registrar(logging.WARNING, "despesas_mp", "Saídas do Mercado Pago com problema", erro=type(e).__name__)
     return out
+
+
+def estado_saidas(con) -> dict:
+    """A linha de situação das saídas do Mercado Pago (Despesas): pedido, recebido, quantas, próxima volta, erro exato, configuração."""
+    fi = _fin()
+    g = lambda k: fi._estado(con, "saidas_" + k)   # noqa: E731
+    m = fi.mp_coleta_min(con)
+    ult = fi._estado(con, "ultima_rodada")
+    prox = None
+    if m > 0 and ult:
+        try:
+            prox = (datetime.fromisoformat(ult) + timedelta(minutes=m)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            prox = None
+    pend = [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")]
+    return {"ligado": _cfg(con, "despesas.mp_relatorio", "1") == "1", "tem_site": fi._tem_site(con), "coleta_min": m,
+            "em_andamento": _BUSCA.locked(), "ultima_volta": g("ultima_volta") or None, "ultimo_pedido": g("ultimo_pedido") or None,
+            "ultimo_recebido": g("ultimo_recebido") or None, "proxima": prox,
+            "importadas": con.execute("SELECT COUNT(*) FROM despesa WHERE origem='mp' AND apagado_em IS NULL").fetchone()[0],
+            "novas_ultima": int(g("novas_ultima") or 0), "erro": g("erro") or None, "erro_codigo": g("erro_codigo") or None,
+            "config": g("config") or None, "aguardando": [p["periodo"] for p in pend if p["pedido_em"] and not p["baixado_em"]], "meses": pend}
+
+
+import threading as _threading   # noqa: E402
+_BUSCA = _threading.Lock()
+
+
+def _buscar_fundo() -> None:
+    if not _BUSCA.acquire(blocking=False):
+        return
+    try:
+        con = connect()
+        try:
+            rodada_mp(con, force=True)
+        finally:
+            con.close()
+    finally:
+        _BUSCA.release()
 
 
 # ---------------------------------------------------------------- extrato OFX (mínimo)
@@ -491,7 +759,7 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
         return {"periodo": {"de": d1, "ate": d2}, "itens": ls, "total": round(sum(x["valor"] for x in ls), 2), "categorias": categorias(con), "meios": MEIOS,
                 "vinculos": VINCULOS, "contas": _fin().contas(con), "precisa_justificar": fila, "n_precisa": len(fila),
                 "transferencias": [x for x in listar(con, d1, d2, conta, com_transferencias=True) if x["tipo"] == "transferencia_propria"],
-                "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")],
+                "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")], "saidas_mp": estado_saidas(con),
                 "doacoes": _doacoes(con), "notas_pedidas": _notas_pedidas(con),
                 "notas_lembrete_dias": _notas_dias(con), "orcamento": _orcamento_opcoes(con)}
     finally:
@@ -679,6 +947,81 @@ def ofx(b: dict, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         return importar_ofx(con, int(b.get("conta_id") or 0), texto, bool(b.get("aplicar")), _ator(u))
+    finally:
+        con.close()
+
+
+@router.post("/extrato-mp")
+def extrato_mp(b: dict, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """{base64 (do CSV do Extrato do Mercado Pago), aplicar: false} → simulação (o que entra, o que completa, o que já está); com aplicar: true
+    importa só as SAÍDAS novas (CAMP-FIN-CONSERTOS: o Extrato tem o nome de quem recebeu, como o Rafael vê no aplicativo)."""
+    try:
+        dados = base64.b64decode(re.sub(r"^data:[^,]*,", "", str(b.get("base64") or "")).strip(), validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, "O arquivo chegou incompleto: escolha de novo.") from e
+    if len(dados) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Extrato grande demais (até 5 MB)")
+    try:
+        texto = dados.decode("utf-8")
+    except UnicodeDecodeError:
+        texto = dados.decode("latin-1")
+    con = connect()
+    try:
+        return importar_extrato_mp(con, texto, bool(b.get("aplicar")), _ator(u))
+    finally:
+        con.close()
+
+
+@router.get("/mp/estado")
+def mp_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return estado_saidas(con)
+    finally:
+        con.close()
+
+
+@router.post("/mp/buscar")
+def mp_buscar(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """"Buscar saídas agora": uma volta em segundo plano (pede de novo o mês corrente e o anterior; baixa o que já estiver pronto)."""
+    con = connect()
+    try:
+        if _cfg(con, "despesas.mp_relatorio", "1") != "1":
+            raise HTTPException(409, "A busca das saídas do Mercado Pago está desligada (despesas.mp_relatorio)")
+        if not _fin()._tem_site(con):
+            raise HTTPException(409, "Falta a senha do site em Configurações: sem ela o painel não lê a conta do Mercado Pago")
+    finally:
+        con.close()
+    ja = _BUSCA.locked()
+    if not ja:
+        _threading.Thread(target=_buscar_fundo, daemon=True).start()
+    return {"ok": True, "ja_rodando": ja}
+
+
+@router.post("/mp/config")
+def mp_config(b: dict, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """"Configurar relatório no Mercado Pago" (pelo site; contrato 1.34). Sem aplicar: só mostra o que será configurado (simular). Com
+    aplicar: true (admin confirmou), o site cria ou ajusta a configuração do relatório de liberações."""
+    aplicar = bool(b.get("aplicar"))
+    con = connect()
+    try:
+        try:
+            r = _fin()._wp().h.post(ROTA_CFG, json={"simular": not aplicar})
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"Não consegui falar com o site: {type(e).__name__}") from e
+        if r.status_code >= 400:
+            cod, msg = _erro_site(r, "configurar o relatório no Mercado Pago")
+            raise HTTPException(409 if cod in ("sem_rota", "desligado") else 502, msg)
+        d = r.json() or {}
+        if aplicar:
+            _est(con, "config", "ok")
+            _est(con, "erro", "")
+            _est(con, "erro_codigo", "")
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('despesa','mp_config','mp_config',?,?)",
+                        (_ator(u), json.dumps({"acao": d.get("acao") or "", "colunas": len(d.get("colunas") or [])}, ensure_ascii=False)))
+            con.commit()
+        return {"simulado": not aplicar, "acao": d.get("acao") or "", "colunas": d.get("colunas") or [], "existia": bool(d.get("existia")),
+                "prefixo": d.get("prefixo") or "", "faltavam": d.get("faltavam") or []}
     finally:
         con.close()
 

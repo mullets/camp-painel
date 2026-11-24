@@ -77,6 +77,7 @@ MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do 
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
+MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
@@ -20125,7 +20126,7 @@ def filho(modo):
         class WPF: h = H()
         o1 = dp.rodada_mp(c, WPF())
         ver("1ª volta: pede o relatório de cada mês desde o início (out e nov), nada baixado ainda (é assíncrono)", o1["pedidos"] == 2 and o1["baixados"] == 0
-            and [p[1] for p in site["pedidos"]] == [{"desde": "2026-10-01", "ate": "2026-10-31"}, {"desde": "2026-11-01", "ate": "2026-11-24"}]
+            and sorted(p[1]["desde"] for p in site["pedidos"]) == ["2026-10-01", "2026-11-01"] and site["pedidos"][0][1] == {"desde": "2026-11-01", "ate": "2026-11-24"}   # CAMP-FIN-CONSERTOS: o mês corrente primeiro
             and c.execute("SELECT COUNT(*) FROM despesa").fetchone()[0] == 0, (o1, site["pedidos"]))
         o1b = dp.rodada_mp(c, WPF())
         ver("2ª volta sem relatório pronto: não pede de novo (espera)", o1b["pedidos"] == 0 and len(site["pedidos"]) == 2, o1b)
@@ -20235,6 +20236,176 @@ def filho(modo):
         ver("entrar no Financeiro pelo endereço fecha o painel lateral e a fila que ficaram abertos", "function finFecharCamadas()" in html and "finLerRota(route);finFecharCamadas();" in html)
         ver("uma aba que falha mostra o aviso só nela, com Tentar de novo", "function finErroAba(aba,e)" in html and "data-fin-acao=\"tentar-aba\"" in html and "Object.entries(FIN_RENDER).forEach" in html)
         ver("estado no endereço: aba, período, conta e detalhe", "function finRota()" in html and "carregarFinanceiro(a1,route)" in html and "finUrl('push')" in html)
+        for l in res: print(l)
+
+    elif modo == "financeiro_saidas_mp":
+        # CAMP-FIN-CONSERTOS (24/11/2026). Rafael: "ele pegou a saída de dinheiro do Mercado Pago? não consigo achar lá para justificar… saída de
+        # Pix, boleto, transferências". Site e Mercado Pago FALSOS, linhas no formato do relatório de liberações (já filtradas pelo site) e do
+        # Extrato da conta (CSV baixado do Mercado Pago), com os movimentos do Extrato real do Rafael. Prova: cada saída vira despesa com o rótulo
+        # do Extrato, o meio e quem recebeu; entradas (Liberação de dinheiro, Venda com Pix) não viram receita de novo; Extrato e relatório não
+        # duplicam; situação na tela com o erro EXATO (sem senha, 401, 404, desligado, sem configuração); "Buscar saídas agora"; "Configurar
+        # relatório no Mercado Pago" (simular → aplicar).
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, sys as _s, base64 as _b64, time as _t
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, despesas as dp
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='2026-11-01' WHERE chave='financeiro.mp_inicio'"); c.commit()
+        sf.semear(c)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        # relatório de liberações, linhas de SAÍDA como o site devolve (contrato 1.33 + tags/contraparte opcionais do 1.34)
+        REL = [{"linha": 2, "data": "2026-11-20T10:00:00.000-03:00", "source_id": "132300X97RZ", "descricao": "payment", "debito": 69.0, "meio_tipo": "bank_transfer", "meio": "pix", "tags": "[\"PIX\",\"QR\"]"},
+               {"linha": 3, "data": "2026-11-20T11:00:00.000-03:00", "source_id": "1323MTY5PX", "descricao": "payout", "debito": 750.0, "meio_tipo": "", "tags": "[\"PIX\"]", "contraparte": "Danilo Machado Barbalaco"},
+               {"linha": 4, "data": "2026-11-21T09:00:00.000-03:00", "source_id": "1323TRBPVW", "descricao": "payment", "debito": 472.24, "meio_tipo": "ticket", "meio": "bolbradesco"},
+               {"linha": 5, "data": "2026-11-22T09:00:00.000-03:00", "source_id": "1323XAN6MT", "descricao": "payment", "debito": 569.25, "meio_tipo": "debit_card", "meio": "debmaster", "contraparte": "Anthropic* claude sub"},
+               {"linha": 6, "data": "2026-11-23T09:00:00.000-03:00", "source_id": "1323SAQ001", "descricao": "withdrawal", "debito": 1000.0},
+               {"linha": 7, "data": "2026-11-23T10:00:00.000-03:00", "source_id": "1323REF001", "descricao": "refund", "debito": 40.0},
+               {"linha": 8, "data": "2026-11-23T11:00:00.000-03:00", "source_id": "1323TAR001", "descricao": "fee-release_in_advance", "debito": 3.1}]
+        rot = {"132300X97RZ": ("Pagamento com Pix", "pix", "despesa"), "1323MTY5PX": ("Pix enviado", "pix", "despesa"), "1323TRBPVW": ("Pagamento de boleto/conta", "boleto", "despesa"),
+               "1323XAN6MT": ("Compra no cartão de débito", "debito", "despesa"), "1323SAQ001": ("Saque (transferência para a conta bancária da CAMP)", "transferencia", "transferencia_propria"),
+               "1323TAR001": ("Tarifa do Mercado Pago", "tarifa", "despesa")}
+        imp = dp.importar_saidas_mp(c, REL); c.commit()
+        got = {r["mp_ref"]: (r["descricao"], r["meio"], r["tipo"]) for r in c.execute("SELECT * FROM despesa WHERE origem='mp'")}
+        ver("relatório: cada tipo de saída com o rótulo do Extrato e o meio (Pix enviado, Pagamento com Pix, boleto, cartão, saque, tarifa); devolução fora",
+            got == rot and imp["ignoradas"] == 1, got)
+        ver("relatório: quem recebeu vem junto quando o site manda", c.execute("SELECT contraparte FROM despesa WHERE mp_ref='1323XAN6MT'").fetchone()[0] == "Anthropic* claude sub"
+            and c.execute("SELECT contraparte FROM despesa WHERE mp_ref='1323MTY5PX'").fetchone()[0] == "Danilo Machado Barbalaco")
+        # Extrato CSV como o Mercado Pago baixa (resumo antes do cabeçalho; valores com vírgula; entradas e saídas)
+        CSV = ("INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE\n5.000,00;3.000,00;-2.860,59;6.204,80\n\n"
+               "RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE\n"
+               "20-11-2026;Pagamento com Pix DSC - MATERIAIS PARA CONSTRUCAO LTDA;132300X97RZ;-69,00;6.931,00\n"
+               "20-11-2026;Danilo Machado Barbalaco · Pix enviado;1323MTY5PX;-750,00;6.181,00\n"
+               "21-11-2026;Pagamento;1323TRBPVW;-472,24;5.708,76\n"
+               "22-11-2026;Anthropic* claude sub · Pagamento;1323XAN6MT;-569,25;5.139,51\n"
+               "22-11-2026;Liberação de dinheiro;1323LIB001;150,00;5.289,51\n"
+               "22-11-2026;Venda com Pix Visita guiada ingressos;1323VEN001;60,00;5.349,51\n"
+               "23-11-2026;Pix enviado Gráfica Ipsis Ltda;1323NOVO01;-1.234,56;4.114,95\n"
+               "23-11-2026;Transferência enviada Maria Restauro;1323TRF001;-80,00;4.034,95\n"
+               "23-11-2026;Saque para conta bancária;1323SAQ002;-500,00;3.534,95\n")
+        cl = {t: dp.classificar_extrato(t)[1:] for t in ("Pagamento com Pix DSC - MATERIAIS PARA CONSTRUCAO LTDA", "Danilo Machado Barbalaco · Pix enviado", "Pagamento", "Anthropic* claude sub · Pagamento")}
+        ver("Extrato: rótulo, meio e quem recebeu como no aplicativo", cl == {
+            "Pagamento com Pix DSC - MATERIAIS PARA CONSTRUCAO LTDA": ("pix", None, "Pagamento com Pix", "DSC - MATERIAIS PARA CONSTRUCAO LTDA"),
+            "Danilo Machado Barbalaco · Pix enviado": ("pix", None, "Pix enviado", "Danilo Machado Barbalaco"),
+            "Pagamento": ("boleto", None, "Pagamento de boleto/conta", ""),
+            "Anthropic* claude sub · Pagamento": ("debito", None, "Compra no cartão de débito", "Anthropic* claude sub")}, cl)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        rec0 = x.get("/api/financeiro?mes=2026-11").json()["totais"]["geral"]["bruto"]
+        b64 = _b64.b64encode(CSV.encode("utf-8")).decode()
+        n0 = c.execute("SELECT COUNT(*) FROM despesa").fetchone()[0]
+        s1 = x.post("/api/financeiro/despesas/extrato-mp", json={"base64": b64})
+        S1 = s1.json() if s1.status_code == 200 else {}
+        ver("Extrato simular: 3 saídas novas, as 4 do relatório completadas (não duplicam), 2 entradas fora; nada gravado",
+            s1.status_code == 200 and S1["simulado"] and S1["novas"] == 3 and S1["completadas"] == 4 and S1["entradas_ignoradas"] == 2
+            and c.execute("SELECT COUNT(*) FROM despesa").fetchone()[0] == n0, S1 if S1 else s1.text)
+        s2 = x.post("/api/financeiro/despesas/extrato-mp", json={"base64": b64, "aplicar": True})
+        rows = {r["mp_ref"]: dict(r) for r in c.execute("SELECT * FROM despesa WHERE apagado_em IS NULL")}
+        ver("Extrato importar: Pix enviado à Gráfica e transferência viram despesa; saque é transferência própria; nomes completados",
+            s2.status_code == 200 and rows["1323NOVO01"]["valor"] == 1234.56 and rows["1323NOVO01"]["contraparte"] == "Gráfica Ipsis Ltda" and rows["1323NOVO01"]["meio"] == "pix"
+            and rows["1323TRF001"]["descricao"] == "Transferência enviada" and rows["1323TRF001"]["contraparte"] == "Maria Restauro"
+            and rows["1323SAQ002"]["tipo"] == "transferencia_propria" and rows["132300X97RZ"]["contraparte"] == "DSC - MATERIAIS PARA CONSTRUCAO LTDA"
+            and c.execute("SELECT COUNT(*) FROM despesa").fetchone()[0] == n0 + 3, {k: (v["descricao"], v["contraparte"], v["valor"]) for k, v in rows.items()})
+        ver("Extrato de novo: nada duplica; relatório de novo depois do Extrato também não", x.post("/api/financeiro/despesas/extrato-mp", json={"base64": b64, "aplicar": True}).json()["novas"] == 0
+            and dp.importar_saidas_mp(c, REL)["novas"] == 0 and c.execute("SELECT COUNT(*) FROM despesa").fetchone()[0] == n0 + 3)
+        ver("Liberação de dinheiro e Venda com Pix NÃO entram de novo como receita", x.get("/api/financeiro?mes=2026-11").json()["totais"]["geral"]["bruto"] == rec0
+            and not c.execute("SELECT 1 FROM despesa WHERE mp_ref IN ('1323LIB001','1323VEN001')").fetchone())
+        J = x.get("/api/financeiro/despesas?mes=2026-11").json()
+        fila = {i_["mp_ref"]: (i_["descricao"], i_["contraparte"], i_["meio_nome"]) for i_ in J["precisa_justificar"]}
+        ver("Precisa justificar mostra o que o Rafael vê no Extrato (tipo, quem recebeu, meio, referência do movimento)",
+            fila.get("132300X97RZ") == ("Pagamento com Pix", "DSC - MATERIAIS PARA CONSTRUCAO LTDA", "Pix") and fila.get("1323XAN6MT") == ("Compra no cartão de débito", "Anthropic* claude sub", "cartão de débito")
+            and fila.get("1323TRBPVW", ("",))[0] == "Pagamento de boleto/conta" and "1323SAQ001" not in fila, fila)
+        ver("Extrato que não é do Mercado Pago: 400 com explicação; operador 403", x.post("/api/financeiro/despesas/extrato-mp", json={"base64": _b64.b64encode(b"a;b\n1;2").decode()}).status_code == 400
+            and op.post("/api/financeiro/despesas/extrato-mp", json={"base64": b64}).status_code == 403 and op.get("/api/financeiro/despesas/mp/estado").status_code == 403
+            and op.post("/api/financeiro/despesas/mp/buscar").status_code == 403 and op.post("/api/financeiro/despesas/mp/config", json={}).status_code == 403)
+        # ---- situação e erros exatos
+        cenario = {"rels": (200, {"itens": []}), "post": (202, {"ok": True}), "cfg": (200, {"acao": "criar", "existia": False, "colunas": ["DATE", "SOURCE_ID", "DESCRIPTION"], "prefixo": "camp-liberacoes"}), "chamadas": []}
+        class H:
+            def get(s, path, params=None):
+                cenario["chamadas"].append(("GET", path, params))
+                if path == dp.ROTA_RELS: return Resp(*cenario["rels"])
+                return Resp(404, {"code": "rest_no_route", "message": "Nenhuma rota"})
+            def post(s, path, json=None):
+                cenario["chamadas"].append(("POST", path, json))
+                if path == dp.ROTA_REL: return Resp(*cenario["post"])
+                if path == dp.ROTA_CFG: return Resp(*cenario["cfg"])
+                return Resp(404, {})
+        class WPF: h = H()
+        def volta():
+            o = dp.rodada_mp(c, WPF()); return o, x.get("/api/financeiro/despesas/mp/estado").json()
+        cenario["rels"] = (409, {"code": "camp_mp_desligado", "message": "O Mercado Pago está desligado ou sem a chave no site.", "data": {"status": 409}})
+        o, E = volta()
+        ver("site sem a chave do Mercado Pago: a situação mostra a mensagem exata", E["erro"] == "O Mercado Pago está desligado ou sem a chave no site." and E["erro_codigo"] == "desligado", E)
+        cenario["rels"] = (401, {"code": "rest_forbidden", "message": "Sem permissão"})
+        o, E = volta()
+        ver("site recusou a senha (401): diz para conferir a senha do site", E["erro_codigo"] == "senha_site" and "401" in E["erro"] and "senha do site" in E["erro"], E["erro"])
+        cenario["rels"] = (404, {"code": "rest_no_route", "message": "Nenhuma rota"})
+        o, E = volta()
+        ver("site sem a rota (404): diz para atualizar o plugin", E["erro_codigo"] == "sem_rota" and "plugin" in E["erro"], E["erro"])
+        cenario["rels"] = (200, {"itens": []})
+        cenario["post"] = (502, {"code": "camp_mp_sem_config", "message": "Falta configurar o relatório de liberações no Mercado Pago.", "data": {"status": 502, "mp_http": 404, "mp_mensagem": "report config not found"}})
+        n_post = sum(1 for ch in cenario["chamadas"] if ch[0] == "POST")
+        o, E = volta()
+        ver("relatório sem configuração: erro exato com a resposta do Mercado Pago, oferece configurar, e não pede os outros meses à toa",
+            E["config"] == "falta" and E["erro_codigo"] == "sem_config" and "HTTP 404" in E["erro"] and "report config not found" in E["erro"]
+            and sum(1 for ch in cenario["chamadas"] if ch[0] == "POST") == n_post + 1, (E["erro"], E["config"]))
+        fi_wp = fi._wp; fi._wp = lambda: WPF()
+        try:
+            rs = x.post("/api/financeiro/despesas/mp/config", json={})
+            ver("Configurar relatório: sem confirmar só simula (o site recebe simular=true) e mostra as colunas", rs.status_code == 200 and rs.json()["simulado"] and rs.json()["colunas"][:2] == ["DATE", "SOURCE_ID"]
+                and cenario["chamadas"][-1] == ("POST", dp.ROTA_CFG, {"simular": True}) and x.get("/api/financeiro/despesas/mp/estado").json()["config"] == "falta", rs.text)
+            ra = x.post("/api/financeiro/despesas/mp/config", json={"aplicar": True})
+            ver("Configurar relatório: confirmado, o site recebe simular=false; a situação deixa de pedir configuração; fica no histórico",
+                ra.status_code == 200 and not ra.json()["simulado"] and cenario["chamadas"][-1] == ("POST", dp.ROTA_CFG, {"simular": False})
+                and x.get("/api/financeiro/despesas/mp/estado").json()["config"] == "ok" and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='mp_config'").fetchone()[0] == 1, ra.text)
+            cenario["cfg"] = (404, {"code": "rest_no_route", "message": "Nenhuma rota"})
+            r4 = x.post("/api/financeiro/despesas/mp/config", json={})
+            ver("Configurar relatório num site antigo: 409 dizendo para atualizar o plugin", r4.status_code == 409 and "plugin" in (r4.json().get("erro") or r4.json().get("detail") or ""), r4.text)
+            cenario["post"] = (202, {"ok": True})
+            c.execute("UPDATE configuracao SET valor='' WHERE chave='wp.app_password'"); c.commit()
+            rb0 = x.post("/api/financeiro/despesas/mp/buscar")
+            ver("Buscar saídas agora sem a senha do site: 409 com a explicação", rb0.status_code == 409 and "senha do site" in (rb0.json().get("erro") or rb0.json().get("detail") or ""), rb0.text)
+            c.execute("UPDATE configuracao SET valor='senha-app' WHERE chave='wp.app_password'"); c.commit()
+            cenario["rels"] = (200, {"itens": [{"arquivo": "camp-liberacoes-2026-11.csv", "begin_date": "2026-11-01T03:00:00Z", "status": "processed", "criado": "2026-11-24T12:00:00Z"}]})
+            orig_get = H.get
+            def get2(s, path, params=None):
+                if path == dp.ROTA_REL:
+                    cenario["chamadas"].append(("GET", path, params))
+                    return Resp(200, {"arquivo": params["arquivo"], "itens": [{"linha": 9, "data": "2026-11-24T08:00:00.000-03:00", "source_id": "1323BUSCA1", "descricao": "payout", "debito": 55.0, "tags": "[\"PIX\"]"}]})
+                return orig_get(s, path, params)
+            H.get = get2
+            c.execute("UPDATE mp_relatorio SET pedido_em=datetime('now'), baixado_em=NULL"); c.commit()   # pedido há pouco: sem o botão, a volta automática esperaria 6 h para pedir de novo
+            npost = sum(1 for ch in cenario["chamadas"] if ch[0] == "POST" and ch[1] == dp.ROTA_REL)
+            rb = x.post("/api/financeiro/despesas/mp/buscar")
+            for _ in range(100):
+                E = x.get("/api/financeiro/despesas/mp/estado").json()
+                if not E["em_andamento"] and E["ultimo_recebido"]: break
+                _t.sleep(0.05)
+            ver("Buscar saídas agora: roda em segundo plano, baixa o relatório pronto e mostra recebido e quantas", rb.status_code == 200 and rb.json()["ok"]
+                and E["ultimo_recebido"] and E["erro"] is None and E["importadas"] >= 1 and c.execute("SELECT COUNT(*) FROM despesa WHERE mp_ref='1323BUSCA1'").fetchone()[0] == 1, E)
+            cenario["rels"] = (200, {"itens": []})
+            c.execute("UPDATE mp_relatorio SET pedido_em=datetime('now'), baixado_em=NULL"); c.commit()
+            npost = sum(1 for ch in cenario["chamadas"] if ch[0] == "POST" and ch[1] == dp.ROTA_REL)
+            o_auto = dp.rodada_mp(c, WPF())
+            n_auto = sum(1 for ch in cenario["chamadas"] if ch[0] == "POST" and ch[1] == dp.ROTA_REL) - npost
+            o_btn = dp.rodada_mp(c, WPF(), force=True)
+            n_btn = sum(1 for ch in cenario["chamadas"] if ch[0] == "POST" and ch[1] == dp.ROTA_REL) - npost - n_auto
+            ver("Buscar saídas agora (force) pede de novo o mês corrente sem esperar as 6 h; a volta automática espera", n_auto == 0 and n_btn == 1 and o_btn["pedidos"] == 1
+                and x.get("/api/financeiro/despesas/mp/estado").json()["aguardando"] == ["2026-11"], (n_auto, n_btn))
+            Jd = x.get("/api/financeiro/despesas?mes=2026-11").json()
+            ver("a lista de Despesas traz a situação das saídas (para a linha na tela)", Jd.get("saidas_mp", {}).get("ultimo_recebido") == E["ultimo_recebido"] and "proxima" in Jd["saidas_mp"], list(Jd.get("saidas_mp", {}))[:6])
+        finally:
+            fi._wp = fi_wp
         for l in res: print(l)
 
     elif modo == "financeiro_nota_fiscal":
@@ -24721,6 +24892,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · tela branca: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Financeiro · tela branca: todas as verificações rodaram")
+
+print("Financeiro · saídas do Mercado Pago visíveis: Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação e erro exato; Buscar agora; Configurar relatório")
+rc, out = rodar("financeiro_saidas_mp", f"{tmp}/financeiro_saidas_mp.db")
+if rc != 0: ok(False, f"teste financeiro_saidas_mp não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saídas do Mercado Pago: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Financeiro · saídas do Mercado Pago: todas as verificações rodaram")
 
 print("Financeiro · pedir nota fiscal ao fornecedor: dados da CAMP, texto com PRONAC, SMTP do painel falso, nota pedida, lembrete na Home, Pedir de novo, comprovante, memória do fornecedor, LGPD, papéis")
 rc, out = rodar("financeiro_nota_fiscal", f"{tmp}/financeiro_nota_fiscal.db")
