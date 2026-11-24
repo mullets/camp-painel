@@ -82,6 +82,7 @@ MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: sa�
 MODOS_RAPIDOS |= {"financeiro_mp_livro"}   # CAMP-FIN 24/11/2026: o livro da conta (relatório de liberações + Extrato, com sinal) decide entrada/saída; VINDI −1.707,34; −472,24 exato; liberações não são receita nova (linha própria)
 MODOS_RAPIDOS |= {"financeiro_comprovante_saidas"}   # CAMP-FIN 24/11/2026: prévia do PDF (SAMEORIGIN), tirar/trocar comprovante, título da saída, compra só da busca payer.id, fontes das saídas (linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_saida_sem_direcao"}   # CAMP-FIN 24/11/2026: Pix pago a empresa, Pix enviado e cartão SEM direção entravam como receita (contrato 1.36; linha própria)
+MODOS_RAPIDOS |= {"projetos_camp"}   # CAMP-PROJ 24/11/2026: Projetos da CAMP (PRONAC a partir do Financeiro, avisos, Home, e-mail diário, orçamento, documentos; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_direcao"}   # CAMP-FIN 24/11/2026: compra paga PELA CAMP (Anthropic* claude sub) aparecia como receita; direção do site, heurística, refazer, sem duplicar, Isto é uma saída/entrada; linha própria
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -20792,6 +20793,139 @@ def filho(modo):
             and all(len(desp(r_)) == 1 for r_ in ("B33MMZEM0GVXCMCKZ", "190892406292", "55500001", "55500002", "189801616943", "190000000006")))
         for l in res: print(l)
 
+    elif modo == "projetos_camp":
+        # CAMP-PROJ (24/11/2026). Rafael: "vamos ter uma área de projetos no sistema, interligados aos outros módulos dele, que vai ter os
+        # objetivos e prazos, e precisa sempre me avisar tudo." Projetos da CAMP (Rouanet/edital/patrocínio/interno). Prova: migração 259
+        # idempotente; criar o projeto do PRONAC a partir do Financeiro só simula por padrão, cria uma vez e não inventa dado (objetivo,
+        # responsável e prazos "a preencher"); o orçamento é a planilha do SALIC (28 itens, R$ 163.475,31) sem cópia; avisos (atrasado, 7 dias,
+        # prazo do SALIC em 30 dias, acima do orçamento, sem comprovante, a preencher); mudanças desde a última visita (só as de outra pessoa);
+        # Home; orçamento próprio com despesa ligada; despesa em dois projetos = 409; documentos (bytes conferidos, repetido = 409, tirar guarda);
+        # resumo diário por e-mail desligado por padrão, um por dia, não antes da hora, teste não conta; só admin.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import base64 as _b64, json as _j
+        from datetime import date as _date, datetime as _dt, timedelta as _td
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, projetos_camp as pcm
+        from app.main import app
+        fi._HOJE = _date(2026, 11, 24)
+        D = lambda n: (fi._HOJE + _td(days=n)).isoformat()
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 259: tabelas e colunas novas (opcionais) nas despesas e patrocínios",
+            all(pcm._tem(c, t) for t in ("projeto_camp", "projeto_camp_objetivo", "projeto_camp_etapa", "projeto_camp_tarefa", "projeto_camp_item", "projeto_camp_arquivo", "projeto_camp_email_envio"))
+            and {"projeto_camp_id", "projeto_camp_item"} <= pcm._colunas(c, "despesa") and "projeto_camp_id" in pcm._colunas(c, "patrocinio"))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Eq", "eq@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(e):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": "senha-longa-12345"}); return x
+        A, E, O = cli("adm@camp.arq.br"), cli("eq@camp.arq.br"), cli("op@camp.arq.br")
+        ver("só admin: operador recebe 403", O.get("/api/projetos-camp").status_code == 403 and O.get("/api/projetos-camp/home").status_code == 403)
+        L = A.get("/api/projetos-camp").json()
+        s = L.get("semear") or {}
+        ver("lista vazia oferece criar o projeto do PRONAC (simulação, nada criado)", L["projetos"] == [] and s.get("acao") == "simulado"
+            and s["plano"]["codigo_externo"] == "PRONAC 2613864" and s["plano"]["itens_orcamento"] == 28 and s["plano"]["orcamento_total"] == 163475.31
+            and c.execute("SELECT COUNT(*) FROM projeto_camp").fetchone()[0] == 0, s)
+        r = A.post("/api/projetos-camp/semear-rouanet", json={}).json()
+        ver("semear sem 'aplicar' só simula", r["acao"] == "simulado" and c.execute("SELECT COUNT(*) FROM projeto_camp").fetchone()[0] == 0)
+        r = A.post("/api/projetos-camp/semear-rouanet", json={"aplicar": True}).json(); pid = r.get("projeto_id")
+        r2 = A.post("/api/projetos-camp/semear-rouanet", json={"aplicar": True}).json()
+        ver("aplicar cria UMA vez (de novo: já existe)", r["acao"] == "criado" and r2["acao"] == "ja_existe" and c.execute("SELECT COUNT(*) FROM projeto_camp").fetchone()[0] == 1, (r, r2))
+        d = A.get(f"/api/projetos-camp/{pid}").json(); p = d["projeto"]
+        ver("nada inventado: objetivo, responsável, datas e prazos vazios e 'a preencher'", not p["objetivo_geral"] and not p["responsavel"] and not p["prazo_captacao"]
+            and set(d["a_preencher"]) == {"Objetivo geral", "Responsável", "Início e fim", "Prazo de captação", "Fim da execução", "Prestação de contas"}, d["a_preencher"])
+        ver("orçamento = planilha do SALIC do Financeiro (sem cópia): 28 itens, R$ 163.475,31", d["orcamento"]["fonte"] == "salic" and len(d["orcamento"]["itens"]) == 28
+            and d["orcamento"]["total"]["previsto"] == 163475.31 and c.execute("SELECT COUNT(*) FROM projeto_camp_item").fetchone()[0] == 0, d["orcamento"]["total"])
+        ver("orçamento do SALIC não aceita item próprio", A.post(f"/api/projetos-camp/{pid}/itens", json={"descricao": "x", "previsto": 1}).status_code == 400)
+        A.put(f"/api/projetos-camp/{pid}", json={"responsavel": "Rafael", "situacao": "captacao", "inicio": D(-60), "fim": D(240), "prazo_captacao": D(20)})
+        ver("datas inválidas e fim antes do início: 400", A.put(f"/api/projetos-camp/{pid}", json={"prazo_execucao": "31/12/2026"}).status_code == 400
+            and A.put(f"/api/projetos-camp/{pid}", json={"fim": D(-90)}).status_code == 400)
+        e1 = A.post(f"/api/projetos-camp/{pid}/etapas", json={"nome": "Produção do livro", "inicio": D(-10), "prazo": D(90)}).json()["etapas"][0]["id"]
+        A.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Tratar as imagens", "prazo": D(-3), "responsavel": "Equipe", "etapa_id": e1})
+        A.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Revisão de texto", "prazo": D(5)})
+        A.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Mais tarde", "prazo": D(40)})
+        A.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Já feita", "prazo": D(-30), "situacao": "feita"})
+        A.post(f"/api/projetos-camp/{pid}/objetivos", json={"texto": "Imprimir exemplares", "indicador": "exemplares", "meta": 1000, "atual": 250})
+        c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, origem, chave, tipo, orcamento_item) VALUES (2, ?, 450, 'boleto', 'CBL', 'manual', 'manual:t1', 'despesa', 14)", (D(-2),)); c.commit()
+        d = A.get(f"/api/projetos-camp/{pid}").json(); tit = [a["titulo"] for a in d["alertas"]]
+        ver("avisos: tarefa atrasada (vermelho), vence em 5 dias (âmbar), prazo do SALIC em 20 dias; tarefa feita e a de 40 dias fora",
+            any("Tratar as imagens: atrasado há 3 dias" in t for t in tit) and any("Revisão de texto: vence em 5 dias" in t for t in tit)
+            and any(t.startswith("Prazo de captação: vence em 20 dias") for t in tit) and not any("Já feita" in t or "Mais tarde" in t for t in tit), tit)
+        ver("avisos: item do SALIC acima do orçado (R$ 450 de R$ 400) e despesa sem comprovante", any("Acima do previsto: item 14" in t for t in tit)
+            and any("1 despesa sem comprovante" in t for t in tit) and d["alertas"][0]["nivel"] == "r", tit)
+        ver("objetivo com meta: 25%; progresso das tarefas: 1 de 4 feitas", d["objetivos"][0]["pct"] == 0.25 and d["progresso"]["feitas"] == 1 and d["progresso"]["total"] == 5, d["progresso"])
+        ver("despesa da conta do projeto entra sozinha no Financeiro do projeto", [x["contraparte"] for x in d["financeiro"]["despesas"]] == ["CBL"] and d["financeiro"]["despesas"][0]["da_conta"])
+        # mudanças desde a última visita: as minhas não contam; as de outra pessoa sim
+        A.post(f"/api/projetos-camp/{pid}/visto")
+        c.execute("UPDATE projeto_camp_visto SET visto_em=datetime('now','-1 minute')"); c.execute("UPDATE despesa SET criado_em=datetime('now','-2 minutes')"); c.commit()   # a despesa já existia na visita
+        A.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Minha tarefa"})
+        ver("as próprias mudanças não contam como novidade", A.get(f"/api/projetos-camp/{pid}").json()["mudancas"] == [])
+        E.post(f"/api/projetos-camp/{pid}/tarefas", json={"o_que": "Tarefa da equipe"})
+        m = A.get(f"/api/projetos-camp/{pid}").json()["mudancas"]
+        ver("mudança de outra pessoa aparece desde a última visita", [x["texto"] for x in m] == ["Tarefa adicionada: Tarefa da equipe"] and m[0]["ator"] == "eq@camp.arq.br", m)
+        h = A.get("/api/projetos-camp/home").json()
+        ver("Home: atrasados, vencem em 7 dias, mudanças e a lista de avisos", h["projetos"] == 1 and h["atrasados"] == 1 and h["vencem_7d"] == 1 and h["mudancas"] == 1
+            and h["itens"][0]["nivel"] == "r", h)
+        A.post(f"/api/projetos-camp/{pid}/visto")
+        ver("abrir o projeto zera as mudanças da Home", A.get("/api/projetos-camp/home").json()["mudancas"] == 0)
+        # projeto interno com orçamento próprio; despesa ligada; mesma despesa em outro projeto = 409
+        p2 = A.post("/api/projetos-camp", json={"nome": "Mostra na sede", "tipo": "interno"}).json()["projeto"]["id"]
+        it = A.post(f"/api/projetos-camp/{p2}/itens", json={"descricao": "Impressão das pranchas", "previsto": 1200}).json()["orcamento"]["itens"][0]["id"]
+        c.execute("INSERT INTO despesa (conta_id, data, valor, meio, contraparte, origem, chave, tipo) VALUES (1, ?, 1290, 'pix', 'Gráfica', 'manual', 'manual:t2', 'despesa')", (D(-1),)); c.commit()
+        did = c.execute("SELECT id FROM despesa WHERE chave='manual:t2'").fetchone()[0]
+        cand = A.get(f"/api/projetos-camp/{p2}/candidatas").json()
+        ver("candidatas: despesas sem projeto (fora da conta do projeto)", did in [x["id"] for x in cand["despesas"]])
+        d2 = A.put(f"/api/projetos-camp/{p2}/despesas/{did}", json={"ligar": True, "item": it}).json()
+        o = d2["orcamento"]
+        ver("orçamento próprio: realizado pela despesa ligada (R$ 1.290 de R$ 1.200) e aviso acima do previsto", o["fonte"] == "proprio" and o["itens"][0]["realizado"] == 1290.0
+            and o["itens"][0]["nivel"] == "vermelho" and any("Acima do previsto: Impressão das pranchas" in a["titulo"] for a in d2["alertas"]), o)
+        ver("a mesma despesa em outro projeto: 409", A.put(f"/api/projetos-camp/{pid}/despesas/{did}", json={"ligar": True}).status_code == 409)
+        A.post(f"/api/projetos-camp/{p2}/receitas", json={"data": D(-5), "valor": 1500, "origem": "Associação"})
+        f2 = A.get(f"/api/projetos-camp/{p2}").json()["financeiro"]
+        ver("financeiro do projeto: entradas, saídas e saldo", f2["total_receitas"] == 1500.0 and f2["total_despesas"] == 1290.0 and f2["saldo"] == 210.0, f2)
+        d2 = A.put(f"/api/projetos-camp/{p2}/despesas/{did}", json={"ligar": False}).json()
+        ver("tirar a despesa do projeto: sai do projeto, continua no Financeiro", d2["financeiro"]["despesas"] == [] and c.execute("SELECT apagado_em FROM despesa WHERE id=?", (did,)).fetchone()[0] is None)
+        # documentos
+        pdf = _b64.b64encode(b"%PDF-1.4 teste").decode()
+        r = A.post(f"/api/projetos-camp/{pid}/arquivos", json={"nome": "portaria.pdf", "base64": pdf, "tipo": "aprovacao"})
+        ver("documento PDF entra", r.status_code == 200 and r.json()["arquivos"][0]["tipo_nome"] == "Aprovação ou portaria", r.text[:200])
+        ver("mesmo arquivo de novo: 409; PDF falso: 400", A.post(f"/api/projetos-camp/{pid}/arquivos", json={"nome": "x.pdf", "base64": pdf}).status_code == 409
+            and A.post(f"/api/projetos-camp/{pid}/arquivos", json={"nome": "y.pdf", "base64": _b64.b64encode(b"nao e pdf").decode()}).status_code == 400)
+        aid = r.json()["arquivos"][0]["id"]
+        ver("baixar o documento", A.get(f"/api/projetos-camp/{pid}/arquivos/{aid}").content.startswith(b"%PDF"))
+        d = A.delete(f"/api/projetos-camp/{pid}/arquivos/{aid}").json()
+        ver("tirar o documento: some da lista, a linha fica guardada e vai para o histórico", d["arquivos"] == [] and c.execute("SELECT apagado_em FROM projeto_camp_arquivo WHERE id=?", (aid,)).fetchone()[0]
+            and any(hh["texto"] == "Documento tirado: portaria.pdf" for hh in d["historico"]))
+        # resumo diário por e-mail
+        enviados = []
+        fake = lambda smtp, para, assunto, corpo: enviados.append((para, assunto, corpo))
+        ver("e-mail desligado por padrão: nada sai", pcm.resumo_email(c, _dt(2026, 11, 24, 9), enviar=fake)["motivo"] == "desligado" and enviados == [])
+        ver("destinatário inválido: 400", A.put("/api/projetos-camp/email", json={"para": "nao-e-email", "hora": 8}).status_code == 400)
+        A.put("/api/projetos-camp/email", json={"para": "rafael@camp.arq.br, eq@camp.arq.br", "hora": 8})
+        for k, v in (("smtp.host", "smtp.exemplo"), ("smtp.remetente", "painel@camp.arq.br")):
+            c.execute("INSERT INTO configuracao (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor", (k, v))
+        c.commit()
+        ver("antes da hora: não sai", pcm.resumo_email(c, _dt(2026, 11, 24, 7), enviar=fake).get("motivo") == "antes das 8h" and enviados == [])
+        r = pcm.resumo_email(c, _dt(2026, 11, 24, 9), enviar=fake)
+        ver("às 9h: um e-mail para cada destinatário, com atrasados, prazos e o link", r["enviado"] and len(enviados) == 2 and "Projetos da CAMP" in enviados[0][1]
+            and "Tratar as imagens" in enviados[0][2] and "#projetos_camp" in enviados[0][2], (r.get("erro"), enviados[:1]))
+        ver("no mesmo dia não repete", pcm.resumo_email(c, _dt(2026, 11, 24, 15), enviar=fake).get("motivo") == "já enviado hoje" and len(enviados) == 2)
+        n0 = c.execute("SELECT COUNT(*) FROM projeto_camp_email_envio").fetchone()[0]
+        pcm.resumo_email(c, _dt(2026, 11, 24, 15), enviar=fake, forcar=True)
+        ver("teste (forçar) sai mas não conta como o resumo do dia", len(enviados) == 4 and c.execute("SELECT COUNT(*) FROM projeto_camp_email_envio").fetchone()[0] == n0)
+        # arquivar some da lista (aparece com arquivados)
+        A.put(f"/api/projetos-camp/{p2}", json={"situacao": "arquivado"})
+        ver("arquivado sai da lista e aparece com 'Mostrar arquivados'", [x["id"] for x in A.get("/api/projetos-camp").json()["projetos"]] == [pid]
+            and p2 in [x["id"] for x in A.get("/api/projetos-camp?arquivados=true").json()["projetos"]])
+        ver("histórico registra quem fez o quê", any(hh["texto"].startswith("Projeto criado a partir do Financeiro") for hh in A.get(f"/api/projetos-camp/{pid}").json()["historico"]))
+        # tela (guarda rápida; o comportamento no navegador está em tests/navegador_projetos_camp.js)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: menu Projetos da CAMP (tecla 7, só admin), rota #projetos_camp/<id>/<aba> e bloco na Home",
+            'data-v="projetos_camp" data-pode="rota.projetos_camp"' in html and "projetos_camp:'7'" in html and "'rota.projetos_camp':'admin'" in html
+            and "if(v==='projetos_camp')carregarProjetosCamp(route);" in html and 'id="ini-projetos-camp"' in html and "if(admin)pcHomeCarregar();" in html)
+        for l in res: print(l)
+
     elif modo == "financeiro_mp_direcao":
         # CAMP-FIN (24/11/2026). Rafael, no print de Financeiro → Receitas: "isso é despesa… presta atenção". "Anthropic* claude sub" (assinatura
         # paga pela CAMP com o saldo do Mercado Pago, −R$ 569,25 no Extrato) aparecia como RECEITA "Recebido direto no Mercado Pago" (bruto
@@ -25448,6 +25582,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · comprovante e saídas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 17, "Financeiro · comprovante e saídas: todas as verificações rodaram")
+
+print("Projetos da CAMP: PRONAC a partir do Financeiro (simular), avisos, mudanças, Home, orçamento, documentos, e-mail diário")
+rc, out = rodar("projetos_camp", f"{tmp}/projetos_camp.db")
+if rc != 0: ok(False, f"teste projetos_camp não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projetos da CAMP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 35, "Projetos da CAMP: todas as verificações rodaram")
 
 print("Financeiro · entrada ou saída do Mercado Pago: compra paga pela CAMP não é receita; site antigo (heurística); refazer linhas antigas; sem duplicar; Isto é uma saída/entrada")
 rc, out = rodar("financeiro_mp_direcao", f"{tmp}/financeiro_mp_direcao.db")

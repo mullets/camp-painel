@@ -2831,6 +2831,59 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
 }
 .fin-mb{margin-bottom:14px}.fin-mt{margin-top:8px}.fin-mt2{margin-top:10px}.fin-sk40{width:40%}.fin-sk55{width:55%}.fin-skl{margin:12px 0}.fin-flex1{flex:1}.fin-normal{font-weight:400}
 .fin-grande{text-align:left;font-size:var(--fs-num)}.fin-arq{display:inline-flex}.fin-mais{display:grid;gap:10px;margin-top:8px}.fin-mb6{margin-bottom:6px}
+
+/* CAMP-PROJ (24/11/2026): Projetos da CAMP (projetos institucionais: Lei Rouanet, editais, patrocínios, internos). Sóbrio, sem emoji.
+   Não confundir com o projeto do acervo (F0xx-P000x, .pj-*): aqui tudo é .pc-*. */
+#v-projetos_camp .pc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 16px}
+.pc-kpi{background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);padding:12px 14px;display:grid;gap:2px;min-width:0}
+.pc-kpi b{font:600 var(--fs-lg) var(--mono);font-variant-numeric:tabular-nums}.pc-kpi span{color:var(--ink2);font-size:var(--fs-sm2)}
+.pc-kpi.r b{color:var(--red)}.pc-kpi.a b{color:var(--amber)}
+.pc-card{background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);padding:16px;min-width:0;margin:0 0 16px}
+.pc-card>h2,.pc-card>.pc-ch>h2{font-size:var(--fs-base);margin:0}
+.pc-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.pc-aviso{border:1px solid var(--line2);border-left:4px solid var(--blue);border-radius:var(--r);padding:10px 12px;margin:0 0 16px;background:var(--surface);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.pc-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
+.pc-lista td{vertical-align:top}.pc-lista .pc-nome{font-weight:600}.pc-lista small{display:block;color:var(--ink2)}
+.pc-lista tr[data-pc-abrir]{cursor:pointer}.pc-lista tr[data-pc-abrir]:hover td{background:var(--surface2)}
+.pc-barra{display:block;height:6px;border-radius:var(--r-sm);background:var(--surface2);overflow:hidden;min-width:80px}
+.pc-barra>i{display:block;height:100%;width:0;background:var(--green)}.pc-barra.a>i{background:var(--amber)}.pc-barra.r>i{background:var(--red)}
+.pc-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pc-al{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pc-al li{border-left:3px solid var(--line);padding:6px 10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;word-break:break-word}.pc-al li>div{display:grid;gap:2px;min-width:0}
+.pc-al li[data-n="r"]{border-left-color:var(--red)}.pc-al li[data-n="a"]{border-left-color:var(--amber)}.pc-al li[data-n="b"]{border-left-color:var(--blue)}
+.pc-al li small{color:var(--ink2)}.pc-al li>.btn{white-space:nowrap}
+.pc-dl{display:grid;grid-template-columns:minmax(120px,auto) minmax(0,1fr);gap:6px 14px;margin:0}
+.pc-dl dt{color:var(--ink2)}.pc-dl dd{margin:0;word-break:break-word}.pc-falta{color:var(--amber);font-style:italic}
+.pc-topo{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin:0 0 12px}
+.pc-topo h1{margin:4px 0}.pc-topo .sub{margin:0}
+.pc-obj{list-style:none;margin:0;padding:0;display:grid;gap:10px}.pc-obj li{display:grid;gap:4px}
+.pc-obj .pc-obj-l{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.pc-acoes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pc-tl{position:relative;display:grid;gap:6px;margin:0 0 12px}
+.pc-tl-l{display:grid;grid-template-columns:minmax(120px,28%) minmax(0,1fr);gap:8px;align-items:center}
+.pc-tl-trilho{position:relative;height:14px;background:var(--surface2);border-radius:var(--r-sm)}
+.pc-tl-trilho>i{position:absolute;top:0;bottom:0;border-radius:var(--r-sm);background:var(--blue);min-width:6px}
+.pc-tl-trilho>i[data-s="feita"]{background:var(--green)}.pc-tl-trilho>i[data-s="atrasada"]{background:var(--red)}
+.pc-tl-trilho>b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.pc-tl-eixo{display:flex;justify-content:space-between;color:var(--ink2);font-size:var(--fs-xs)}
+.pc-etapa{border:1px solid var(--line2);border-radius:var(--r);padding:10px 12px;margin:0 0 10px}
+.pc-etapa-t{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.pc-etapa-t h3{font-size:var(--fs-base);margin:0}
+.pc-tar{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.pc-tar li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 8px;background:var(--surface2);border-radius:var(--r-sm)}
+.pc-tar li[data-s="feita"] .pc-tar-o,.pc-tar li[data-s="nao_se_aplica"] .pc-tar-o{color:var(--ink3);text-decoration:line-through}
+.pc-tar small{color:var(--ink2);display:block}
+.pc-filtro{justify-content:space-between}.pc-filtro{flex-wrap:wrap}.pc-chk-l{display:inline-flex;gap:6px;align-items:center}
+.pc-form{display:grid;gap:10px}.pc-form label{display:grid;gap:4px}.pc-form .pc-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pc-form textarea{min-height:80px}.pc-form .help{margin:0}
+.pc-cand{max-height:360px;overflow:auto}
+.pc-hist{list-style:none;margin:0;padding:0;display:grid;gap:6px}.pc-hist li{border-left:3px solid var(--line);padding:4px 10px}.pc-hist small{color:var(--ink2);display:block}
+.pc-home ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pc-home li{border-left:3px solid var(--line);padding:4px 8px;word-break:break-word}.pc-home li[data-n="r"]{border-left-color:var(--red)}.pc-home li[data-n="a"]{border-left-color:var(--amber)}
+.pc-home li small{display:block;color:var(--ink2)}.pc-home li .btn{white-space:normal;text-align:left;height:auto;min-height:0;padding:0;line-height:1.35;overflow-wrap:anywhere}.pc-home .pc-home-n{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 8px;color:var(--ink2);font-size:var(--fs-sm2)}
+.pc-home .pc-home-n b{color:var(--ink)}.pc-home .pc-home-n .r b{color:var(--red)}.pc-home .pc-home-n .a b{color:var(--amber)}
+@media (max-width:900px){.pc-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.pc-lista th,.pc-lista td{padding-left:6px;padding-right:6px}.pc-lista .tag{white-space:normal}.pc-form .pc-2{grid-template-columns:1fr}.pc-tl-l{grid-template-columns:minmax(0,1fr)}.pc-lista .pc-col-prog{display:none}.pc-dl{grid-template-columns:minmax(0,1fr)}.pc-dl dt{margin-top:6px}}
 </style>
 </head>
 <body>
@@ -2867,6 +2920,7 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
     <div class="grp" data-grp="admin">Administração</div>
     <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Máquinas</button>
     <button data-v="financeiro" data-pode="rota.financeiro"><svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 16V10M10 16V6M14 16v-4M18 16V8"/></svg>Financeiro</button>
+    <button data-v="projetos_camp" data-pode="rota.projetos_camp"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M8 13h5M8 16h8"/></svg>Projetos da CAMP</button>
     <button data-v="emails" data-pode="rota.emails"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 7l9 6 9-6"/></svg>E-mails</button>
     <button data-v="config" class="nav-sec"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações</button>
     <button data-v="auditoria" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Histórico de ações</button>
@@ -3287,6 +3341,9 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
     <aside class="fin-lado" id="fin-lado" hidden role="dialog" aria-modal="true" aria-labelledby="fin-lado-tit"></aside>
     <div class="fin-fila" id="fin-fila" hidden role="dialog" aria-modal="true" aria-labelledby="fin-fila-tit"></div>
   </section>
+  <section class="content" id="v-projetos_camp"><!-- CAMP-PROJ: Projetos da CAMP (projetos institucionais; NÃO é o projeto do acervo). Lista e detalhe montados por carregarProjetosCamp -->
+    <div id="pc-corpo"><div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Carregando…</div></div></div></div>
+  </section>
   <section class="content" id="v-doacoes">
     <div class="hdr"><div><h1>Doações de acervo</h1><p class="sub">Intenções de doação de acervo enviadas pelo formulário do site (Intenção de doação de acervo). Aqui a equipe acompanha cada doação do começo ao fim: etapas (o que já aconteceu e o que falta), próximos passos (frete, embalagem, transporte…), arquivos, contrato assinado e histórico. A cobrança da contribuição vai junto com o contrato. Com a contribuição paga, a pessoa vira Amiga da CAMP por 12 meses, sem renovação automática. Tem dados pessoais: só admin e master veem.</p></div>
       <div class="act"><button type="button" class="btn" id="doa-sinc">Sincronizar agora</button><button type="button" class="btn" id="doa-importar">Importar ficha (CSV do Google Forms)</button><button type="button" class="btn" id="doa-amigos">Conferir Amigos das doações pagas</button><a class="btn" id="doa-form" href="https://camp.arq.br/intencao-de-doacao-de-acervo/" target="_blank" rel="noopener">Ver o formulário no site</a></div></div>
@@ -3632,7 +3689,7 @@ const navEl=document.getElementById('nav');
 function show(v,sec){document.querySelectorAll('.content').forEach(s=>{const on=s.id==='v-'+v;s.classList.toggle('on',on);s.hidden=!on});   /* UX-27: tela inativa com hidden (fora do leitor de tela; um só h1 por tela) */navEl.querySelectorAll('button').forEach(b=>{const on=b.dataset.v===sec;b.classList.toggle('on',on);if(on)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   {const a=navEl.querySelector('button.on');if(a&&a.classList.contains('nav-sec')&&typeof navSecAbrir==='function')navSecAbrir(true)}   /* CAMP-154: a tela atual é um item do "Mais": ele aparece aberto */
   document.querySelector('.main').scrollTo(0,0);closeDrawer()}
-const TITLES={painel:'Precisa de você',duplicatas:'Duplicatas',conferir:'Conferir folhas',decisoes:'Decisões',filas:'Material novo',solicitacoes:'Pedidos de alta resolução',inscricoes:'Inscrições',amigos:'Amigos da CAMP',ingressos:'Ingressos',cobrancas:'Cobranças avulsas',doacoes:'Doações de acervo',patrocinios:'Patrocínios',financeiro:'Financeiro',emails:'E-mails',erros:'Problemas',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',localizacao:'Onde está guardado',emprestimos:'Empréstimos',estante:'Ler etiqueta',estacoes:'Máquinas',uso:'Downloads',auditoria:'Histórico de ações',relatorios:'Relatórios',visitas:'Visitas ao site',config:'Configurações',caminho:'Como o material anda',glossario:'Glossário',qualidade:'Qualidade do CAMP Vision'};
+const TITLES={painel:'Precisa de você',duplicatas:'Duplicatas',conferir:'Conferir folhas',decisoes:'Decisões',filas:'Material novo',solicitacoes:'Pedidos de alta resolução',inscricoes:'Inscrições',amigos:'Amigos da CAMP',ingressos:'Ingressos',cobrancas:'Cobranças avulsas',doacoes:'Doações de acervo',patrocinios:'Patrocínios',financeiro:'Financeiro',projetos_camp:'Projetos da CAMP',emails:'E-mails',erros:'Problemas',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',localizacao:'Onde está guardado',emprestimos:'Empréstimos',estante:'Ler etiqueta',estacoes:'Máquinas',uso:'Downloads',auditoria:'Histórico de ações',relatorios:'Relatórios',visitas:'Visitas ao site',config:'Configurações',caminho:'Como o material anda',glossario:'Glossário',qualidade:'Qualidade do CAMP Vision'};
 let NAV_INDEX=Number(history.state&&history.state.campIndex)||0;
 function rotaAtual(){return (history.state&&history.state.campRoute)||location.hash.slice(1)||'painel'}
 function salvarContextoNavegacao(){const st={...(history.state||{}),camp:true,campIndex:NAV_INDEX,campRoute:rotaAtual(),campScroll:mainEl.scrollTop||0};history.replaceState(st,'',location.href)}
@@ -3655,7 +3712,7 @@ function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document
   sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1></div></div>${estadoHTML(semAcesso?'sem-permissao':'vazio',{titulo:detalhe,texto:semAcesso?'O seu papel neste painel não abre esta página.':'',quem:semAcesso?'um administrador (o Rafael)':'',acoes:`<button class="btn pri" onclick="go('${fallback}')">Voltar</button>`})}`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
-const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.amigos':'admin','rota.emails':'admin','rota.ingressos':'admin','rota.cobrancas':'admin','rota.doacoes':'admin','rota.patrocinios':'admin','rota.financeiro':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','lote.novo':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
+const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.amigos':'admin','rota.emails':'admin','rota.ingressos':'admin','rota.cobrancas':'admin','rota.doacoes':'admin','rota.patrocinios':'admin','rota.financeiro':'admin','rota.projetos_camp':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','lote.novo':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
 /* Redesenho §19: no celular o menu inteiro abre numa GAVETA pelo ☰ do cabeçalho (antes: barra de baixo com 5 destinos + "Mais").
    Aberta: o resto da tela fica inerte (o Tab não sai da gaveta); fecha com Esc, no fundo escurecido, ao escolher um item ou ao alargar a tela. */
 const MQ_CELULAR=window.matchMedia?matchMedia('(max-width:720px)'):{matches:false,addEventListener(){}};
@@ -3687,7 +3744,7 @@ function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el
 function route_to(route){route=route||'painel';if(/^financeiro\?/.test(route)){route=route.replace(/^financeiro\?/,'financeiro/geral?');try{history.replaceState({...(history.state||{}),campRoute:route},'','#'+route)}catch(_){}}   /* CAMP-FIN-CONSERTOS: o estado do Financeiro mora no endereço */
   {const ant={emkt:'emails/aceite',emailsite:'emails/modelos'}[route.split('/')[0]];if(ant){route=ant;try{history.replaceState({...(history.state||{}),campRoute:route},'','#'+route)}catch(_){}}}   /* CAMP-EMAIL (20/11): e-mails num lugar só; #emkt e #emailsite antigos abrem a aba */
   setTimeout(()=>{window.PJ_ROTA=route;vigiarMarca()},0);   /* exaustão CAMP-105: nova visita ao projeto (vindo de outra tela) reabre a gaveta do que trava; redesenhar na mesma visita não */
-  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){filaChegou(a1);carregarFilas()}if(v==='projetos'){projChegou(a1);carregarProjetosAPI({});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='amigos')carregarAmigos();if(v==='emails')emTelaAba(a1);if(v==='ingressos')carregarIngressos();if(v==='cobrancas')carregarCobrancas();if(v==='doacoes')carregarDoacoes();if(v==='patrocinios')carregarPatrocinios();if(v==='financeiro')carregarFinanceiro(a1,route);if(v==='erros'){cpRota(a1)}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
+  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){filaChegou(a1);carregarFilas()}if(v==='projetos'){projChegou(a1);carregarProjetosAPI({});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='amigos')carregarAmigos();if(v==='emails')emTelaAba(a1);if(v==='ingressos')carregarIngressos();if(v==='cobrancas')carregarCobrancas();if(v==='doacoes')carregarDoacoes();if(v==='patrocinios')carregarPatrocinios();if(v==='financeiro')carregarFinanceiro(a1,route);if(v==='projetos_camp')carregarProjetosCamp(route);if(v==='erros'){cpRota(a1)}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 let POP_VOLTANDO=false;window.addEventListener('popstate',e=>{if(POP_VOLTANDO){POP_VOLTANDO=false;return}if(temAlteracoes()){POP_VOLTANDO=true;history.go(1);confirmarDescarte().then(ok=>{if(ok){ALTERACOES_PENDENTES.clear();atualizarDirtyUI();history.back()}});return}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
 navEl.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
@@ -4394,7 +4451,7 @@ const AJUDA_TELAS={
   emails:{titulo:'E-mails',intro:'Tudo de e-mail num lugar só, em três abas. Só admin e master.',passos:[['Enviados','Todo e-mail que saiu do painel e do site, com o motivo de cada falha. Clique numa linha para ver o e-mail.'],['Modelos do Sender','O ID de cada modelo TR no Sender: cole e salve; o teste manda um e-mail de exemplo.'],['Quem aceita e-mails','Quem marcou "Quero receber e-mails da CAMP" num formulário do site, de onde veio e a situação no Sender.'],['Troque de aba','← e → trocam de aba. Cada aba tem endereço próprio: #emails, #emails/modelos e #emails/aceite.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['[ · ⌘/Ctrl + B','Recolher/expandir o menu (recolhido, só os ícones)'],['1–6','Precisa de você · Projetos · Fundos · Pedidos de alta resolução · Máquinas · Financeiro'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U · V','Etiquetas · Relatórios · Downloads · Visitas ao site'],['S','Inscrições'],['H · Z · R · J · Y','Amigos da CAMP · Ingressos · Cobranças avulsas · Doações de acervo · Patrocínios'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['E','E-mails'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['J · K · Enter · I','Precisa de você e Problemas: descer · subir na lista · abrir o item · ignorar (esconder por 7 dias). Sem item escolhido, I abre Arquitetos'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['[ · ⌘/Ctrl + B','Recolher/expandir o menu (recolhido, só os ícones)'],['1–7','Precisa de você · Projetos · Fundos · Pedidos de alta resolução · Máquinas · Financeiro · Projetos da CAMP'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U · V','Etiquetas · Relatórios · Downloads · Visitas ao site'],['S','Inscrições'],['H · Z · R · J · Y','Amigos da CAMP · Ingressos · Cobranças avulsas · Doações de acervo · Patrocínios'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['E','E-mails'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['J · K · Enter · I','Precisa de você e Problemas: descer · subir na lista · abrir o item · ignorar (esconder por 7 dias). Sem item escolhido, I abre Arquitetos'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 // ---------- Como funciona esta página (H1): uma caixa curta no topo de cada tela; "Entendi" fecha, o "?" traz de volta ----------
 // v = versão do texto: se mudar, a caixa volta a aparecer uma vez para quem já tinha fechado, com a etiqueta "Novo".
@@ -4609,7 +4666,7 @@ function recolhidoPadrao(){let p=null;try{p=localStorage.getItem('camp.side')}ca
 recolhidoPadrao();MQ_TABLET.addEventListener('change',recolhidoPadrao);
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
-const NAV_ATALHOS={painel:'1',filas:'N',erros:'P',decisoes:'D',projetos:'2',fundos:'3',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',solicitacoes:'4',inscricoes:'S',amigos:'H',ingressos:'Z',cobrancas:'R',doacoes:'J',patrocinios:'Y',uso:'U',visitas:'V',relatorios:'L',estacoes:'5',financeiro:'6',emails:'E',config:'C',auditoria:'A',qualidade:'Q',caminho:'M',glossario:'G'};   /* UX-28: na ordem do menu (ordem do trabalho); as teclas são as mesmas do CAMP-154: 1–5 os destinos, o resto por letra. Redesenho §3: Histórico (A) e Qualidade (Q) foram para Administração, teclas iguais */
+const NAV_ATALHOS={painel:'1',filas:'N',erros:'P',decisoes:'D',projetos:'2',fundos:'3',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',solicitacoes:'4',inscricoes:'S',amigos:'H',ingressos:'Z',cobrancas:'R',doacoes:'J',patrocinios:'Y',uso:'U',visitas:'V',relatorios:'L',estacoes:'5',financeiro:'6',projetos_camp:'7',emails:'E',config:'C',auditoria:'A',qualidade:'Q',caminho:'M',glossario:'G'};   /* UX-28: na ordem do menu (ordem do trabalho); as teclas são as mesmas do CAMP-154: 1–5 os destinos, o resto por letra. Redesenho §3: Histórico (A) e Qualidade (Q) foram para Administração, teclas iguais */
 const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
 document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
@@ -9389,6 +9446,7 @@ async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')
     </div>
     <div class="ini-col ini-lateral">
       <div id="ini-alertas">${iniAlertasHTML(d.alertas)}</div>
+      ${admin?'<div id="ini-projetos-camp"></div>':''}
       <section class="ini-jogo-p" id="ini-jogo" aria-labelledby="ini-t-jogo"><h2 id="ini-t-jogo" class="ini-sr">Seu progresso</h2><div class="ini-jogo-corpo">${iniJogoHTML(undefined)}</div></section>
       <section class="panel ini-saude-p" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2><span id="ini-saude-resumo">${iniSaudeResumo(PAINEL_EST,PAINEL_QI,p)}</span>${iniAjudaSecHTML('saude','O que significam as cores?',['Verde (✓ Online): funcionando.','Amarelo (! atenção): precisa de olho, mas não para o trabalho.','Vermelho (✕ crítico): parou ou vai parar; resolva hoje.','Cinza (? não medido): o painel não conseguiu medir, ou está desligado fora do expediente.','O que falha vem primeiro, com a frase do que acontece; “detalhes” mostra o lado técnico. Passe o mouse num sistema verde para ver a medida.'])}</div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
       <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">Comparado com 7 dias atrás</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
@@ -9397,7 +9455,7 @@ async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')
       <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
     </div>
   </div>`;
-  iniJogoCarregar();
+  iniJogoCarregar();if(admin)pcHomeCarregar();   /* CAMP-PROJ: bloco Projetos da CAMP (atrasados, 7 dias, mudanças) */
   garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();iniSemLugar();
   if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}
   pr.then(r=>{if(r)iniRitmoMostrar(r,p);const k=document.getElementById('ini-kpi-hoje');if(k)k.innerHTML=iniKpiHojeHTML(r)});vmPosicionar(document.getElementById('ini-cobertura')||document.createElement('i'));   /* §17: largura das barras sem estilo inline no HTML */
@@ -10192,6 +10250,255 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.
 document.addEventListener('change',e=>{const id=e.target&&e.target.id;if(id==='cob-sit'){COB.sit=e.target.value;carregarCobrancas()}else if(id==='cob-fin'){COB.fin=e.target.value;carregarCobrancas()}else if(id==='cob-de'){COB.de=e.target.value;carregarCobrancas()}else if(id==='cob-ate'){COB.ate=e.target.value;carregarCobrancas()}else if(id==='cob-n-fin')cobPrevia()});
 {let tq,tv;document.addEventListener('input',e=>{const id=e.target&&e.target.id;if(id==='cob-q'){clearTimeout(tq);tq=setTimeout(()=>{COB.q=e.target.value.trim();carregarCobrancas()},300)}else if(id==='cob-n-desc')cobPrevia();
   else if(id==='cob-n-vinc'){clearTimeout(tv);const inp=e.target,q=inp.value.trim();if(q.length<2||cobCodigoVinculo(q)===q.toUpperCase())return;tv=setTimeout(async()=>{try{const r=await API('/api/busca?'+new URLSearchParams({q,limite:15}));if(inp.value.trim()!==q)return;document.getElementById('cob-n-vinc-lista').innerHTML=(r.resultados||[]).filter(x=>x.tipo==='fundo'||x.tipo==='projeto').map(x=>`<option value="${escHtml(x.codigo+' · '+x.titulo)}"></option>`).join('')}catch(_){}},250)}})}
+/* CAMP-PROJ (24/11/2026). Rafael: "vamos ter uma área de projetos no sistema, interligados aos outros módulos dele, que vai ter os objetivos e
+   prazos, e precisa sempre me avisar tudo." Projetos da CAMP (Lei Rouanet, editais, patrocínios, projetos internos) no modelo da proposta do
+   SALIC: identificação, objetivos e metas, etapas e cronograma, orçamento (o do SALIC vem do Financeiro), financeiro do projeto, documentos e
+   histórico. Estado no endereço: #projetos_camp (lista) e #projetos_camp/<id>/<aba>. NÃO é o projeto do acervo (F0xx-P000x). Só admin e
+   master. Sem emoji (tom sério). Larguras das barras sem estilo inline no HTML (pcPosicionar). */
+let PC={lista:null,det:null,id:null,aba:'geral',arquivados:false,cand:null};
+const PC_ABAS=[['geral','Visão geral'],['cronograma','Cronograma'],['orcamento','Orçamento'],['financeiro','Financeiro do projeto'],['documentos','Documentos'],['historico','Histórico']];
+const PC_SIT_TAG={planejamento:'b',captacao:'a',execucao:'g',prestacao:'a',concluido:'g',arquivado:''};
+const PC_TAR_TAG={a_fazer:'',fazendo:'b',feita:'g',nao_se_aplica:''};
+const pcData=s=>s?String(s).slice(0,10).split('-').reverse().join('/'):'';
+function pcQuando(d){if(d==null)return '';if(d<0)return `atrasado há ${-d} dia${d!==-1?'s':''}`;if(d===0)return 'vence hoje';return `vence em ${d} dia${d!==1?'s':''}`}
+function pcDias(s){if(!s||!PC.det)return null;return Math.round((new Date(s.slice(0,10)+'T12:00:00')-new Date(PC.det.hoje+'T12:00:00'))/864e5)}
+function pcPct(p){return p==null?'—':(Math.round(p*1000)/10).toLocaleString('pt-BR')+'%'}
+function pcBarra(pct,nivel){const n=nivel==='vermelho'?'r':nivel==='ambar'?'a':'';return `<span class="pc-barra ${n}" data-pc-pct="${pct==null?0:Math.max(0,Math.min(1,pct))}" role="img" aria-label="${escHtml(pcPct(pct))}"><i></i></span>`}
+function pcPosicionar(raiz){(raiz||document).querySelectorAll('[data-pc-pct]').forEach(b=>{const i=b.firstElementChild;if(i)i.style.width=(+b.dataset.pcPct*100)+'%'});
+  (raiz||document).querySelectorAll('[data-pc-ini]').forEach(i=>{i.style.left=(+i.dataset.pcIni*100)+'%';if(i.dataset.pcLarg!=null)i.style.width=(+i.dataset.pcLarg*100)+'%'})}
+function pcCarregandoHTML(){return '<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Carregando…</div></div></div>'}
+function pcErroHTML(msg){return `<div class="pc-card"><b>Não foi possível carregar os Projetos da CAMP.</b><p class="help">${escHtml(msg||'')}</p><button type="button" class="btn" data-pc="tentar">Tentar de novo</button></div>`}
+function pcRota(){return PC.id?`projetos_camp/${PC.id}${PC.aba&&PC.aba!=='geral'?'/'+PC.aba:''}`:'projetos_camp'}
+async function carregarProjetosCamp(route){const el=document.getElementById('pc-corpo');if(!el)return;
+  const ps=String(route||'').split('?')[0].split('/'),id=/^\d+$/.test(ps[1]||'')?+ps[1]:null,aba=PC_ABAS.some(a=>a[0]===ps[2])?ps[2]:'geral';
+  if(id===null){PC.id=null;PC.det=null;el.innerHTML=pcCarregandoHTML();
+    try{PC.lista=await API('/api/projetos-camp'+(PC.arquivados?'?arquivados=true':''))}catch(e){if(e.status===401)return;el.innerHTML=pcErroHTML(e.message);return}
+    pcLista();return}
+  if(PC.id===id&&PC.det){PC.aba=aba;pcDetalhe();return}
+  PC.id=id;PC.aba=aba;el.innerHTML=pcCarregandoHTML();
+  try{PC.det=await API('/api/projetos-camp/'+id)}catch(e){if(e.status===401)return;el.innerHTML=pcErroHTML(e.message);return}
+  pcDetalhe();API('/api/projetos-camp/'+id+'/visto',{method:'POST'}).catch(()=>{})}
+
+/* ---------- lista ---------- */
+function pcLista(){const L=PC.lista,el=document.getElementById('pc-corpo');if(!L||!el)return;const ps=L.projetos||[];
+  const at=ps.reduce((s,x)=>s+x.atrasados,0),v7=ps.reduce((s,x)=>s+x.vencem_7d,0),and=ps.filter(x=>!['concluido','arquivado'].includes(x.situacao)).length;
+  const sem=L.semear?`<div class="pc-aviso"><span>O Financeiro já tem o projeto <b>${escHtml(L.semear.plano.codigo_externo||'')}</b> (${L.semear.plano.itens_orcamento} itens no orçamento, ${escHtml(finR(L.semear.plano.orcamento_total))}). Crie o projeto aqui com esses dados: o que não está no Financeiro fica "a preencher".</span><button type="button" class="btn" data-pc="semear-ver">Ver o que será criado</button></div>`:'';
+  const linhas=ps.length?ps.map(x=>{const pz=x.proximo_prazo;return `<tr data-pc-abrir="${x.id}" tabindex="0"><td><span class="pc-nome">${escHtml(x.nome)}</span><small>${escHtml(x.tipo_nome)}${x.codigo_externo?' · '+escHtml(x.codigo_externo):''}${x.responsavel?' · '+escHtml(x.responsavel):''}</small></td>
+      <td><span class="tag ${PC_SIT_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span></td>
+      <td>${pz?`${escHtml(pcData(pz.data))}<small>${escHtml(pz.nome)} · ${escHtml(pcQuando(pz.dias))}</small>`:'<small>sem prazo marcado</small>'}</td>
+      <td class="pc-col-prog">${x.progresso.pct==null?'<small>sem etapas</small>':`${pcBarra(x.progresso.pct)}<small>${escHtml(pcPct(x.progresso.pct))}${x.progresso.total?` · ${x.progresso.feitas} de ${x.progresso.total}`:''}</small>`}</td>
+      <td>${x.atrasados?`<span class="tag r">${x.atrasados} atrasado${x.atrasados>1?'s':''}</span>`:''}${x.vencem_7d?` <span class="tag a">${x.vencem_7d} em 7 dias</span>`:''}${!x.atrasados&&!x.vencem_7d?'<small>em dia</small>':''}</td></tr>`}).join('')
+    :`<tr><td colspan="5" class="empty">Nenhum projeto da CAMP ainda. Use Novo projeto${L.semear?' ou crie o do PRONAC a partir do Financeiro':''}.</td></tr>`;
+  const em=L.email||{};
+  el.innerHTML=`<div class="hdr"><div><h1>Projetos da CAMP</h1><p class="sub">Projetos institucionais da CAMP (Lei Rouanet, editais, patrocínios e projetos internos): objetivos, prazos, orçamento e documentos, ligados ao Financeiro. Os avisos aparecem na Home e no resumo diário por e-mail. Não confundir com os projetos do acervo (F0xx-P000x). Só admin e master veem.</p></div><div class="act"><button type="button" class="btn pri" data-pc="novo">Novo projeto</button></div></div>
+  ${sem}
+  <div class="pc-kpis" role="group" aria-label="Números dos projetos"><div class="pc-kpi"><b>${and}</b><span>em andamento</span></div><div class="pc-kpi ${at?'r':''}"><b>${at}</b><span>prazos atrasados</span></div><div class="pc-kpi ${v7?'a':''}"><b>${v7}</b><span>vencem em 7 dias</span></div></div>
+  <div class="panel"><div class="filterbar pc-filtro"><label class="pc-chk-l"><input type="checkbox" id="pc-arq"${PC.arquivados?' checked':''}> Mostrar arquivados</label><span class="help">${ps.length} projeto${ps.length!==1?'s':''}</span></div>
+  <div class="tw"><table class="pc-lista"><caption class="sr">Projetos da CAMP</caption><thead><tr><th>Projeto</th><th>Situação</th><th>Próximo prazo</th><th class="pc-col-prog">Progresso</th><th>Avisos</th></tr></thead><tbody>${linhas}</tbody></table></div></div>
+  <details class="pc-card" id="pc-email"><summary><b>Resumo diário por e-mail</b> · ${em.ligado?`ligado (${escHtml((em.para||[]).join(', '))}, a partir das ${em.hora}h)`:'desligado'}</summary>
+    <form class="pc-form" data-pc-form="email"><p class="help">Um e-mail por dia com o que está atrasado, o que vence nos próximos dias, avisos de orçamento e comprovantes e o que mudou nas últimas 24 horas. Usa o e-mail do painel (Configurações → E-mail e avisos). Deixe em branco para desligar.</p>
+      <div class="pc-2"><label>Quem recebe (separe por vírgula)<input name="para" type="text" value="${escHtml((em.para||[]).join(', '))}" autocomplete="off"></label><label>A partir de que hora<input name="hora" type="number" min="0" max="23" value="${em.hora!=null?em.hora:8}"></label></div>
+      <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button><button type="button" class="btn" data-pc="email-teste"${em.ligado?'':' disabled'}>Enviar um teste agora</button>${em.ultimo?`<span class="help">último envio: ${escHtml(pcData(em.ultimo.dia))} · ${em.ultimo.ok?'enviado':'não saiu'}${em.ultimo.erro?' ('+escHtml(em.ultimo.erro)+')':''}</span>`:''}</div></form></details>`;
+  pcPosicionar(el)}
+
+async function pcSemearVer(){let r;try{r=await API('/api/projetos-camp/semear-rouanet',{method:'POST',body:JSON.stringify({aplicar:false})})}catch(e){toast(e.message);return}
+  if(r.acao!=='simulado'){toast(r.motivo||'Nada a criar.');return}const p=r.plano;
+  const ok=await confirmar({titulo:'Criar o projeto a partir do Financeiro',html:`<p>Simulação: nada foi criado ainda.</p><dl class="pc-dl"><dt>Nome</dt><dd>${escHtml(p.nome)}</dd><dt>Código</dt><dd>${escHtml(p.codigo_externo||'—')}</dd><dt>Conta do projeto</dt><dd>${escHtml(p.conta_nome)}</dd><dt>Orçamento</dt><dd>${p.itens_orcamento} itens da planilha do SALIC (${escHtml(finR(p.orcamento_total))}), usados direto do Financeiro</dd><dt>Início e fim</dt><dd>${p.inicio?escHtml(pcData(p.inicio)+' a '+pcData(p.fim)):'a preencher'}</dd></dl><p class="help">A preencher depois: ${escHtml(p.a_preencher.join(', '))}.</p>`,botao:'Criar o projeto',cancelar:'Voltar'});
+  if(!ok)return;try{r=await API('/api/projetos-camp/semear-rouanet',{method:'POST',body:JSON.stringify({aplicar:true})})}catch(e){toast(e.message);return}
+  toast(r.acao==='criado'?'Projeto criado com os dados do Financeiro. Complete o que está a preencher.':(r.motivo||'Nada a criar.'));if(r.projeto_id)nav('projetos_camp/'+r.projeto_id)}
+
+function pcNovo(){const L=PC.lista||{},op=L.opcoes||{};
+  openDrawer('Novo projeto da CAMP','',`<form class="pc-form" data-pc-form="novo"><label>Nome do projeto<input name="nome" required maxlength="200"></label>
+    <div class="pc-2"><label>Tipo<select name="tipo">${Object.entries(op.tipos||{}).map(([k,v])=>`<option value="${escHtml(k)}">${escHtml(v)}</option>`).join('')}</select></label><label>Código (PRONAC, edital…)<input name="codigo_externo" maxlength="60"></label></div>
+    <label>Responsável<input name="responsavel" maxlength="120"></label><label>Objetivo geral<textarea name="objetivo_geral" maxlength="4000"></textarea></label>
+    <label>Conta do Financeiro (opcional)<select name="conta_id"><option value="">Nenhuma (orçamento próprio)</option>${(op.contas||[]).map(c=>`<option value="${c.id}">${escHtml(c.nome)}</option>`).join('')}</select></label>
+    <p class="help">Com a conta de um projeto incentivado, o orçamento é a planilha do SALIC que está no Financeiro.</p>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Criar projeto</button><button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+
+/* ---------- detalhe ---------- */
+function pcDetalhe(){const D=PC.det,el=document.getElementById('pc-corpo');if(!D||!el)return;const p=D.projeto;
+  const abas=PC_ABAS.map(([k,l])=>{const n=k==='geral'?D.alertas.filter(a=>a.nivel!=='b').length:k==='documentos'?D.arquivos.length:0;return `<button type="button" role="tab" class="btn${PC.aba===k?' on':''}" aria-selected="${PC.aba===k}" aria-pressed="${PC.aba===k}" data-pc-aba="${k}">${escHtml(l)}${n?` <b>${n}</b>`:''}</button>`}).join('');
+  el.innerHTML=`<div class="pc-topo"><div><button type="button" class="btn sm lnk" data-pc="voltar">← Projetos da CAMP</button><h1>${escHtml(p.nome)}</h1><p class="sub">${escHtml(p.tipo_nome)}${p.codigo_externo?' · '+escHtml(p.codigo_externo):''} · <span class="tag ${PC_SIT_TAG[p.situacao]||''}">${escHtml(p.situacao_nome)}</span>${D.progresso.pct!=null?` · ${escHtml(pcPct(D.progresso.pct))} concluído`:''}</p></div>
+    <div class="pc-acoes"><button type="button" class="btn" data-pc="editar">Editar dados</button></div></div>
+  <div class="abas-sit" role="tablist" aria-label="Partes do projeto">${abas}</div>
+  <div id="pc-aba">${({geral:pcGeralHTML,cronograma:pcCronoHTML,orcamento:pcOrcHTML,financeiro:pcFinHTML,documentos:pcDocHTML,historico:pcHistHTML}[PC.aba]||pcGeralHTML)(D)}</div>`;
+  pcPosicionar(el)}
+
+function pcAlertasHTML(als,vazio){return als.length?`<ul class="pc-al">${als.map(a=>`<li data-n="${a.nivel}"><div><span>${escHtml(a.titulo)}</span>${a.motivo?`<small>${escHtml(a.motivo)}</small>`:''}</div>${a.aba&&a.aba!==PC.aba?`<button type="button" class="btn sm lnk" data-pc-aba="${escHtml(a.aba)}">Ver</button>`:''}</li>`).join('')}</ul>`:`<p class="help">${escHtml(vazio)}</p>`}
+function pcGeralHTML(D){const p=D.projeto,f=k=>p[k]?escHtml(k.startsWith('prazo')||k==='inicio'||k==='fim'?pcData(p[k]):p[k]):'<span class="pc-falta">a preencher</span>';
+  const pz=D.prazos.filter(x=>x.dias!=null).slice(0,6);
+  return `<div class="pc-grid"><div>
+    <section class="pc-card"><div class="pc-ch"><h2>Avisos</h2></div>${pcAlertasHTML(D.alertas,'Nada atrasado nem perto do prazo. Tudo em dia.')}</section>
+    ${D.mudancas.length?`<section class="pc-card"><div class="pc-ch"><h2>Mudou desde a sua última visita</h2><small class="help">${escHtml(fmtDataHora(D.visto_em))}</small></div><ul class="pc-hist">${D.mudancas.slice(0,10).map(m=>`<li>${escHtml(m.texto)}<small>${escHtml(fmtDataHora(m.quando))} · ${escHtml(m.ator)}</small></li>`).join('')}</ul></section>`:''}
+    <section class="pc-card"><div class="pc-ch"><h2>Objetivo geral</h2></div>${p.objetivo_geral?`<p>${escHtml(p.objetivo_geral)}</p>`:'<p class="pc-falta">a preencher</p>'}${p.resumo?`<p class="help">${escHtml(p.resumo)}</p>`:''}</section>
+    <section class="pc-card"><div class="pc-ch"><h2>Objetivos e metas</h2><button type="button" class="btn sm" data-pc="obj-novo">Novo objetivo</button></div>
+      ${D.objetivos.length?`<ul class="pc-obj">${D.objetivos.map(o=>`<li><div class="pc-obj-l"><span>${escHtml(o.texto)}</span><span class="pc-acoes"><button type="button" class="btn sm lnk" data-pc-obj="${o.id}">Editar</button></span></div>${o.meta!=null?`${pcBarra(o.pct)}<small class="help">${escHtml(String(o.atual??0).replace('.',','))} de ${escHtml(String(o.meta).replace('.',','))}${o.indicador?' '+escHtml(o.indicador):''} · ${escHtml(pcPct(o.pct))}</small>`:(o.indicador?`<small class="help">${escHtml(o.indicador)}</small>`:'')}</li>`).join('')}</ul>`:'<p class="help">Nenhum objetivo ainda. Use os objetivos e metas da proposta (ex.: "Imprimir 1.000 exemplares").</p>'}</section>
+  </div><div>
+    <section class="pc-card"><div class="pc-ch"><h2>Identificação</h2></div><dl class="pc-dl"><dt>Tipo</dt><dd>${escHtml(p.tipo_nome)}</dd><dt>Código</dt><dd>${f('codigo_externo')}</dd><dt>Situação</dt><dd>${escHtml(p.situacao_nome)}</dd><dt>Responsável</dt><dd>${f('responsavel')}</dd>
+      <dt>Conta</dt><dd>${p.conta_nome?escHtml(p.conta_nome):'nenhuma (orçamento próprio)'}</dd><dt>Início</dt><dd>${f('inicio')}</dd><dt>Fim</dt><dd>${f('fim')}</dd>
+      <dt>Prazo de captação</dt><dd>${f('prazo_captacao')}</dd><dt>Fim da execução</dt><dd>${f('prazo_execucao')}</dd><dt>Prestação de contas</dt><dd>${f('prazo_prestacao')}</dd></dl></section>
+    <section class="pc-card"><div class="pc-ch"><h2>Próximos prazos</h2><button type="button" class="btn sm lnk" data-pc-aba="cronograma">Cronograma</button></div>${pz.length?`<ul class="pc-al">${pz.map(x=>`<li data-n="${x.dias<0?'r':x.dias<=7?'a':'b'}"><span>${escHtml(x.nome)}</span><small>${escHtml(pcData(x.data))} · ${escHtml(pcQuando(x.dias))}${x.responsavel?' · '+escHtml(x.responsavel):''}</small></li>`).join('')}</ul>`:'<p class="help">Nenhum prazo marcado.</p>'}</section>
+    <section class="pc-card"><div class="pc-ch"><h2>Orçamento</h2><button type="button" class="btn sm lnk" data-pc-aba="orcamento">Detalhe</button></div>${pcBarra(D.orcamento.total.pct,D.orcamento.total.nivel)}<p class="help">${escHtml(finR(D.orcamento.total.realizado))} de ${escHtml(finR(D.orcamento.total.previsto))} · saldo ${escHtml(finR(D.orcamento.total.saldo))}</p></section>
+  </div></div>`}
+
+function pcCronoHTML(D){const et=D.etapas,ta=D.tarefas,p=D.projeto;
+  const datas=[p.inicio,p.fim,...et.flatMap(e=>[e.inicio,e.prazo])].filter(Boolean).sort();let tl='';
+  if(datas.length>=2&&datas[0]!==datas[datas.length-1]){const a=new Date(datas[0]+'T12:00:00'),b=new Date(datas[datas.length-1]+'T12:00:00'),tot=b-a,pos=s=>Math.max(0,Math.min(1,(new Date(s+'T12:00:00')-a)/tot));
+    const hj=pos(D.hoje);tl=`<div class="pc-tl" aria-label="Linha do tempo">${et.filter(e=>e.prazo||e.inicio).map(e=>{const i=pos(e.inicio||e.prazo),f=pos(e.prazo||e.inicio),s=e.situacao==='feita'?'feita':(e.prazo&&pcDias(e.prazo)<0&&!['feita','nao_se_aplica'].includes(e.situacao)?'atrasada':'');
+      return `<div class="pc-tl-l"><span>${escHtml(e.nome)}</span><span class="pc-tl-trilho"><i data-s="${s}" data-pc-ini="${i}" data-pc-larg="${Math.max(0,f-i)}" title="${escHtml((e.inicio?pcData(e.inicio)+' a ':'')+pcData(e.prazo))}"></i>${D.hoje>=datas[0]&&D.hoje<=datas[datas.length-1]?`<b data-pc-ini="${hj}" title="hoje"></b>`:''}</span></div>`}).join('')}
+      <div class="pc-tl-l"><span></span><span class="pc-tl-eixo"><span>${escHtml(pcData(datas[0]))}</span><span>${escHtml(pcData(datas[datas.length-1]))}</span></span></div></div>`}
+  const tar=t=>{const d=pcDias(t.prazo),at=t.prazo&&d<0&&!['feita','nao_se_aplica'].includes(t.situacao);return `<li data-s="${t.situacao}"><span><span class="pc-tar-o">${escHtml(t.o_que)}</span><small>${t.responsavel?escHtml(t.responsavel)+' · ':''}${t.prazo?escHtml(pcData(t.prazo))+(['feita','nao_se_aplica'].includes(t.situacao)?'':' · '+escHtml(pcQuando(d))):'sem prazo'}${t.nota?' · '+escHtml(t.nota):''}</small></span>
+    <span class="pc-acoes">${at?'<span class="tag r">atrasada</span>':''}<label class="sr" for="pc-ts-${t.id}">Situação</label><select id="pc-ts-${t.id}" data-pc-tar-sit="${t.id}">${Object.entries(D.opcoes.sit_tarefa).map(([k,v])=>`<option value="${k}"${k===t.situacao?' selected':''}>${escHtml(v)}</option>`).join('')}</select><button type="button" class="btn sm lnk" data-pc-tar="${t.id}">Editar</button></span></li>`};
+  const blocos=et.map(e=>{const ts=ta.filter(t=>t.etapa_id===e.id),d=pcDias(e.prazo),at=e.prazo&&d<0&&!['feita','nao_se_aplica'].includes(e.situacao);
+    return `<div class="pc-etapa"><div class="pc-etapa-t"><div><h3>${escHtml(e.nome)}${e.marco?' <span class="tag b">marco</span>':''}</h3><small class="help">${e.inicio?escHtml(pcData(e.inicio))+' a ':''}${e.prazo?escHtml(pcData(e.prazo)):'sem prazo'}${e.prazo&&!['feita','nao_se_aplica'].includes(e.situacao)?' · '+escHtml(pcQuando(d)):''}</small></div>
+      <span class="pc-acoes">${at?'<span class="tag r">atrasada</span>':''}<label class="sr" for="pc-es-${e.id}">Situação</label><select id="pc-es-${e.id}" data-pc-etapa-sit="${e.id}">${Object.entries(D.opcoes.sit_tarefa).map(([k,v])=>`<option value="${k}"${k===e.situacao?' selected':''}>${escHtml(v)}</option>`).join('')}</select><button type="button" class="btn sm lnk" data-pc-etapa="${e.id}">Editar</button><button type="button" class="btn sm lnk" data-pc-tar-nova="${e.id}">Nova tarefa</button></span></div>
+      ${ts.length?`<ul class="pc-tar">${ts.map(tar).join('')}</ul>`:''}</div>`}).join('');
+  const soltas=ta.filter(t=>!t.etapa_id);
+  return `<section class="pc-card"><div class="pc-ch"><h2>Cronograma</h2><span class="pc-acoes"><button type="button" class="btn sm" data-pc="etapa-nova">Nova etapa</button><button type="button" class="btn sm" data-pc-tar-nova="">Nova tarefa</button></span></div>
+    ${tl||(et.length?'<p class="help">Marque início e prazo nas etapas para ver a linha do tempo.</p>':'')}
+    ${blocos||'<p class="help">Nenhuma etapa ainda. Use as etapas da proposta (pré-produção, produção, divulgação, pós-produção) e os marcos (aprovação, captação, prestação de contas).</p>'}
+    ${soltas.length?`<div class="pc-etapa"><div class="pc-etapa-t"><h3>Tarefas sem etapa</h3></div><ul class="pc-tar">${soltas.map(tar).join('')}</ul></div>`:''}</section>`}
+
+function pcOrcHTML(D){const o=D.orcamento,t=o.total;
+  const linhas=o.itens.map(i=>`<tr><td>${i.item!=null?escHtml(String(i.item)):''}</td><td>${escHtml(i.descricao)}${i.grupo?`<small class="help">${escHtml(i.grupo)}</small>`:''}</td><td class="pc-num">${escHtml(finR(i.previsto))}</td><td class="pc-num">${escHtml(finR(i.realizado))}</td><td class="pc-num">${escHtml(finR(i.saldo))}</td><td>${pcBarra(i.pct,i.nivel)}<small class="help">${escHtml(pcPct(i.pct))}</small></td><td>${o.fonte==='proprio'?`<button type="button" class="btn sm lnk" data-pc-item="${i.id}">Editar</button>`:''}</td></tr>`).join('');
+  return `<section class="pc-card"><div class="pc-ch"><h2>Orçamento · previsto × realizado</h2><span class="pc-acoes">${o.fonte==='salic'?`<button type="button" class="btn sm" data-pc="fin-projeto">Abrir no Financeiro</button>`:'<button type="button" class="btn sm" data-pc="item-novo">Novo item</button>'}</span></div>
+    ${o.fonte==='salic'?`<p class="help">Planilha orçamentária do SALIC, a mesma do Financeiro → Projeto incentivado. O realizado são as despesas da conta do projeto ligadas a cada item e as notas da CAMP pagas.${o.banner?' '+escHtml(o.banner)+'.':''}</p>`:`<p class="help">Orçamento próprio do projeto. O realizado são as despesas ligadas a cada item (aba Financeiro do projeto).${o.sem_item?` Despesas ligadas sem item: ${escHtml(finR(o.sem_item))}.`:''}</p>`}
+    <div class="tw"><table><caption class="sr">Orçamento do projeto</caption><thead><tr><th>Item</th><th>Descrição</th><th class="pc-num">Previsto</th><th class="pc-num">Realizado</th><th class="pc-num">Saldo</th><th>Usado</th><th></th></tr></thead>
+    <tbody>${linhas||'<tr><td colspan="7" class="empty">Nenhum item no orçamento.</td></tr>'}</tbody>
+    ${o.itens.length?`<tfoot><tr><th></th><th>Total</th><th class="pc-num">${escHtml(finR(t.previsto))}</th><th class="pc-num">${escHtml(finR(t.realizado))}</th><th class="pc-num">${escHtml(finR(t.saldo))}</th><th>${pcBarra(t.pct,t.nivel)}<small class="help">${escHtml(pcPct(t.pct))}</small></th><th></th></tr></tfoot>`:''}</table></div></section>`}
+
+function pcFinHTML(D){const F=D.financeiro;
+  const desp=F.despesas.map(d=>`<tr><td>${escHtml(pcData(d.data))}</td><td>${escHtml(d.contraparte||'—')}<small class="help">${escHtml(d.justificativa||d.descricao||'')}</small></td><td class="pc-num">${escHtml(finR(d.valor))}</td>
+    <td>${d.comprovantes?'<span class="tag g">com comprovante</span>':'<span class="tag r">sem comprovante</span>'} ${d.da_conta?'<span class="tag">conta do projeto</span>':'<span class="tag b">ligada</span>'}</td>
+    <td class="pc-acoes"><button type="button" class="btn sm lnk" data-pc-desp-abrir="${d.id}">Abrir no Financeiro</button>${d.ligada?`<button type="button" class="btn sm lnk" data-pc-desp-tirar="${d.id}">Tirar do projeto</button>`:''}</td></tr>`).join('');
+  const rec=F.receitas.map(r=>`<tr><td>${escHtml(pcData(r.data))}</td><td>${escHtml(r.origem||'—')}<small class="help">${escHtml(r.descricao)}</small></td><td class="pc-num">${escHtml(finR(r.valor))}</td><td><button type="button" class="btn sm lnk perigo-txt" data-pc-rec-apagar="${r.id}">Apagar</button></td></tr>`).join('');
+  const pat=F.patrocinios.map(x=>`<tr><td>${escHtml(x.empresa)}<small class="help">${escHtml(x.cota)} · ${escHtml(x.etapa)}</small></td><td class="pc-num">${escHtml(finR(x.valor_pago))}</td><td><button type="button" class="btn sm lnk" data-pc-pat-tirar="${x.site_id}">Tirar do projeto</button></td></tr>`).join('');
+  const notas=F.notas.map(n=>`<tr><td>${escHtml(n.competencia)}</td><td>${escHtml(n.nf_numero||'—')}</td><td>${escHtml(n.situacao)}</td><td class="pc-num">${escHtml(finR(n.valor))}</td></tr>`).join('');
+  return `<div class="pc-kpis"><div class="pc-kpi"><b>${escHtml(finR(F.total_receitas))}</b><span>entradas (lançadas e patrocínios)</span></div><div class="pc-kpi"><b>${escHtml(finR(F.total_despesas))}</b><span>saídas</span></div><div class="pc-kpi ${F.saldo<0?'r':''}"><b>${escHtml(finR(F.saldo))}</b><span>saldo</span></div></div>
+  <section class="pc-card"><div class="pc-ch"><h2>Despesas do projeto</h2><button type="button" class="btn sm" data-pc="ligar-desp">Ligar despesa</button></div>
+    <p class="help">As despesas da conta do projeto entram sozinhas; despesas de outra conta (ex.: Mercado Pago) podem ser ligadas aqui. Comprovante e justificativa ficam no Financeiro.</p>
+    <div class="tw"><table><caption class="sr">Despesas do projeto</caption><thead><tr><th>Data</th><th>Quem recebeu</th><th class="pc-num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>${desp||'<tr><td colspan="5" class="empty">Nenhuma despesa no projeto.</td></tr>'}</tbody></table></div></section>
+  <section class="pc-card"><div class="pc-ch"><h2>Entradas</h2><button type="button" class="btn sm" data-pc="rec-nova">Lançar entrada</button></div><p class="help">Captação, aporte, prêmio de edital: o que entrou para o projeto.</p>
+    <div class="tw"><table><caption class="sr">Entradas do projeto</caption><thead><tr><th>Data</th><th>Origem</th><th class="pc-num">Valor</th><th></th></tr></thead><tbody>${rec||'<tr><td colspan="4" class="empty">Nenhuma entrada lançada.</td></tr>'}</tbody></table></div></section>
+  <section class="pc-card"><div class="pc-ch"><h2>Patrocínios ligados</h2><button type="button" class="btn sm" data-pc="ligar-pat">Ligar patrocínio</button></div>
+    <div class="tw"><table><caption class="sr">Patrocínios do projeto</caption><thead><tr><th>Empresa</th><th class="pc-num">Pago</th><th></th></tr></thead><tbody>${pat||'<tr><td colspan="3" class="empty">Nenhum patrocínio ligado.</td></tr>'}</tbody></table></div></section>
+  ${F.notas.length?`<section class="pc-card"><div class="pc-ch"><h2>Notas da CAMP para o projeto</h2><button type="button" class="btn sm lnk" data-pc="fin-projeto">Abrir no Financeiro</button></div><div class="tw"><table><caption class="sr">Notas da CAMP</caption><thead><tr><th>Competência</th><th>Nota nº</th><th>Situação</th><th class="pc-num">Valor</th></tr></thead><tbody>${notas}</tbody></table></div></section>`:''}`}
+
+function pcDocHTML(D){const op=D.opcoes.tipos_arquivo;
+  return `<section class="pc-card"><div class="pc-ch"><h2>Documentos</h2></div>
+    <form class="pc-form" data-pc-form="arquivo"><div class="pc-2"><label>Tipo<select name="tipo">${Object.entries(op).map(([k,v])=>`<option value="${k}">${escHtml(v)}</option>`).join('')}</select></label><label>Arquivo (PDF, JPG, PNG, WEBP, XLSX ou DOCX; até 15 MB)<input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.docx" required></label></div><div class="pc-acoes"><button type="submit" class="btn">Anexar</button></div></form>
+    ${D.arquivos.length?`<div class="tw"><table><caption class="sr">Documentos do projeto</caption><thead><tr><th>Documento</th><th>Tipo</th><th>Enviado</th><th></th></tr></thead><tbody>${D.arquivos.map(a=>`<tr><td><a href="/api/projetos-camp/${PC.id}/arquivos/${a.id}" target="_blank" rel="noopener">${escHtml(a.nome)}</a></td><td>${escHtml(a.tipo_nome)}</td><td>${escHtml(fmtDataHora(a.criado_em))}<small class="help">${escHtml(a.criado_por)}</small></td><td><button type="button" class="btn sm lnk perigo-txt" data-pc-arq-tirar="${a.id}">Tirar</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="help">Nenhum documento. Guarde aqui a proposta, a portaria de aprovação, contratos, relatórios e a prestação de contas.</p>'}</section>`}
+
+function pcHistHTML(D){return `<section class="pc-card"><div class="pc-ch"><h2>Histórico</h2></div>${D.historico.length?`<ul class="pc-hist">${D.historico.map(h=>`<li>${escHtml(h.texto)}<small>${escHtml(fmtDataHora(h.quando))} · ${escHtml(h.ator)}</small></li>`).join('')}</ul>`:'<p class="help">Nada registrado ainda.</p>'}</section>`}
+
+/* ---------- formulários (painel lateral) ---------- */
+function pcOpts(o,sel){return Object.entries(o).map(([k,v])=>`<option value="${escHtml(k)}"${k===sel?' selected':''}>${escHtml(v)}</option>`).join('')}
+function pcEditar(){const D=PC.det,p=D.projeto,op=D.opcoes;
+  openDrawer('Dados do projeto',p.nome,`<form class="pc-form" data-pc-form="dados"><label>Nome<input name="nome" required maxlength="200" value="${escHtml(p.nome)}"></label>
+    <div class="pc-2"><label>Tipo<select name="tipo">${pcOpts(op.tipos,p.tipo)}</select></label><label>Situação<select name="situacao">${pcOpts(op.situacoes,p.situacao)}</select></label></div>
+    <div class="pc-2"><label>Código (PRONAC, edital…)<input name="codigo_externo" maxlength="60" value="${escHtml(p.codigo_externo)}"></label><label>Responsável<input name="responsavel" maxlength="120" value="${escHtml(p.responsavel)}"></label></div>
+    <label>Objetivo geral<textarea name="objetivo_geral" maxlength="4000">${escHtml(p.objetivo_geral)}</textarea></label><label>Resumo (opcional)<textarea name="resumo" maxlength="4000">${escHtml(p.resumo)}</textarea></label>
+    <div class="pc-2"><label>Início<input type="date" name="inicio" value="${escHtml(p.inicio)}"></label><label>Fim<input type="date" name="fim" value="${escHtml(p.fim)}"></label></div>
+    <div class="pc-2"><label>Prazo de captação<input type="date" name="prazo_captacao" value="${escHtml(p.prazo_captacao)}"></label><label>Fim da execução<input type="date" name="prazo_execucao" value="${escHtml(p.prazo_execucao)}"></label></div>
+    <label>Prestação de contas<input type="date" name="prazo_prestacao" value="${escHtml(p.prazo_prestacao)}"></label>
+    <label>Conta do Financeiro<select name="conta_id"><option value="">Nenhuma (orçamento próprio)</option>${op.contas.map(c=>`<option value="${c.id}"${String(c.id)===String(p.conta_id)?' selected':''}>${escHtml(c.nome)}</option>`).join('')}</select></label>
+    <p class="help">${p.tipo==='rouanet'?'As datas oficiais estão na proposta e na portaria do SALIC: copie de lá.':'Deixe em branco o que ainda não se sabe.'}</p>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button><button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+function pcObjForm(o){o=o||{};openDrawer(o.id?'Editar objetivo':'Novo objetivo',PC.det.projeto.nome,`<form class="pc-form" data-pc-form="obj" data-id="${o.id||''}"><label>Objetivo ou meta<textarea name="texto" required maxlength="1000">${escHtml(o.texto||'')}</textarea></label>
+    <div class="pc-2"><label>Meta (número, opcional)<input type="number" step="any" min="0" name="meta" value="${o.meta??''}"></label><label>Alcançado até agora<input type="number" step="any" min="0" name="atual" value="${o.atual??''}"></label></div>
+    <label>Indicador (opcional)<input name="indicador" maxlength="120" placeholder="ex.: exemplares impressos" value="${escHtml(o.indicador||'')}"></label>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button>${o.id?'<button type="button" class="btn perigo-txt" data-pc="obj-apagar">Apagar</button>':''}<button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+function pcEtapaForm(e){e=e||{};openDrawer(e.id?'Editar etapa':'Nova etapa',PC.det.projeto.nome,`<form class="pc-form" data-pc-form="etapa" data-id="${e.id||''}"><label>Etapa ou marco<input name="nome" required maxlength="200" value="${escHtml(e.nome||'')}"></label>
+    <div class="pc-2"><label>Início<input type="date" name="inicio" value="${escHtml(e.inicio||'')}"></label><label>Prazo<input type="date" name="prazo" value="${escHtml(e.prazo||'')}"></label></div>
+    <div class="pc-2"><label>Situação<select name="situacao">${pcOpts(PC.det.opcoes.sit_tarefa,e.situacao||'a_fazer')}</select></label><label class="pc-chk"><span>Marco</span><span><input type="checkbox" name="marco"${e.marco?' checked':''}> entrega ou data institucional</span></label></div>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button>${e.id?'<button type="button" class="btn perigo-txt" data-pc="etapa-apagar">Apagar</button>':''}<button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+function pcTarForm(t,etapa){t=t||{};const et=PC.det.etapas,eid=t.id?t.etapa_id:etapa;
+  openDrawer(t.id?'Editar tarefa':'Nova tarefa',PC.det.projeto.nome,`<form class="pc-form" data-pc-form="tarefa" data-id="${t.id||''}"><label>O que fazer<input name="o_que" required maxlength="300" value="${escHtml(t.o_que||'')}"></label>
+    <div class="pc-2"><label>Responsável<input name="responsavel" maxlength="120" value="${escHtml(t.responsavel||'')}"></label><label>Prazo<input type="date" name="prazo" value="${escHtml(t.prazo||'')}"></label></div>
+    <div class="pc-2"><label>Situação<select name="situacao">${pcOpts(PC.det.opcoes.sit_tarefa,t.situacao||'a_fazer')}</select></label><label>Etapa<select name="etapa_id"><option value="">Sem etapa</option>${et.map(e=>`<option value="${e.id}"${String(e.id)===String(eid||'')?' selected':''}>${escHtml(e.nome)}</option>`).join('')}</select></label></div>
+    <label>Nota<textarea name="nota" maxlength="2000">${escHtml(t.nota||'')}</textarea></label>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button>${t.id?'<button type="button" class="btn perigo-txt" data-pc="tarefa-apagar">Apagar</button>':''}<button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+function pcItemForm(i){i=i||{};openDrawer(i.id?'Editar item do orçamento':'Novo item do orçamento',PC.det.projeto.nome,`<form class="pc-form" data-pc-form="item" data-id="${i.id||''}"><label>Descrição<input name="descricao" required maxlength="200" value="${escHtml(i.descricao||'')}"></label>
+    <label>Previsto (R$)<input type="number" step="0.01" min="0" name="previsto" required value="${i.previsto??''}"></label>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Salvar</button>${i.id?'<button type="button" class="btn perigo-txt" data-pc="item-apagar">Apagar</button>':''}<button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+function pcRecForm(){openDrawer('Lançar entrada',PC.det.projeto.nome,`<form class="pc-form" data-pc-form="receita"><div class="pc-2"><label>Data<input type="date" name="data" required value="${escHtml(PC.det.hoje)}"></label><label>Valor (R$)<input type="number" step="0.01" min="0.01" name="valor" required></label></div>
+    <label>Origem (quem pagou)<input name="origem" maxlength="200"></label><label>Descrição<input name="descricao" maxlength="300" placeholder="ex.: captação via incentivo fiscal"></label>
+    <div class="pc-acoes"><button type="submit" class="btn pri">Lançar</button><button type="button" class="btn" data-pc="fechar">Voltar</button></div></form>`)}
+async function pcLigarForm(tipo){let c;try{c=await API(`/api/projetos-camp/${PC.id}/candidatas`)}catch(e){toast(e.message);return}PC.cand=c;
+  const it=PC.det.orcamento.fonte==='proprio'?PC.det.orcamento.itens:[];
+  const lista=tipo==='desp'?(c.despesas.length?c.despesas.map(d=>`<tr data-pc-busca="${escHtml((d.contraparte+' '+d.justificativa).toLowerCase())}"><td>${escHtml(pcData(d.data))}</td><td>${escHtml(d.contraparte||'—')}<small class="help">${escHtml(d.justificativa)}</small></td><td class="pc-num">${escHtml(finR(d.valor))}</td><td><button type="button" class="btn sm" data-pc-ligar-desp="${d.id}">Ligar</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Nenhuma despesa sem projeto.</td></tr>')
+    :(c.patrocinios.length?c.patrocinios.map(x=>`<tr data-pc-busca="${escHtml(x.empresa.toLowerCase())}"><td>${escHtml(x.empresa)}<small class="help">${escHtml(x.cota)}</small></td><td class="pc-num">${escHtml(finR(x.valor_pago))}</td><td><button type="button" class="btn sm" data-pc-ligar-pat="${x.site_id}">Ligar</button></td></tr>`).join(''):'<tr><td colspan="3" class="empty">Nenhum patrocínio sem projeto.</td></tr>');
+  openDrawer(tipo==='desp'?'Ligar despesa ao projeto':'Ligar patrocínio ao projeto',PC.det.projeto.nome,`<div class="pc-form" data-sem-alteracao><input type="search" id="pc-cand-q" placeholder="Buscar" aria-label="Buscar">
+    ${tipo==='desp'&&it.length?`<label>Item do orçamento (opcional)<select id="pc-cand-item"><option value="">Sem item</option>${it.map(i=>`<option value="${i.id}">${escHtml(i.descricao)}</option>`).join('')}</select></label>`:''}
+    <div class="tw pc-cand"><table><tbody>${lista}</tbody></table></div><div class="pc-acoes"><button type="button" class="btn" data-pc="fechar">Fechar</button></div></div>`)}
+
+/* ---------- ações ---------- */
+async function pcSalvar(path,metodo,corpo,msg){try{const d=await API(path,{method:metodo,body:corpo==null?undefined:JSON.stringify(corpo)});if(d&&d.projeto){PC.det=d;if(mainEl.classList.contains('with-drawer'))closeDrawer(true);pcDetalhe()}if(msg)toast(msg);return d}catch(e){toast(e.message);return null}}
+function pcCampos(f){const o={};new FormData(f).forEach((v,k)=>{o[k]=typeof v==='string'?v.trim():v});return o}
+const pcNum=v=>v===''||v==null?null:Number(String(v).replace(',','.'));
+document.addEventListener('submit',async e=>{const f=e.target.closest('form[data-pc-form]');if(!f)return;e.preventDefault();const k=f.dataset.pcForm,v=pcCampos(f),id=f.dataset.id,base=`/api/projetos-camp/${PC.id}`;
+  if(k==='novo'){try{const d=await API('/api/projetos-camp',{method:'POST',body:JSON.stringify({nome:v.nome,tipo:v.tipo,codigo_externo:v.codigo_externo,responsavel:v.responsavel,objetivo_geral:v.objetivo_geral,conta_id:v.conta_id?+v.conta_id:null})});closeDrawer(true);PC.det=d;PC.id=d.projeto.id;PC.aba='geral';toast('Projeto criado.');nav('projetos_camp/'+d.projeto.id)}catch(er){toast(er.message)}return}
+  if(k==='email'){try{const r=await API('/api/projetos-camp/email',{method:'PUT',body:JSON.stringify({para:v.para,hora:+v.hora||0})});toast(r.ligado?'Resumo diário ligado.':'Resumo diário desligado.');carregarProjetosCamp('projetos_camp')}catch(er){toast(er.message)}return}
+  if(k==='dados'){pcSalvar(base,'PUT',{nome:v.nome,tipo:v.tipo,situacao:v.situacao,codigo_externo:v.codigo_externo,responsavel:v.responsavel,objetivo_geral:v.objetivo_geral,resumo:v.resumo,inicio:v.inicio,fim:v.fim,prazo_captacao:v.prazo_captacao,prazo_execucao:v.prazo_execucao,prazo_prestacao:v.prazo_prestacao,conta_id:v.conta_id?+v.conta_id:null,sem_conta:!v.conta_id},'Dados salvos.');return}
+  if(k==='obj'){const c={texto:v.texto,indicador:v.indicador,meta:pcNum(v.meta),atual:pcNum(v.atual)};if(id&&c.meta==null)c.limpar_meta=true;pcSalvar(id?`${base}/objetivos/${id}`:`${base}/objetivos`,id?'PUT':'POST',c,'Objetivo salvo.');return}
+  if(k==='etapa'){pcSalvar(id?`${base}/etapas/${id}`:`${base}/etapas`,id?'PUT':'POST',{nome:v.nome,inicio:v.inicio,prazo:v.prazo,situacao:v.situacao,marco:!!f.querySelector('[name=marco]').checked},'Etapa salva.');return}
+  if(k==='tarefa'){pcSalvar(id?`${base}/tarefas/${id}`:`${base}/tarefas`,id?'PUT':'POST',{o_que:v.o_que,responsavel:v.responsavel,prazo:v.prazo,situacao:v.situacao,nota:v.nota,etapa_id:v.etapa_id?+v.etapa_id:null,sem_etapa:!v.etapa_id},'Tarefa salva.');return}
+  if(k==='item'){pcSalvar(id?`${base}/itens/${id}`:`${base}/itens`,id?'PUT':'POST',{descricao:v.descricao,previsto:pcNum(v.previsto)},'Item salvo.');return}
+  if(k==='receita'){pcSalvar(`${base}/receitas`,'POST',{data:v.data,valor:pcNum(v.valor),origem:v.origem,descricao:v.descricao},'Entrada lançada.');return}
+  if(k==='arquivo'){const arq=f.querySelector('input[type=file]').files[0];if(!arq)return;if(arq.size>15*1024*1024){toast('O arquivo passa de 15 MB: diminua ou divida.');return}
+    const b64=await new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok(String(r.result));r.onerror=er;r.readAsDataURL(arq)});pcSalvar(`${base}/arquivos`,'POST',{nome:arq.name,base64:b64,tipo:v.tipo},'Documento anexado.');return}});
+document.addEventListener('change',e=>{const t=e.target;if(t.id==='pc-arq'){PC.arquivados=t.checked;carregarProjetosCamp('projetos_camp');return}
+  const base=`/api/projetos-camp/${PC.id}`;
+  if(t.dataset.pcTarSit){pcSalvar(`${base}/tarefas/${t.dataset.pcTarSit}`,'PUT',{situacao:t.value},'Tarefa: '+t.selectedOptions[0].textContent.toLowerCase()+'.');return}
+  if(t.dataset.pcEtapaSit){pcSalvar(`${base}/etapas/${t.dataset.pcEtapaSit}`,'PUT',{situacao:t.value},'Etapa: '+t.selectedOptions[0].textContent.toLowerCase()+'.')}});
+document.addEventListener('input',e=>{if(e.target.id!=='pc-cand-q')return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll('#d-body [data-pc-busca]').forEach(tr=>{tr.hidden=!!q&&!tr.dataset.pcBusca.includes(q)})});
+document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const tr=e.target.closest&&e.target.closest('tr[data-pc-abrir]');if(tr){e.preventDefault();nav('projetos_camp/'+tr.dataset.pcAbrir)}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-pc],[data-pc-abrir],[data-pc-aba],[data-pc-obj],[data-pc-etapa],[data-pc-tar],[data-pc-tar-nova],[data-pc-item],[data-pc-desp-tirar],[data-pc-desp-abrir],[data-pc-rec-apagar],[data-pc-pat-tirar],[data-pc-arq-tirar],[data-pc-ligar-desp],[data-pc-ligar-pat]');if(!t)return;
+  const ds=t.dataset,D=PC.det,base=`/api/projetos-camp/${PC.id}`;
+  if(ds.pcAbrir){if(e.target.closest('a,button,select,input'))return;nav('projetos_camp/'+ds.pcAbrir);return}
+  if(ds.pcAba){PC.aba=ds.pcAba;nav(pcRota());return}
+  if(ds.pcObj){pcObjForm(D.objetivos.find(o=>o.id===+ds.pcObj));return}
+  if(ds.pcEtapa){pcEtapaForm(D.etapas.find(x=>x.id===+ds.pcEtapa));return}
+  if(ds.pcTar){pcTarForm(D.tarefas.find(x=>x.id===+ds.pcTar));return}
+  if(ds.pcTarNova!==undefined){pcTarForm(null,ds.pcTarNova?+ds.pcTarNova:null);return}
+  if(ds.pcItem){pcItemForm(D.orcamento.itens.find(x=>x.id===+ds.pcItem));return}
+  if(ds.pcDespAbrir){nav('financeiro/despesas/'+ds.pcDespAbrir);return}
+  if(ds.pcDespTirar){if(await confirmar({titulo:'Tirar despesa do projeto',texto:'A despesa continua no Financeiro; só deixa de contar neste projeto.',botao:'Tirar do projeto',cancelar:'Voltar'}))pcSalvar(`${base}/despesas/${ds.pcDespTirar}`,'PUT',{ligar:false},'Despesa tirada do projeto.');return}
+  if(ds.pcLigarDesp){const it=document.getElementById('pc-cand-item');pcSalvar(`${base}/despesas/${ds.pcLigarDesp}`,'PUT',{ligar:true,item:it&&it.value?+it.value:null},'Despesa ligada ao projeto.');return}
+  if(ds.pcLigarPat){pcSalvar(`${base}/patrocinios/${ds.pcLigarPat}`,'PUT',{ligar:true},'Patrocínio ligado ao projeto.');return}
+  if(ds.pcPatTirar){if(await confirmar({titulo:'Tirar patrocínio do projeto',texto:'O patrocínio continua em Patrocínios; só deixa de contar neste projeto.',botao:'Tirar do projeto',cancelar:'Voltar'}))pcSalvar(`${base}/patrocinios/${ds.pcPatTirar}`,'PUT',{ligar:false},'Patrocínio tirado do projeto.');return}
+  if(ds.pcRecApagar){if(await confirmar({titulo:'Apagar entrada',texto:'A entrada sai do projeto (fica registrada no histórico).',botao:'Apagar',cancelar:'Voltar',perigo:true}))pcSalvar(`${base}/receitas/${ds.pcRecApagar}`,'DELETE',null,'Entrada apagada.');return}
+  if(ds.pcArqTirar){if(await confirmar({titulo:'Tirar documento',texto:'O documento sai da lista do projeto. O arquivo fica guardado e a retirada vai para o histórico.',botao:'Tirar',cancelar:'Voltar',perigo:true}))pcSalvar(`${base}/arquivos/${ds.pcArqTirar}`,'DELETE',null,'Documento tirado.');return}
+  const a=ds.pc;if(!a)return;
+  if(a==='tentar'){carregarProjetosCamp(rotaAtual());return}
+  if(a==='novo'){pcNovo();return}
+  if(a==='semear-ver'){pcSemearVer();return}
+  if(a==='voltar'){nav('projetos_camp');return}
+  if(a==='fechar'){closeDrawer();return}
+  if(a==='editar'){pcEditar();return}
+  if(a==='obj-novo'){pcObjForm();return}
+  if(a==='etapa-nova'){pcEtapaForm();return}
+  if(a==='item-novo'){pcItemForm();return}
+  if(a==='rec-nova'){pcRecForm();return}
+  if(a==='ligar-desp'){pcLigarForm('desp');return}
+  if(a==='ligar-pat'){pcLigarForm('pat');return}
+  if(a==='fin-projeto'){nav('financeiro/projeto'+(D&&D.projeto.conta_id?'?conta='+D.projeto.conta_id:''));return}
+  if(a==='email-teste'){try{const r=await API('/api/projetos-camp/email/teste',{method:'POST'});toast(r.enviado?`Teste enviado para ${r.enviados} endereço${r.enviados>1?'s':''}.`:'O teste não saiu: '+(r.erro||''))}catch(er){toast(er.message)}return}
+  const f=t.closest('form[data-pc-form]'),id=f&&f.dataset.id;
+  const apagar=async(tit,txt,path,msg)=>{if(await confirmar({titulo:tit,texto:txt,botao:'Apagar',cancelar:'Voltar',perigo:true}))pcSalvar(path,'DELETE',null,msg)};
+  if(a==='obj-apagar'&&id)apagar('Apagar objetivo','O objetivo sai do projeto (fica no histórico).',`${base}/objetivos/${id}`,'Objetivo apagado.');
+  if(a==='etapa-apagar'&&id)apagar('Apagar etapa','A etapa sai do cronograma; as tarefas dela ficam, sem etapa.',`${base}/etapas/${id}`,'Etapa apagada.');
+  if(a==='tarefa-apagar'&&id)apagar('Apagar tarefa','A tarefa sai do projeto (fica no histórico).',`${base}/tarefas/${id}`,'Tarefa apagada.');
+  if(a==='item-apagar'&&id)apagar('Apagar item do orçamento','O item sai do orçamento; as despesas ligadas a ele ficam no projeto, sem item.',`${base}/itens/${id}`,'Item apagado.')});
+
+/* ---------- Home: bloco "Projetos da CAMP" (admin) ---------- */
+function pcHomeHTML(h){if(!h)return '';if(h.erro)return `<section class="panel pc-home" aria-labelledby="ini-t-pc"><div class="ph"><h2 id="ini-t-pc">Projetos da CAMP</h2></div><div class="pb"><p class="help">Não consegui ler os projetos agora.</p></div></section>`;
+  if(!h.projetos)return `<section class="panel pc-home" aria-labelledby="ini-t-pc"><div class="ph"><h2 id="ini-t-pc">Projetos da CAMP</h2><button type="button" class="ini-link" data-pc-home="lista">abrir</button></div><div class="pb"><p class="help">Nenhum projeto da CAMP cadastrado.</p></div></section>`;
+  return `<section class="panel pc-home" aria-labelledby="ini-t-pc"><div class="ph"><h2 id="ini-t-pc">Projetos da CAMP</h2><button type="button" class="ini-link" data-pc-home="lista">ver todos</button></div><div class="pb">
+    <p class="pc-home-n"><span class="${h.atrasados?'r':''}"><b>${h.atrasados}</b> atrasado${h.atrasados!==1?'s':''}</span><span class="${h.vencem_7d?'a':''}"><b>${h.vencem_7d}</b> em 7 dias</span><span><b>${h.mudancas}</b> mudança${h.mudancas!==1?'s':''} desde a sua última visita</span></p>
+    ${h.itens.length?`<ul>${h.itens.map(a=>`<li data-n="${a.nivel}"><button type="button" class="btn sm lnk" data-pc-home="${a.projeto_id}" data-pc-home-aba="${escHtml(a.aba||'geral')}">${escHtml(a.titulo)}</button><small>${escHtml(a.projeto)}${a.motivo?' · '+escHtml(a.motivo):''}</small></li>`).join('')}</ul>${h.mais?`<p class="help">e mais ${h.mais} aviso${h.mais>1?'s':''}</p>`:''}`:'<p class="help">Nada atrasado nem perto do prazo.</p>'}</div></section>`}
+async function pcHomeCarregar(){const el=document.getElementById('ini-projetos-camp');if(!el)return;let h;try{h=await API('/api/projetos-camp/home')}catch(e){h={erro:e.message}}if(document.getElementById('ini-projetos-camp')===el)el.innerHTML=pcHomeHTML(h)}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-pc-home]');if(!b)return;const v=b.dataset.pcHome;if(v==='lista'){nav('projetos_camp');return}PC.det=null;nav('projetos_camp/'+v+(b.dataset.pcHomeAba&&b.dataset.pcHomeAba!=='geral'?'/'+b.dataset.pcHomeAba:''))});
 /* CAMP-FIN (24/11/2026). Rafael: "relatório de receitas para o contador", "Temos como interligar com o Mercado Pago?", "E o que gastamos?",
    "Já podemos fazer DRE nisso tudo?" e "Preciso do melhor UI e UX para essas telas aí". Financeiro: Visão geral · Receitas · Despesas · DRE ·
    Conferência, a fila "Precisa justificar" (uma despesa por vez) e o painel lateral de cada linha. Só admin e master. Sem emoji (tom sério). */
