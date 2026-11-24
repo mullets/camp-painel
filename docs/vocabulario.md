@@ -858,3 +858,10 @@ avisar tudo." Modelo: a proposta do SALIC.
 - Home (admin): bloco **Projetos da CAMP** com "N atrasados · N em 7 dias · N mudanças desde a sua última visita" e os avisos.
 - **Resumo diário por e-mail** (`projetos_camp.email_diario`, vazio = desligado; `projetos_camp.email_hora`, padrão 8): seções "Atrasado", "Vence
   nos próximos dias", "Orçamento e comprovantes", "Mudou nas últimas 24 horas".
+- **Proposta do SALIC** (CAMP-PROJ, 24/11/2026; dados em `docs/rouanet/pronac-2613864-proposta.json`, sem dado pessoal): o projeto do PRONAC já
+  nasce com resumo, objetivo geral, objetivos específicos com meta, marcos (**Proposta enviada ao MinC**, **Enquadramento: Artigo 18**), etapas com
+  **duração** e tarefas, **Ficha técnica** e **Obrigações da proposta** (grupos **Documentos enviados ao SALIC**, **Acessibilidade**,
+  **Democratização de acesso**, **Direitos**; "N de M cumpridas"). Projeto que já existe: aviso "A proposta do SALIC tem informações que ainda não
+  estão aqui: …" com **Ver o que será completado** → **Completar** (só o vazio; nada da equipe é trocado). Etapa sem data: "duração: 3 meses ·
+  começa quando a captação for liberada"; com **Execução começa em** (Editar dados) as datas aparecem ("pela duração (3 meses), a partir do início
+  da execução"). Trecho ilegível na cópia: "Trecho ilegível na cópia da proposta: confira o texto na proposta do SALIC." Nunca inventar data.

@@ -1,0 +1,87 @@
+{
+  "_origem": "Proposta do SALIC do PRONAC 2613864, PDF enviado pelo Rafael em 24/11/2026, lido por OCR. Sem dado pessoal (nenhum CPF, endereço, telefone ou e-mail). Trechos que o OCR deixou ilegíveis foram reconstruídos só quando o resto da proposta confirma; onde não confirma, o texto leva 'conferir': true.",
+  "pronac": "2613864",
+  "resumo": "O projeto visa a edição, publicação e distribuição do livro \"Arquitetura Moderna Paulista: Acervo Karazawa\", sobre a obra dos arquitetos Fernando Karazawa e Ana Maria d'Andretta Karazawa, em versão impressa e em livro eletrônico acessível, com lançamentos acompanhados de mesa de debate e ações formativas gratuitas para estudantes e professores da rede pública.",
+  "objetivo_geral": "Editar, publicar e distribuir o livro \"Arquitetura Moderna Paulista: Acervo Karazawa\", que registra os projetos residenciais e institucionais dos arquitetos Fernando Karazawa e Ana Maria d'Andretta Karazawa, com desenhos técnicos originais digitalizados, fotografias e textos sobre a arquitetura moderna no oeste paulista.",
+  "responsavel": "Rafael Moreira D'Andrea",
+  "fonte_recurso": "Incentivo Fiscal Federal",
+  "valor_proposta": 163475.31,
+  "locais": "Presidente Prudente/SP e São Paulo/SP",
+  "enquadramento": "Artigo 18 · COANP · Humanidades · Livro/obra de referência impressa/eletrônica de valor artístico, literário ou humanístico",
+  "proposta_enviada_em": "2026-10-26",
+  "enquadrado_em": "2026-11-23",
+  "observacao": "Primeiro projeto de valor até R$ 200 mil, dispensado de análise de portfólio (art. 4º, § 5º, da IN MinC nº 29/2026).",
+  "equipe": [
+    {"papel": "Proponente: gestão técnica e financeira, coordenação geral e editorial", "nome": "Rafael Moreira D'Andrea"},
+    {"papel": "Autora e pesquisadora", "nome": "Amanda Carolina Felício Vantini"},
+    {"papel": "Instituição parceira (guardiã do acervo; digitalização, cessão de espaço e rede institucional para os lançamentos)", "nome": "CAMP"},
+    {"papel": "Projeto gráfico e diagramação", "nome": "a contratar"},
+    {"papel": "Preparação e revisão de texto", "nome": "a contratar"},
+    {"papel": "Tratamento de imagens (profissional de pré-impressão)", "nome": "a contratar"},
+    {"papel": "Acessibilidade: EPUB acessível, Libras e audiodescrição", "nome": "a contratar"},
+    {"papel": "Educador das oficinas-percurso (arquiteto com atuação em educação patrimonial)", "nome": "a contratar"},
+    {"papel": "Contador com registro no CRC", "nome": "a contratar"},
+    {"papel": "Palestrantes dos lançamentos", "nome": "a autora, um nome da arquitetura do oeste paulista e um pesquisador de arquitetura moderna (a definir)"}
+  ],
+  "objetivos": [
+    {"texto": "Produto LIVRO: editar e imprimir 1 livro de cerca de 240 páginas, com tiragem de 2.000 exemplares", "indicador": "exemplares impressos", "meta": 2000,
+     "detalhe": "400 gratuitos com caráter social e educativo · 200 para os patrocinadores · 200 para divulgação · 400 vendidos a até R$ 50,00 · 800 vendidos a R$ 120,00 · receita prevista R$ 116.000,00"},
+    {"texto": "Produto LIVRO ELETRÔNICO: produzir 1 versão digital acessível (EPUB 3 e PDF acessível), para download gratuito na internet", "indicador": "versão digital acessível", "meta": 1,
+     "detalhe": "descrição textual das cerca de 250 imagens"},
+    {"texto": "Produto LANÇAMENTO COM MESA DE DEBATE: realizar 2 lançamentos gratuitos de 2 horas, com intérprete de Libras e audiodescrição", "indicador": "lançamentos", "meta": 2,
+     "detalhe": "um em Presidente Prudente/SP e um em São Paulo/SP · cerca de 100 pessoas cada"},
+    {"texto": "Produto CONTRAPARTIDAS SOCIAIS: realizar 4 oficinas-percurso de 3 horas, \"Ler a arquitetura moderna da cidade\"", "indicador": "oficinas-percurso", "meta": 4,
+     "detalhe": "2 em cada cidade · 200 estudantes e professores de instituições públicas de ensino (turmas de 50)"}
+  ],
+  "marcos": [
+    {"nome": "Proposta enviada ao MinC", "data": "2026-10-26"},
+    {"nome": "Enquadramento: Artigo 18", "data": "2026-11-23"}
+  ],
+  "etapas": [
+    {"nome": "Captação de recursos", "duracao_texto": "até 36 meses", "duracao_dias": null, "comeca": "", "tarefas": []},
+    {"nome": "Pré-produção", "duracao_texto": "3 meses", "meses": 3, "comeca": "começa quando a captação for liberada", "tarefas": [
+      {"o_que": "Contratação da equipe e assinatura das cessões de direitos (autora e titulares dos desenhos)"},
+      {"o_que": "Adaptação do texto da pesquisa para livro, legendas e fichas das obras"},
+      {"o_que": "Digitalização das pranchas originais e seleção de 250 imagens", "conferir": true},
+      {"o_que": "Projeto gráfico e capa; envio do leiaute de aplicação das marcas ao MinC (5 dias úteis)"}
+    ]},
+    {"nome": "Produção/Execução", "duracao_texto": "6 meses", "meses": 6, "comeca": "depois da pré-produção", "tarefas": [
+      {"o_que": "Preparação e revisão de texto (2 provas), diagramação, tratamento de imagens e provas de cor"},
+      {"o_que": "ISBN, código de barras e ficha catalográfica"},
+      {"o_que": "Impressão de 2.000 exemplares"},
+      {"o_que": "Conversão para EPUB 3 acessível e descrição textual das imagens; publicação para download"},
+      {"o_que": "2 lançamentos com mesa de debate, Libras e audiodescrição"},
+      {"o_que": "4 oficinas-percurso para estudantes e professores da rede pública"},
+      {"o_que": "Distribuição gratuita, venda e divulgação"}
+    ]},
+    {"nome": "Pós-produção", "duracao_texto": "60 dias", "dias": 60, "comeca": "depois da produção", "tarefas": [
+      {"o_que": "Envio de exemplar à Fundação Biblioteca Nacional (depósito legal)"},
+      {"o_que": "Publicação dos vídeos dos lançamentos com Libras e audiodescrição"},
+      {"o_que": "Relatório final e prestação de contas"}
+    ]}
+  ],
+  "obrigacoes": [
+    {"grupo": "Acessibilidade", "texto": "Acessibilidade física: lançamentos e oficinas-percurso realizados em locais com rampa ou elevador, sanitário acessível e lugares reservados para pessoas em cadeira de rodas e seus acompanhantes."},
+    {"grupo": "Acessibilidade", "texto": "Deficiência visual: livro eletrônico em EPUB 3 compatível com leitores de tela, com descrição textual de todas as imagens e desenhos; PDF acessível com fonte ampliável; audiodescrição ao vivo nos lançamentos."},
+    {"grupo": "Acessibilidade", "texto": "Deficiência auditiva: intérpretes de Libras (dupla) nos lançamentos; janela de Libras e legendas nos vídeos publicados."},
+    {"grupo": "Acessibilidade", "texto": "Deficiência intelectual e autismo: roteiro das oficinas em linguagem simples; lugares em área tranquila nos eventos."},
+    {"grupo": "Acessibilidade", "texto": "Divulgação acessível: peças com texto alternativo e contraste adequado, vídeos legendados e informação sobre os recursos de acessibilidade em todo o material de divulgação."},
+    {"grupo": "Democratização de acesso", "texto": "400 exemplares (20%) em distribuição gratuita com caráter social e educativo, por escolas públicas e entidades representativas: bibliotecas públicas municipais do oeste paulista, rede de bibliotecas do Estado de São Paulo, cursos públicos de arquitetura e escolas estaduais de Presidente Prudente, incluindo professores (art. 43)."},
+    {"grupo": "Democratização de acesso", "texto": "200 exemplares (10%) para os patrocinadores, na proporção do valor investido."},
+    {"grupo": "Democratização de acesso", "texto": "200 exemplares (10%) para divulgação: imprensa, bibliotecas especializadas, instituições parceiras e depósito legal na Fundação Biblioteca Nacional."},
+    {"grupo": "Democratização de acesso", "texto": "400 exemplares (20%) vendidos a preço popular de R$ 50,00."},
+    {"grupo": "Democratização de acesso", "texto": "800 exemplares (40%) vendidos a R$ 120,00 (receita prevista total: R$ 116.000,00)."},
+    {"grupo": "Democratização de acesso", "texto": "Livro eletrônico acessível para download gratuito na internet."},
+    {"grupo": "Democratização de acesso", "texto": "2 lançamentos com mesa de debate gratuitos e abertos ao público (cerca de 200 pessoas)."},
+    {"grupo": "Democratização de acesso", "texto": "4 oficinas-percurso para 200 estudantes e professores de instituições públicas de ensino, como contrapartida social (art. 44), com roteiro impresso em linguagem simples e lista de presença."},
+    {"grupo": "Democratização de acesso", "texto": "Ampliação do acesso (art. 42, I): doação de mais 10% dos exemplares para distribuição social e educativa, totalizando 20%."},
+    {"grupo": "Democratização de acesso", "texto": "Ampliação do acesso (art. 42, III): publicação na internet dos vídeos dos lançamentos com Libras e audiodescrição."},
+    {"grupo": "Democratização de acesso", "texto": "Ampliação do acesso (art. 42, V): lançamentos com mesa de debate gratuitos e abertos ao público."},
+    {"grupo": "Direitos", "texto": "Antes do início da execução, apresentar as autorizações da autora e dos titulares dos direitos sobre os desenhos e imagens do acervo Karazawa."}
+  ],
+  "documentos": [
+    {"nome": "Autorização do proprietário ou detentor de direitos ou cessão dos direitos autorais", "enviado_em": "2026-10-26"},
+    {"nome": "Contrato de cessão / termo de anuência (Anuência CAMP e Doação Acervo Karazawa)", "enviado_em": "2026-10-26"},
+    {"nome": "Proposta gráfica", "enviado_em": "2026-10-26"}
+  ]
+}

@@ -53,6 +53,8 @@ MAX_ARQUIVO = 15 * 1024 * 1024
 ENTIDADE = "projeto_camp"
 RE_DATA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ROUANET_CONTA = 2   # conta do PRONAC 2613864 já cadastrada (migrações 249/254)
+PROPOSTA_JSON = Path(__file__).resolve().parents[2] / "docs" / "rouanet" / "pronac-2613864-proposta.json"   # a proposta do SALIC, sem dado pessoal
+NOTA_CONFERIR = "Trecho ilegível na cópia da proposta: confira o texto na proposta do SALIC."
 
 
 # ---------------------------------------------------------------- utilidades
@@ -159,7 +161,8 @@ def _objetivos(con, pid: int) -> list[dict]:
         pct = None
         if r["meta"] and r["meta"] > 0:
             pct = round(min(1.0, max(0.0, float(r["atual"] or 0) / float(r["meta"]))), 4)
-        out.append({"id": r["id"], "texto": r["texto"], "indicador": r["indicador"] or "", "meta": r["meta"], "atual": r["atual"], "pct": pct, "ordem": r["ordem"]})
+        out.append({"id": r["id"], "texto": r["texto"], "indicador": r["indicador"] or "", "meta": r["meta"], "atual": r["atual"], "pct": pct, "ordem": r["ordem"],
+                    "detalhe": (r["detalhe"] if "detalhe" in r.keys() else None) or ""})
     return out
 
 
@@ -170,11 +173,58 @@ def _tarefas(con, pid: int) -> list[dict]:
                                  "ORDER BY situacao IN ('feita','nao_se_aplica'), prazo IS NULL OR prazo='', prazo, id", (pid,))]
 
 
-def _etapas(con, pid: int) -> list[dict]:
-    return [{"id": r["id"], "nome": r["nome"], "inicio": r["inicio"] or "", "prazo": r["prazo"] or "", "situacao": r["situacao"],
-             "situacao_nome": SIT_TAREFA.get(r["situacao"], r["situacao"]), "marco": bool(r["marco"]), "ordem": r["ordem"], "feita_em": r["feita_em"] or ""}
-            for r in con.execute("SELECT * FROM projeto_camp_etapa WHERE projeto_id=? AND apagado_em IS NULL "
-                                 "ORDER BY ordem, prazo IS NULL OR prazo='', prazo, id", (pid,))]
+def _somar_meses(d: date, m: int) -> date:
+    a, mm = d.year + (d.month - 1 + m) // 12, (d.month - 1 + m) % 12 + 1
+    ult = (date(a + (mm == 12), mm % 12 + 1, 1) - timedelta(days=1)).day
+    return date(a, mm, min(d.day, ult))
+
+
+def _etapas(con, pid: int, inicio_execucao: str | None = None) -> list[dict]:
+    """A proposta do SALIC dá DURAÇÃO ("3 meses", "60 dias"), não data. Etapa sem data e com duração ganha datas em sequência só quando a
+    equipe informa o início da execução (projeto_camp.inicio_execucao); antes disso mostra "duração: … · começa …". Nunca inventa data."""
+    rows = list(con.execute("SELECT * FROM projeto_camp_etapa WHERE projeto_id=? AND apagado_em IS NULL "
+                            "ORDER BY ordem, prazo IS NULL OR prazo='', prazo, id", (pid,)))
+    if inicio_execucao is None:
+        p = con.execute("SELECT inicio_execucao FROM projeto_camp WHERE id=?", (pid,)).fetchone()
+        inicio_execucao = p[0] if p and "inicio_execucao" in p.keys() else None
+    cursor = date.fromisoformat(inicio_execucao) if inicio_execucao and RE_DATA.match(inicio_execucao) else None
+    out = []
+    for r in rows:
+        k = r.keys()
+        dm, dd = (r["duracao_meses"] if "duracao_meses" in k else None), (r["duracao_dias"] if "duracao_dias" in k else None)
+        ini, prz, calc = r["inicio"] or "", r["prazo"] or "", False
+        if cursor and (dm or dd) and not ini and not prz:
+            fim = _somar_meses(cursor, dm) - timedelta(days=1) if dm else cursor + timedelta(days=dd - 1)
+            ini, prz, calc = cursor.isoformat(), fim.isoformat(), True
+            cursor = fim + timedelta(days=1)
+        elif cursor and prz and (dm or dd):
+            cursor = date.fromisoformat(prz) + timedelta(days=1)
+        out.append({"id": r["id"], "nome": r["nome"], "inicio": ini, "prazo": prz, "datas_calculadas": calc, "situacao": r["situacao"],
+                    "situacao_nome": SIT_TAREFA.get(r["situacao"], r["situacao"]), "marco": bool(r["marco"]), "ordem": r["ordem"],
+                    "feita_em": r["feita_em"] or "", "duracao_texto": (r["duracao_texto"] if "duracao_texto" in k else None) or "",
+                    "comeca": (r["comeca"] if "comeca" in k else None) or ""})
+    return out
+
+
+GRUPOS_OBRIGACAO = ("Documentos enviados ao SALIC", "Acessibilidade", "Democratização de acesso", "Direitos")
+
+
+def _obrigacoes(con, pid: int) -> list[dict]:
+    if not _tem(con, "projeto_camp_obrigacao"):
+        return []
+    ordem = {g: i for i, g in enumerate(GRUPOS_OBRIGACAO)}
+    xs = [{"id": r["id"], "grupo": r["grupo"], "texto": r["texto"], "situacao": r["situacao"], "situacao_nome": SIT_TAREFA.get(r["situacao"], r["situacao"]),
+           "data": r["data"] or "", "nota": r["nota"] or "", "ordem": r["ordem"]}
+          for r in con.execute("SELECT * FROM projeto_camp_obrigacao WHERE projeto_id=? AND apagado_em IS NULL ORDER BY ordem, id", (pid,))]
+    return sorted(xs, key=lambda x: (ordem.get(x["grupo"], 99), x["ordem"], x["id"]))
+
+
+def _equipe(p) -> list[dict]:
+    try:
+        v = json.loads(p["equipe"] or "[]") if "equipe" in p.keys() else []
+        return [{"papel": str(x.get("papel") or ""), "nome": str(x.get("nome") or "")} for x in v if isinstance(x, dict)]
+    except (ValueError, TypeError):
+        return []
 
 
 def progresso(etapas: list[dict], tarefas: list[dict], objetivos: list[dict]) -> dict:
@@ -276,6 +326,7 @@ def _arquivos(con, pid: int) -> list[dict]:
 def _texto_evento(tipo: str, d: dict) -> str:
     t = {
         "criado": "Projeto criado", "dados_alterados": "Dados do projeto alterados", "semeado_rouanet": "Projeto criado a partir do Financeiro (PRONAC)",
+        "proposta_completada": "Completado com a proposta do SALIC", "obrigacao_alterada": "Obrigação alterada",
         "objetivo_criado": "Objetivo adicionado", "objetivo_alterado": "Objetivo alterado", "objetivo_apagado": "Objetivo apagado",
         "etapa_criada": "Etapa adicionada", "etapa_alterada": "Etapa alterada", "etapa_apagada": "Etapa apagada",
         "tarefa_criada": "Tarefa adicionada", "tarefa_alterada": "Tarefa alterada", "tarefa_apagada": "Tarefa apagada",
@@ -284,7 +335,7 @@ def _texto_evento(tipo: str, d: dict) -> str:
         "despesa_desligada": "Despesa tirada do projeto", "patrocinio_ligado": "Patrocínio ligado ao projeto", "patrocinio_desligado": "Patrocínio tirado do projeto",
         "arquivo_adicionado": "Documento adicionado", "arquivo_tirado": "Documento tirado",
     }.get(tipo, tipo.replace("_", " ").capitalize())
-    extra = d.get("nome") or d.get("o_que") or d.get("texto") or d.get("descricao") or ""
+    extra = d.get("nome") or d.get("o_que") or d.get("texto") or d.get("descricao") or d.get("resumo") or ""
     if d.get("situacao"):
         extra = (extra + " · " if extra else "") + SIT_TAREFA.get(d["situacao"], SITUACOES.get(d["situacao"], d["situacao"]))
     if d.get("campos"):
@@ -328,6 +379,8 @@ def a_preencher(p) -> list[str]:
         falta.append("Início e fim")
     if p["tipo"] in ("rouanet", "edital"):
         falta += [nome for k, nome in PRAZOS if not p[k]]
+    if p["tipo"] == "rouanet" and "inicio_execucao" in p.keys() and not p["inicio_execucao"]:
+        falta.append("Início da execução")
     return falta
 
 
@@ -391,7 +444,7 @@ def mudancas(con, pid: int, usuario: str, desde: str | None = None) -> list[dict
 
 def resumo(con, p, ref: date | None = None) -> dict:
     ref = ref or hoje()
-    et, ta, ob = _etapas(con, p["id"]), _tarefas(con, p["id"]), _objetivos(con, p["id"])
+    et, ta, ob = _etapas(con, p["id"], p["inicio_execucao"] or ""), _tarefas(con, p["id"]), _objetivos(con, p["id"])
     desp = _despesas(con, p)
     orc = orcamento(con, p, desp)
     al = alertas_projeto(con, p, et, ta, orc, desp, ref)
@@ -421,7 +474,7 @@ def _conta_nome(con, cid) -> str:
 def detalhe(con, pid: int, usuario: str) -> dict:
     p = _projeto_row(con, pid)
     ref = hoje()
-    et, ta, ob = _etapas(con, pid), _tarefas(con, pid), _objetivos(con, pid)
+    et, ta, ob = _etapas(con, pid, p["inicio_execucao"] or ""), _tarefas(con, pid), _objetivos(con, pid)
     desp = _despesas(con, p)
     orc = orcamento(con, p, desp)
     rec, pat, notas = _receitas(con, pid), _patrocinios(con, pid), _notas(con, p)
@@ -430,11 +483,13 @@ def detalhe(con, pid: int, usuario: str) -> dict:
     total_desp = _r2(sum(d["valor"] for d in desp))
     dados = {k: (p[k] if p[k] is not None else "") for k in p.keys()}
     dados.update({"tipo_nome": TIPOS.get(p["tipo"], p["tipo"]), "situacao_nome": SITUACOES.get(p["situacao"], p["situacao"]), "conta_nome": _conta_nome(con, p["conta_id"])})
+    dados["equipe"] = _equipe(p)
     return {"projeto": dados, "objetivos": ob, "etapas": et, "tarefas": ta, "progresso": progresso(et, ta, ob),
             "prazos": _prazos(p, et, ta, ref), "a_preencher": a_preencher(p), "alertas": alertas_projeto(con, p, et, ta, orc, desp, ref),
             "orcamento": orc, "financeiro": {"despesas": desp, "receitas": rec, "patrocinios": pat, "notas": notas,
                                              "total_receitas": total_rec, "total_despesas": total_desp, "saldo": _r2(total_rec - total_desp),
                                              "texto": f"Entradas {br(total_rec)} · saídas {br(total_desp)}"},
+            "obrigacoes": _obrigacoes(con, pid), "proposta": completar_proposta(con, pid, False, "") if p["tipo"] == "rouanet" else None,
             "arquivos": _arquivos(con, pid), "historico": historico(con, pid), "mudancas": mudancas(con, pid, usuario),
             "visto_em": _visto(con, usuario, pid), "hoje": ref.isoformat(),
             "opcoes": {"tipos": TIPOS, "situacoes": SITUACOES, "sit_tarefa": SIT_TAREFA, "tipos_arquivo": TIPOS_ARQUIVO, "contas": _contas(con)}}
@@ -534,6 +589,77 @@ def resumo_email(con, agora: datetime | None = None, enviar=None, forcar: bool =
 
 
 # ---------------------------------------------------------------- criar o projeto do PRONAC a partir do Financeiro
+def carregar_proposta() -> dict | None:
+    try:
+        return json.loads(PROPOSTA_JSON.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+CAMPOS_PROPOSTA = (("resumo", "Resumo"), ("objetivo_geral", "Objetivo geral"), ("responsavel", "Responsável"), ("fonte_recurso", "Fonte de recurso"),
+                   ("valor_proposta", "Valor da proposta"), ("locais", "Locais"), ("enquadramento", "Enquadramento"), ("observacao", "Observação"),
+                   ("equipe", "Ficha técnica"))
+
+
+def completar_proposta(con, pid: int | None, aplicar: bool, ator: str) -> dict:
+    """Completa o projeto do PRONAC com a proposta do SALIC (docs/rouanet/pronac-2613864-proposta.json, sem dado pessoal). Simula por
+    padrão; aplicando, preenche SÓ o que está vazio e acrescenta só o que falta (objetivo, marco, etapa, tarefa ou obrigação com o mesmo texto
+    não se repete): rodar de novo não muda nada. pid None = projeto ainda não criado (conta tudo)."""
+    prop = carregar_proposta()
+    if not prop:
+        return {"acao": "nada", "motivo": "A proposta do SALIC não está no painel (docs/rouanet/pronac-2613864-proposta.json)."}
+    p = con.execute("SELECT * FROM projeto_camp WHERE id=?", (pid,)).fetchone() if pid else None
+    campos = {}
+    for k, nome in CAMPOS_PROPOSTA:
+        v = prop.get(k)
+        if v in (None, "", []):
+            continue
+        atual = p[k] if p is not None and k in p.keys() else None
+        if atual in (None, "", "[]"):
+            campos[k] = json.dumps(v, ensure_ascii=False) if k == "equipe" else v
+    situacao = "captacao" if prop.get("enquadrado_em") and (p is None or p["situacao"] == "planejamento") else None
+    tem = lambda sql, *a: bool(pid) and con.execute(sql, (pid, *a)).fetchone() is not None
+    objetivos = [o for o in prop.get("objetivos", []) if not tem("SELECT 1 FROM projeto_camp_objetivo WHERE projeto_id=? AND apagado_em IS NULL AND texto=?", o["texto"])]
+    marcos = [m for m in prop.get("marcos", []) if not tem("SELECT 1 FROM projeto_camp_etapa WHERE projeto_id=? AND apagado_em IS NULL AND nome=?", m["nome"])]
+    etapas = [e for e in prop.get("etapas", []) if not tem("SELECT 1 FROM projeto_camp_etapa WHERE projeto_id=? AND apagado_em IS NULL AND nome=?", e["nome"])]
+    tarefas = [(e["nome"], t) for e in prop.get("etapas", []) for t in e.get("tarefas", [])
+               if not tem("SELECT 1 FROM projeto_camp_tarefa WHERE projeto_id=? AND apagado_em IS NULL AND o_que=?", t["o_que"])]
+    obr = [(o["grupo"], o["texto"], "a_fazer", None) for o in prop.get("obrigacoes", [])]
+    obr += [("Documentos enviados ao SALIC", d["nome"], "feita", d.get("enviado_em")) for d in prop.get("documentos", [])]
+    obr = [o for o in obr if not tem("SELECT 1 FROM projeto_camp_obrigacao WHERE projeto_id=? AND apagado_em IS NULL AND grupo=? AND texto=?", o[0], o[1])]
+    nomes = dict(CAMPOS_PROPOSTA)
+    plano = {"campos": [nomes[k] for k in campos] + (["Situação: Captação (enquadrado em " + _br(prop["enquadrado_em"]) + ")"] if situacao else []),
+             "objetivos": len(objetivos), "marcos": len(marcos), "etapas": len(etapas), "tarefas": len(tarefas), "obrigacoes": len(obr)}
+    plano["total"] = len(plano["campos"]) + sum(plano[k] for k in ("objetivos", "marcos", "etapas", "tarefas", "obrigacoes"))
+    if not aplicar or not pid or not plano["total"]:
+        return {"acao": "simulado" if plano["total"] else "completo", "plano": plano}
+    if campos or situacao:
+        v = dict(campos, **({"situacao": situacao} if situacao else {}))
+        con.execute(f"UPDATE projeto_camp SET {', '.join(k + '=?' for k in v)}, alterado_por=?, alterado_em=datetime('now') WHERE id=?", (*v.values(), ator, pid))
+    n = con.execute("SELECT COALESCE(MAX(ordem),0) FROM projeto_camp_objetivo WHERE projeto_id=?", (pid,)).fetchone()[0]
+    for i, o in enumerate(objetivos, 1):
+        con.execute("INSERT INTO projeto_camp_objetivo (projeto_id, texto, indicador, meta, detalhe, ordem) VALUES (?,?,?,?,?,?)",
+                    (pid, o["texto"], o.get("indicador"), o.get("meta"), o.get("detalhe"), n + i))
+    for i, m in enumerate(marcos, 1):
+        con.execute("INSERT INTO projeto_camp_etapa (projeto_id, nome, inicio, prazo, situacao, marco, ordem, feita_em) VALUES (?,?,?,?,'feita',1,?,?)",
+                    (pid, m["nome"], m["data"], m["data"], i, m["data"]))
+    for i, e in enumerate(prop.get("etapas", []), 1):
+        if e in etapas:
+            con.execute("INSERT INTO projeto_camp_etapa (projeto_id, nome, ordem, duracao_texto, duracao_meses, duracao_dias, comeca) VALUES (?,?,?,?,?,?,?)",
+                        (pid, e["nome"], 10 + i, e.get("duracao_texto"), e.get("meses"), e.get("dias"), e.get("comeca") or None))
+    for nome_etapa, t in tarefas:
+        eid = con.execute("SELECT id FROM projeto_camp_etapa WHERE projeto_id=? AND apagado_em IS NULL AND nome=?", (pid, nome_etapa)).fetchone()
+        con.execute("INSERT INTO projeto_camp_tarefa (projeto_id, etapa_id, o_que, nota, criado_por) VALUES (?,?,?,?,?)",
+                    (pid, eid[0] if eid else None, t["o_que"], NOTA_CONFERIR if t.get("conferir") else None, ator))
+    n = con.execute("SELECT COALESCE(MAX(ordem),0) FROM projeto_camp_obrigacao WHERE projeto_id=?", (pid,)).fetchone()[0]
+    for i, (g, t, sit, d) in enumerate(obr, 1):
+        con.execute("INSERT INTO projeto_camp_obrigacao (projeto_id, grupo, texto, situacao, data, ordem, feita_em) VALUES (?,?,?,?,?,?,?)",
+                    (pid, g, t, sit, d, n + i, d if sit == "feita" else None))
+    _ev(con, pid, "proposta_completada", ator, {"resumo": f"{plano['total']} informações", **plano})
+    con.commit()
+    return {"acao": "completado", "plano": plano}
+
+
 def semear_rouanet(con, aplicar: bool, ator: str) -> dict:
     """Simula (padrão) ou cria o projeto do PRONAC 2613864 com os dados que JÁ estão no Financeiro (conta do Banco do Brasil e planilha do
     SALIC). Não inventa: datas, objetivo, responsável e prazos ficam vazios ("a preencher")."""
@@ -556,7 +682,10 @@ def semear_rouanet(con, aplicar: bool, ator: str) -> dict:
         fim = (date(a + (m == 12), m % 12 + 1, 1) - timedelta(days=1)).isoformat()
     plano = {"nome": r["titulo"] or r["nome"], "tipo": "rouanet", "codigo_externo": codigo, "conta_id": r["id"], "conta_nome": r["nome"],
              "itens_orcamento": n_itens, "orcamento_total": total, "inicio": ini, "fim": fim,
-             "a_preencher": ["Objetivo geral", "Responsável"] + ([] if ini and fim else ["Início e fim"]) + [nome for _, nome in PRAZOS]}
+             "a_preencher": ([] if ini and fim else ["Início e fim"]) + [nome for _, nome in PRAZOS]}
+    plano["proposta"] = completar_proposta(con, None, False, ator).get("plano")
+    if not plano["proposta"]:
+        plano["a_preencher"] = ["Objetivo geral", "Responsável"] + plano["a_preencher"]
     if not aplicar:
         return {"acao": "simulado", "plano": plano}
     cur = con.execute("INSERT INTO projeto_camp (nome, tipo, codigo_externo, conta_id, inicio, fim, criado_por) VALUES (?,?,?,?,?,?,?)",
@@ -564,6 +693,7 @@ def semear_rouanet(con, aplicar: bool, ator: str) -> dict:
     pid = cur.lastrowid
     _ev(con, pid, "semeado_rouanet", ator, {"nome": plano["nome"], "conta_id": r["id"], "itens_orcamento": n_itens})
     con.commit()
+    completar_proposta(con, pid, True, ator)
     return {"acao": "criado", "projeto_id": pid, "plano": plano}
 
 
@@ -590,6 +720,8 @@ class MudarProjeto(BaseModel):
     prazo_captacao: str | None = None
     prazo_execucao: str | None = None
     prazo_prestacao: str | None = None
+    inicio_execucao: str | None = None
+    locais: str | None = None
     conta_id: int | None = None
     sem_conta: bool = False
 
@@ -626,6 +758,52 @@ def rota_semear(b: Aplicar, u: dict = Depends(auth.exige("admin"))) -> dict:
         if r["acao"] == "criado":
             registrar(logging.INFO, "projeto_camp_semeado", "Projeto da CAMP criado a partir do PRONAC", projeto_id=r["projeto_id"])
         return r
+    finally:
+        con.close()
+
+
+@router.post("/{pid}/completar-proposta")
+def rota_completar(pid: int, b: Aplicar, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        p = _projeto_row(con, pid)
+        if p["tipo"] != "rouanet":
+            raise HTTPException(400, "Só o projeto da Lei Rouanet tem proposta do SALIC.")
+        r = completar_proposta(con, pid, b.aplicar, _ator(u))
+        return {**r, "detalhe": detalhe(con, pid, _ator(u)) if r["acao"] == "completado" else None}
+    finally:
+        con.close()
+
+
+class Obrigacao(BaseModel):
+    situacao: str | None = None
+    data: str | None = None
+    nota: str | None = None
+
+
+@router.put("/{pid}/obrigacoes/{oid}")
+def obrigacao_mudar(pid: int, oid: int, b: Obrigacao, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        _projeto_row(con, pid)
+        r = con.execute("SELECT * FROM projeto_camp_obrigacao WHERE id=? AND projeto_id=? AND apagado_em IS NULL", (oid, pid)).fetchone()
+        if not r:
+            raise HTTPException(404, "Obrigação não encontrada")
+        v: dict = {}
+        if b.situacao is not None:
+            if b.situacao not in SIT_TAREFA:
+                raise HTTPException(400, "Situação inválida")
+            v["situacao"] = b.situacao
+            v["feita_em"] = date.today().isoformat() if b.situacao == "feita" and not r["feita_em"] else (r["feita_em"] if b.situacao == "feita" else None)
+        if b.data is not None:
+            v["data"] = _data(b.data, "Data")
+        if b.nota is not None:
+            v["nota"] = _txt_longo(b.nota, 1000) or None
+        if v:
+            con.execute(f"UPDATE projeto_camp_obrigacao SET {', '.join(k + '=?' for k in v)} WHERE id=?", (*v.values(), oid))
+            _ev(con, pid, "obrigacao_alterada", _ator(u), {"texto": r["texto"][:80], **({"situacao": v["situacao"]} if "situacao" in v else {})})
+            con.commit()
+        return detalhe(con, pid, _ator(u))
     finally:
         con.close()
 
@@ -748,14 +926,14 @@ def mudar(pid: int, b: MudarProjeto, u: dict = Depends(auth.exige("admin"))) -> 
             if cod and con.execute("SELECT 1 FROM projeto_camp WHERE codigo_externo=? AND id<>?", (cod, pid)).fetchone():
                 raise HTTPException(409, f"Já existe um projeto com o código {cod}.")
             v["codigo_externo"] = cod
-        for k, n in (("responsavel", 120),):
+        for k, n in (("responsavel", 120), ("locais", 200)):
             if getattr(b, k) is not None:
                 v[k] = _txt(getattr(b, k), n) or None
         for k, n in (("objetivo_geral", 4000), ("resumo", 4000)):
             if getattr(b, k) is not None:
                 v[k] = _txt_longo(getattr(b, k), n) or None
         for k, nome in (("inicio", "Início"), ("fim", "Fim"), ("prazo_captacao", "Prazo de captação"), ("prazo_execucao", "Fim da execução"),
-                        ("prazo_prestacao", "Prestação de contas")):
+                        ("prazo_prestacao", "Prestação de contas"), ("inicio_execucao", "Início da execução")):
             if getattr(b, k) is not None:
                 v[k] = _data(getattr(b, k), nome)
         if (v.get("inicio", p["inicio"]) and v.get("fim", p["fim"])) and v.get("fim", p["fim"]) < v.get("inicio", p["inicio"]):
@@ -770,7 +948,8 @@ def mudar(pid: int, b: MudarProjeto, u: dict = Depends(auth.exige("admin"))) -> 
                         (*v.values(), _ator(u), pid))
             nomes = {"nome": "nome", "tipo": "tipo", "situacao": "situação", "codigo_externo": "código", "responsavel": "responsável",
                      "objetivo_geral": "objetivo geral", "resumo": "resumo", "inicio": "início", "fim": "fim", "prazo_captacao": "prazo de captação",
-                     "prazo_execucao": "fim da execução", "prazo_prestacao": "prestação de contas", "conta_id": "conta"}
+                     "prazo_execucao": "fim da execução", "prazo_prestacao": "prestação de contas", "conta_id": "conta",
+                     "inicio_execucao": "início da execução", "locais": "locais"}
             _ev(con, pid, "dados_alterados", _ator(u), {"campos": [nomes.get(k, k) for k in mudou], **({"situacao": v["situacao"]} if "situacao" in mudou else {})})
         con.commit()
         return detalhe(con, pid, _ator(u))

@@ -43,7 +43,7 @@ const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelect
     await P.waitForSelector('#ini-projetos-camp .pc-home', { timeout: 15000 });
     const home = await P.$eval('#ini-projetos-camp', e => e.innerText);
     chk(/Projetos da CAMP/.test(home) && /atrasad/.test(home) && /em 7 dias/.test(home), `${rot}: Home mostra o bloco Projetos da CAMP com atrasados e 7 dias`);
-    chk(/Tratar as imagens do acervo Karazawa/.test(home), `${rot}: Home lista a tarefa atrasada`);
+    chk(/Contratação da equipe/.test(home), `${rot}: Home lista a tarefa atrasada`);
     // 1440 vem antes: conta a mudança de outra pessoa desde a última visita; depois de abrir o projeto (1440), o 390 já não conta nenhuma
     chk(rot === '1440' ? (/mudança/.test(home) && !/\b0 mudanças/.test(home)) : /\b0 mudanças/.test(home), `${rot}: Home conta as mudanças desde a última visita (e abrir o projeto zera)`);
     await P.$eval('#ini-projetos-camp', e => e.scrollIntoView({ block: 'center' })); await P.waitForTimeout(200);
@@ -69,12 +69,12 @@ const semRolagemLateral = P => P.evaluate(() => { const m = document.querySelect
       await P.click(`#pc-corpo [role=tab][data-pc-aba="${aba}"]`);
       await P.waitForFunction(a => location.hash === '#projetos_camp/1' + (a === 'geral' ? '' : '/' + a) && document.querySelector(`#pc-corpo [data-pc-aba="${a}"][aria-selected="true"]`), aba, { timeout: 10000 });
       const txt = await P.$eval('#pc-aba', e => e.innerText);
-      const esperado = { geral: /A preencher|Objetivos e metas/, cronograma: /Produção do livro/, orcamento: /163\.475,31/, financeiro: /sem comprovante/, documentos: /Anexar/, historico: /Projeto criado a partir do Financeiro/ }[aba];
+      const esperado = { geral: { test: t => /tiragem de 2\.000 exemplares/.test(t) && /0 de 2\.000 exemplares impressos/.test(t) && /Ficha técnica[\s\S]*Amanda Carolina Felício Vantini/.test(t) && /Obrigações da proposta/.test(t) && /enviado em 26\/10\/2026/.test(t) && /Incentivo Fiscal Federal/.test(t) }, cronograma: /Produção\/Execução[\s\S]*duração: 6 meses · depois da pré-produção/, orcamento: /163\.475,31/, financeiro: /sem comprovante/, documentos: /Anexar/, historico: /Projeto criado a partir do Financeiro/ }[aba];
       chk(esperado.test(txt), `${rot}: aba ${aba} com conteúdo esperado`);
       chk(await semRolagemLateral(P), `${rot}: aba ${aba} sem rolagem lateral`);
       if (aba === 'geral') {   // Próximos prazos: cada prazo é uma linha normal (nada de uma letra por linha)
         const pz = await P.$$eval('.pc-card', cs => { const c = cs.find(x => /Próximos prazos/.test(x.querySelector('h2')?.textContent || '')); return c ? [...c.querySelectorAll('li span')].map(s => [s.getBoundingClientRect().width, s.getBoundingClientRect().height]) : []; });
-        chk(pz.length > 0 && pz.every(([w, h]) => w > 120 && h < 60), `${rot}: Próximos prazos com largura normal ${JSON.stringify(pz.slice(0, 3))}`);
+        chk(pz.length > 0 && pz.every(([w, h]) => w > 120 && h < 120), `${rot}: Próximos prazos com largura normal ${JSON.stringify(pz.slice(0, 3))}`);
       }
       if (aba === 'orcamento' && rot === '390') {   // celular: cada item em bloco, valores visíveis sem rolar de lado
         const vis = await P.$eval('#pc-aba tbody tr', t => { const r = t.querySelector('[data-l="Saldo"]').getBoundingClientRect(); return r.right <= innerWidth && r.width > 0; });

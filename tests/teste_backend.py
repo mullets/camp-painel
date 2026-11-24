@@ -20802,7 +20802,7 @@ def filho(modo):
         # Home; orçamento próprio com despesa ligada; despesa em dois projetos = 409; documentos (bytes conferidos, repetido = 409, tirar guarda);
         # resumo diário por e-mail desligado por padrão, um por dia, não antes da hora, teste não conta; só admin.
         init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
-        import base64 as _b64, json as _j
+        import base64 as _b64, json as _j, json, re
         from datetime import date as _date, datetime as _dt, timedelta as _td
         from fastapi.testclient import TestClient
         from app import auth, financeiro as fi, projetos_camp as pcm
@@ -20822,6 +20822,8 @@ def filho(modo):
             x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": "senha-longa-12345"}); return x
         A, E, O = cli("adm@camp.arq.br"), cli("eq@camp.arq.br"), cli("op@camp.arq.br")
         ver("só admin: operador recebe 403", O.get("/api/projetos-camp").status_code == 403 and O.get("/api/projetos-camp/home").status_code == 403)
+        _prop_real = pcm.PROPOSTA_JSON
+        pcm.PROPOSTA_JSON = RAIZ / "docs" / "rouanet" / "nao-existe.json"   # 1ª parte: sem a proposta do SALIC, nada é inventado
         L = A.get("/api/projetos-camp").json()
         s = L.get("semear") or {}
         ver("lista vazia oferece criar o projeto do PRONAC (simulação, nada criado)", L["projetos"] == [] and s.get("acao") == "simulado"
@@ -20834,7 +20836,7 @@ def filho(modo):
         ver("aplicar cria UMA vez (de novo: já existe)", r["acao"] == "criado" and r2["acao"] == "ja_existe" and c.execute("SELECT COUNT(*) FROM projeto_camp").fetchone()[0] == 1, (r, r2))
         d = A.get(f"/api/projetos-camp/{pid}").json(); p = d["projeto"]
         ver("nada inventado: objetivo, responsável, datas e prazos vazios e 'a preencher'", not p["objetivo_geral"] and not p["responsavel"] and not p["prazo_captacao"]
-            and set(d["a_preencher"]) == {"Objetivo geral", "Responsável", "Início e fim", "Prazo de captação", "Fim da execução", "Prestação de contas"}, d["a_preencher"])
+            and set(d["a_preencher"]) == {"Objetivo geral", "Responsável", "Início e fim", "Prazo de captação", "Fim da execução", "Prestação de contas", "Início da execução"}, d["a_preencher"])
         ver("orçamento = planilha do SALIC do Financeiro (sem cópia): 28 itens, R$ 163.475,31", d["orcamento"]["fonte"] == "salic" and len(d["orcamento"]["itens"]) == 28
             and d["orcamento"]["total"]["previsto"] == 163475.31 and c.execute("SELECT COUNT(*) FROM projeto_camp_item").fetchone()[0] == 0, d["orcamento"]["total"])
         ver("orçamento do SALIC não aceita item próprio", A.post(f"/api/projetos-camp/{pid}/itens", json={"descricao": "x", "previsto": 1}).status_code == 400)
@@ -20918,6 +20920,70 @@ def filho(modo):
         A.put(f"/api/projetos-camp/{p2}", json={"situacao": "arquivado"})
         ver("arquivado sai da lista e aparece com 'Mostrar arquivados'", [x["id"] for x in A.get("/api/projetos-camp").json()["projetos"]] == [pid]
             and p2 in [x["id"] for x in A.get("/api/projetos-camp?arquivados=true").json()["projetos"]])
+        # proposta do SALIC (docs/rouanet/pronac-2613864-proposta.json): completa só o que está vazio, simula antes, não repete, sem dado pessoal
+        pcm.PROPOSTA_JSON = _prop_real
+        prop_txt = _prop_real.read_text(encoding="utf-8")
+        ver("arquivo da proposta sem dado pessoal (CPF, CNPJ, e-mail, telefone, CEP)", not re.search(r"\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}/\d{4}|@|\(\d{2}\)\s?\d{4}|\d{5}-\d{3}", prop_txt))
+        n_obj = c.execute("SELECT COUNT(*) FROM projeto_camp_objetivo WHERE projeto_id=? AND apagado_em IS NULL", (pid,)).fetchone()[0]
+        d = A.get(f"/api/projetos-camp/{pid}").json(); pl = (d.get("proposta") or {}).get("plano") or {}
+        ver("projeto existente: a tela oferece completar com a proposta (4 objetivos, 2 marcos, 4 etapas, 14 tarefas, 20 obrigações); responsável já preenchido fica fora",
+            d["proposta"]["acao"] == "simulado" and (pl["objetivos"], pl["marcos"], pl["etapas"], pl["tarefas"], pl["obrigacoes"]) == (4, 2, 4, 14, 20)
+            and "Objetivo geral" in pl["campos"] and "Ficha técnica" in pl["campos"] and "Responsável" not in pl["campos"], pl)
+        r = A.post(f"/api/projetos-camp/{pid}/completar-proposta", json={})
+        ver("completar sem 'aplicar' só simula", r.json()["acao"] == "simulado" and c.execute("SELECT COUNT(*) FROM projeto_camp_objetivo WHERE projeto_id=? AND apagado_em IS NULL", (pid,)).fetchone()[0] == n_obj)
+        r = A.post(f"/api/projetos-camp/{pid}/completar-proposta", json={"aplicar": True}).json(); d = r["detalhe"]; p = d["projeto"]
+        ver("aplicar: preenche o vazio e NÃO troca o que a equipe escreveu (responsável continua 'Rafael')", r["acao"] == "completado" and p["responsavel"] == "Rafael"
+            and p["objetivo_geral"].startswith("Editar, publicar e distribuir o livro") and p["fonte_recurso"] == "Incentivo Fiscal Federal" and p["valor_proposta"] == 163475.31
+            and p["locais"] == "Presidente Prudente/SP e São Paulo/SP" and p["enquadramento"].startswith("Artigo 18"), {k: p[k] for k in ("responsavel", "fonte_recurso", "locais")})
+        obs = {o["indicador"]: o for o in d["objetivos"]}
+        ver("objetivos específicos com meta numérica: 2.000 exemplares (distribuição e receita prevista), 1 versão digital, 2 lançamentos, 4 oficinas",
+            obs["exemplares impressos"]["meta"] == 2000 and "400 gratuitos" in obs["exemplares impressos"]["detalhe"] and "receita prevista R$ 116.000,00" in obs["exemplares impressos"]["detalhe"]
+            and obs["versão digital acessível"]["meta"] == 1 and obs["lançamentos"]["meta"] == 2 and obs["oficinas-percurso"]["meta"] == 4 and "200 estudantes" in obs["oficinas-percurso"]["detalhe"], list(obs))
+        ets = {e["nome"]: e for e in d["etapas"]}
+        ver("marcos reais feitos: proposta enviada 26/10/2026 e enquadramento Artigo 18 em 23/11/2026", ets["Proposta enviada ao MinC"]["prazo"] == "2026-10-26"
+            and ets["Enquadramento: Artigo 18"]["prazo"] == "2026-11-23" and all(ets[k]["situacao"] == "feita" and ets[k]["marco"] for k in ("Proposta enviada ao MinC", "Enquadramento: Artigo 18")))
+        ver("etapas com DURAÇÃO e sem data inventada: captação até 36 meses; pré-produção 3 meses (começa quando a captação for liberada); produção 6 meses; pós-produção 60 dias",
+            ets["Captação de recursos"]["duracao_texto"] == "até 36 meses" and ets["Pré-produção"]["duracao_texto"] == "3 meses" and ets["Pré-produção"]["comeca"] == "começa quando a captação for liberada"
+            and ets["Produção/Execução"]["duracao_texto"] == "6 meses" and ets["Pós-produção"]["duracao_texto"] == "60 dias"
+            and all(not ets[k]["inicio"] and not ets[k]["prazo"] for k in ("Captação de recursos", "Pré-produção", "Produção/Execução", "Pós-produção")), ets["Pré-produção"])
+        por_etapa = {k: [t["o_que"] for t in d["tarefas"] if t["etapa_id"] == ets[k]["id"]] for k in ("Pré-produção", "Produção/Execução", "Pós-produção")}
+        dig = [t for t in d["tarefas"] if t["o_que"].startswith("Digitalização das pranchas")]
+        ver("tarefas da proposta em cada etapa (4, 7 e 3); o trecho ilegível do OCR leva 'confira na proposta'", [len(v) for v in por_etapa.values()] == [4, 7, 3]
+            and "Impressão de 2.000 exemplares" in por_etapa["Produção/Execução"] and "Relatório final e prestação de contas" in por_etapa["Pós-produção"]
+            and dig and "confira" in dig[0]["nota"], {k: len(v) for k, v in por_etapa.items()})
+        ob = d["obrigacoes"]; grupos = {}
+        for o in ob: grupos[o["grupo"]] = grupos.get(o["grupo"], 0) + 1
+        docs = [o for o in ob if o["grupo"] == "Documentos enviados ao SALIC"]
+        ver("obrigações: 3 documentos enviados em 26/10/2026 (feitos), 5 de acessibilidade, 11 de democratização de acesso, 1 de direitos",
+            grupos == {"Documentos enviados ao SALIC": 3, "Acessibilidade": 5, "Democratização de acesso": 11, "Direitos": 1}
+            and all(x["situacao"] == "feita" and x["data"] == "2026-10-26" for x in docs), grupos)
+        eq = {x["nome"] for x in p["equipe"]}
+        ver("ficha técnica: autora, proponente, funções a contratar; nenhum e-mail/telefone", "Amanda Carolina Felício Vantini" in eq and "Rafael Moreira D'Andrea" in eq and "a contratar" in eq
+            and not re.search(r"@|\d{4}-\d{4}", json.dumps(p["equipe"], ensure_ascii=False)))
+        r2 = A.post(f"/api/projetos-camp/{pid}/completar-proposta", json={"aplicar": True}).json()
+        ver("de novo: nada a completar, nada repetido", r2["acao"] == "completo" and len(A.get(f"/api/projetos-camp/{pid}").json()["obrigacoes"]) == 20
+            and c.execute("SELECT COUNT(*) FROM projeto_camp_tarefa WHERE projeto_id=? AND o_que='Impressão de 2.000 exemplares'", (pid,)).fetchone()[0] == 1, r2)
+        d = A.put(f"/api/projetos-camp/{pid}", json={"inicio_execucao": "2027-01-10"}).json(); ets = {e["nome"]: e for e in d["etapas"]}
+        ver("início da execução informado: as etapas ganham datas pela duração, em sequência (a captação, sem duração em número, continua sem data)",
+            (ets["Pré-produção"]["inicio"], ets["Pré-produção"]["prazo"]) == ("2027-01-10", "2027-04-09") and (ets["Produção/Execução"]["inicio"], ets["Produção/Execução"]["prazo"]) == ("2027-04-10", "2027-10-09")
+            and (ets["Pós-produção"]["inicio"], ets["Pós-produção"]["prazo"]) == ("2027-10-10", "2027-12-08") and ets["Pré-produção"]["datas_calculadas"]
+            and not ets["Captação de recursos"]["prazo"] and c.execute("SELECT prazo FROM projeto_camp_etapa WHERE id=?", (ets["Pré-produção"]["id"],)).fetchone()[0] is None,
+            {k: (ets[k]["inicio"], ets[k]["prazo"]) for k in ("Pré-produção", "Produção/Execução", "Pós-produção")})
+        oid = [o for o in d["obrigacoes"] if o["grupo"] == "Acessibilidade"][0]["id"]
+        d = A.put(f"/api/projetos-camp/{pid}/obrigacoes/{oid}", json={"situacao": "feita"}).json()
+        ver("obrigação marcada como cumprida, com registro no histórico", [o for o in d["obrigacoes"] if o["id"] == oid][0]["situacao"] == "feita"
+            and any(h_["texto"].startswith("Obrigação alterada") for h_ in d["historico"]))
+        ver("situação inválida na obrigação: 400", A.put(f"/api/projetos-camp/{pid}/obrigacoes/{oid}", json={"situacao": "x"}).status_code == 400)
+        # projeto novo pelo seed: cria e já completa com a proposta (responsável e objetivo geral deixam de estar "a preencher")
+        c.execute("UPDATE projeto_camp SET conta_id=NULL, codigo_externo='PRONAC-teste-antigo' WHERE id=?", (pid,)); c.commit()
+        sim = A.post("/api/projetos-camp/semear-rouanet", json={}).json()
+        ver("seed simulado mostra o que vem da proposta", sim["acao"] == "simulado" and sim["plano"]["proposta"]["objetivos"] == 4 and "Responsável" in sim["plano"]["proposta"]["campos"]
+            and "Objetivo geral" not in sim["plano"]["a_preencher"], sim["plano"].get("a_preencher"))
+        n3 = A.post("/api/projetos-camp/semear-rouanet", json={"aplicar": True}).json()["projeto_id"]
+        d3 = A.get(f"/api/projetos-camp/{n3}").json()
+        ver("seed aplicado: projeto novo já com a proposta (responsável, objetivo geral, 4 objetivos, 6 etapas, 20 obrigações, situação Captação)",
+            d3["projeto"]["responsavel"] == "Rafael Moreira D'Andrea" and d3["projeto"]["situacao"] == "captacao" and len(d3["objetivos"]) == 4 and len(d3["etapas"]) == 6
+            and len(d3["obrigacoes"]) == 20 and "Objetivo geral" not in d3["a_preencher"] and "Início da execução" in d3["a_preencher"], d3["a_preencher"])
         ver("histórico registra quem fez o quê", any(hh["texto"].startswith("Projeto criado a partir do Financeiro") for hh in A.get(f"/api/projetos-camp/{pid}").json()["historico"]))
         # tela (guarda rápida; o comportamento no navegador está em tests/navegador_projetos_camp.js)
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
@@ -25590,7 +25656,7 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projetos da CAMP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 35, "Projetos da CAMP: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 51, "Projetos da CAMP: todas as verificações rodaram")
 
 print("Financeiro · entrada ou saída do Mercado Pago: compra paga pela CAMP não é receita; site antigo (heurística); refazer linhas antigas; sem duplicar; Isto é uma saída/entrada")
 rc, out = rodar("financeiro_mp_direcao", f"{tmp}/financeiro_mp_direcao.db")

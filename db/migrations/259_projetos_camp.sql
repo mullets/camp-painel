@@ -24,7 +24,14 @@ CREATE TABLE IF NOT EXISTS projeto_camp (
   criado_em        TEXT NOT NULL DEFAULT (datetime('now')),
   alterado_por     TEXT,
   alterado_em      TEXT,
-  arquivado_em     TEXT
+  arquivado_em     TEXT,
+  inicio_execucao  TEXT,                                 -- quando a execução começa (liberação da captação): só com ela as etapas com duração ganham datas
+  fonte_recurso    TEXT,                                 -- ex.: Incentivo Fiscal Federal
+  valor_proposta   REAL,
+  locais           TEXT,                                 -- ex.: Presidente Prudente/SP e São Paulo/SP
+  enquadramento    TEXT,
+  observacao       TEXT,
+  equipe           TEXT                                  -- ficha técnica: JSON [{papel, nome}] (nunca CPF, endereço, telefone ou e-mail)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_projeto_camp_codigo ON projeto_camp (codigo_externo) WHERE codigo_externo IS NOT NULL AND codigo_externo <> '';
 CREATE TABLE IF NOT EXISTS projeto_camp_objetivo (      -- objetivos e metas (com indicador e meta numérica opcional)
@@ -34,6 +41,7 @@ CREATE TABLE IF NOT EXISTS projeto_camp_objetivo (      -- objetivos e metas (co
   indicador   TEXT,                                      -- ex.: "exemplares impressos"
   meta        REAL,                                      -- ex.: 1000
   atual       REAL,                                      -- o que já foi alcançado
+  detalhe     TEXT,                                      -- ex.: a distribuição dos exemplares
   ordem       INTEGER NOT NULL DEFAULT 0,
   apagado_em  TEXT
 );
@@ -45,6 +53,10 @@ CREATE TABLE IF NOT EXISTS projeto_camp_etapa (         -- etapas e marcos do cr
   prazo       TEXT,
   situacao    TEXT NOT NULL DEFAULT 'a_fazer',           -- a_fazer | fazendo | feita | nao_se_aplica
   marco       INTEGER NOT NULL DEFAULT 0,                -- 1 = marco (entrega, data institucional)
+  duracao_texto TEXT,                                    -- a proposta dá DURAÇÃO, não data: "3 meses", "60 dias", "até 36 meses"
+  duracao_dias INTEGER,                                  -- dias (60) …
+  duracao_meses INTEGER,                                 -- … ou meses (3): com o início da execução, a etapa ganha datas em sequência
+  comeca      TEXT,                                      -- "começa quando a captação for liberada", "depois da pré-produção"
   ordem       INTEGER NOT NULL DEFAULT 0,
   feita_em    TEXT,
   apagado_em  TEXT
@@ -64,6 +76,18 @@ CREATE TABLE IF NOT EXISTS projeto_camp_tarefa (        -- próximos passos (o m
   apagado_em  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_projeto_camp_tarefa ON projeto_camp_tarefa (projeto_id, situacao);
+CREATE TABLE IF NOT EXISTS projeto_camp_obrigacao (    -- obrigações assumidas na proposta (acessibilidade, democratização de acesso, direitos,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,         -- documentos enviados): lista para a prestação de contas
+  projeto_id  INTEGER NOT NULL,
+  grupo       TEXT NOT NULL,
+  texto       TEXT NOT NULL,
+  situacao    TEXT NOT NULL DEFAULT 'a_fazer',           -- a_fazer | fazendo | feita | nao_se_aplica
+  data        TEXT,                                      -- quando foi cumprida (documento enviado: a data de envio)
+  nota        TEXT,
+  ordem       INTEGER NOT NULL DEFAULT 0,
+  feita_em    TEXT,
+  apagado_em  TEXT
+);
 CREATE TABLE IF NOT EXISTS projeto_camp_item (          -- orçamento próprio (projeto SEM conta de projeto incentivado): previsto × realizado
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   projeto_id  INTEGER NOT NULL,
