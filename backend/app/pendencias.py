@@ -495,6 +495,20 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} empréstimos atrasados", "rota": "emprestimos/atrasado"}})
 
+    # CAMP-FIN (24/11/2026): despesas importadas do Mercado Pago/extrato sem categoria, justificativa ou comprovante — só admin, prioridade baixa
+    if admin:
+        try:
+            from .despesas import pendentes_total
+            nd = pendentes_total(con)
+        except Exception:  # noqa: BLE001
+            nd = 0
+        linhas = vis([{"sev": "b", "titulo": f"Justificar {nd} {'despesa' if nd == 1 else 'despesas'}", "codigo": None,
+                       "detalhe": "saídas da conta sem categoria, justificativa ou comprovante", "adiar": "despesas:justificar", "espera_h": 0,
+                       "acao": _acao("Justificar", "rota", "financeiro/justificar")}] if nd else [])
+        if linhas:
+            grupos.append({"id": "despesas", "titulo": "Despesas para justificar", "quem": "admin", "total": nd, "itens": linhas,
+                           "ver_todos": {"rotulo": "Abrir o Financeiro", "rota": "financeiro/justificar"}})
+
     # 6) melhorar a base (qualidade_base): fila única com prioridade; "Agora não" esconde por 7 dias só para esta pessoa
     from . import qualidade_base as qb
     tq = qb.tarefas_qualidade(con, usuario_id) if com_base else []   # 11/11: para só contar "Precisa de você" a base não entra
