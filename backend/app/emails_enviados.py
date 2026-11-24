@@ -42,7 +42,7 @@ REMOVIDO = "(removido)"
 CANAIS = {"sender": "Sender", "site": "E-mail simples do site", "smtp": "SMTP do painel"}
 ORIGENS = {"formulario": "Formulário do site", "visita": "Visita", "inscricao": "Inscrição", "amigos": "Amigos da CAMP",
            "entrega": "Entrega de material", "downloads": "Downloads (uso do acervo)", "alerta": "Alerta interno", "resumo": "Resumo do dia", "ingressos": "Ingressos",
-           "cobrancas": "Cobranças e doações"}
+           "cobrancas": "Cobranças e doações", "financeiro": "Financeiro"}
 SITUACOES = {"enviado": "Enviado", "falhou": "Falhou", "nao_sender": "Não saiu pelo Sender", "na_fila": "Na fila"}
 # chave do e-mail => (TR, nome). As do site são as de Camp_AAP_Sender::padroes(); as do painel, as daqui.
 MODELOS = {
@@ -60,6 +60,7 @@ MODELOS = {
     "alerta": ("", "Alerta crítico ou resolvido"), "pedido_novo": ("", "Aviso de pedido novo"), "resumo": ("", "Resumo do dia"),
     "cobranca_avulsa": ("TR27", "Cobrança avulsa"), "doacao_recebida": ("TR28", "Intenção de doação de acervo recebida"),
     "contrato_assinatura": ("TR30", "Contrato para assinatura"), "doacao_andamento": ("TR31", "Andamento da doação"),
+    "nota_fiscal_pedido": ("", "Pedido de nota fiscal ao fornecedor"),
 }
 TR_MODELO = {tr: k for k, (tr, _n) in MODELOS.items() if tr}   # cobrança avulsa antiga: o evento só tem "template"
 REGISTRO_ORIGEM = {"camp_solicitacao": "formulario", "camp_contato": "formulario", "camp_agendamento": "visita", "camp_inscricao": "inscricao",
@@ -329,6 +330,11 @@ def todas(con, desde: str = "", ate: str = "") -> list[dict]:
                               "enviado" if r["tipo"] == "email_enviado" else "falhou", d.get("erro"), sender_id=d.get("sender_id") or None,
                               protocolo=r["x_prot"], link=link, ligado=("Cobrança avulsa nº " if ent == "cobranca_avulsa" else "Doação de acervo nº ") + str(r["codigo"]),
                               detalhe={"enviado_por": r["ator"], "etapa": d.get("etapa") or "", "link_contrato": d.get("link_contrato") or ""}))
+    if "nota_pedido" in t:   # CAMP-FIN 24/11/2026: pedido de nota fiscal ao fornecedor (SMTP do painel; o texto copiado/WhatsApp não é e-mail do painel)
+        for r in con.execute("SELECT n.*, d.contraparte AS d_quem FROM nota_pedido n LEFT JOIN despesa d ON d.id=n.despesa_id WHERE n.canal='email' AND n.criado_em BETWEEN ? AND ?", (d0, d1)):
+            out.append(_linha("nota", r["id"], r["criado_em"], r["para"], r["d_quem"], r["assunto"] or "", "nota_fiscal_pedido", "smtp", "financeiro",
+                              "enviado" if r["situacao"] == "enviado" else "falhou", r["erro"], link="#financeiro", ligado=f"Despesa nº {r['despesa_id']}",
+                              detalhe={"enviado_por": r["criado_por"], "texto": r["texto"] or ""}))
     if "email_site" in t:
         for r in con.execute("SELECT * FROM email_site WHERE enviado_em BETWEEN ? AND ?", (d0, d1)):
             reg = r["registro"] or ""
