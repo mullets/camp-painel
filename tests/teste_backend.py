@@ -77,6 +77,7 @@ MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade expli
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
+MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_livro"}   # CAMP-FIN 24/11/2026: o livro da conta (relatório de liberações + Extrato, com sinal) decide entrada/saída; VINDI −1.707,34; −472,24 exato; liberações não são receita nova (linha própria)
@@ -20337,6 +20338,20 @@ def filho(modo):
         zn = _zf.ZipFile(_io.BytesIO(zr.content)).namelist()
         ver("Exportar comprovantes do período (ZIP)", zr.status_code == 200 and len(zn) == 1 and zn[0].endswith("nota-frete.jpg"), zn)
         for l in res: print(l)
+    elif modo == "financeiro_botao_sincronizar":
+        # CAMP-FIN (24/11/2026). Rafael: "arruma o alinhamento aí de botões, e o sincronizar seria quando clicar aparecendo sincronizando e um
+        # loading nele". O botão do topo não tinha ação. Guarda rápida; o comportamento é provado no navegador
+        # (tests/navegador_financeiro_sincronizar.js: giro, "Sincronizando…", mesma largura, acompanha /mp/estado, botões alinhados).
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("o botão do topo tem ação (clique chama finSincronizar)", "closest('#fin-sinc');if(b)finSincronizar(b)" in html and "async function finSincronizar(b,soAcompanhar)" in html)
+        ver("sincroniza pela rota de sempre e acompanha o estado", "API('/api/financeiro/mp/sincronizar',{method:'POST'})" in html and "API('/api/financeiro/mp/estado')" in html)
+        ver("durante: giro (.busy), aria-busy e o texto Sincronizando…", "b.classList.add('busy');b.setAttribute('aria-busy','true');b.textContent=b.dataset.trabalhando||'Sincronizando…'" in html)
+        ver("sincronização já em andamento ao abrir: o botão acompanha", "if(m.em_andamento&&sb&&!sb.classList.contains('busy'))finSincronizar(sb,true)" in html)
+        ver("botões das saídas com a mesma largura e a mesma borda direita", ".fin-fontes li{display:grid;grid-template-columns:minmax(0,1fr) auto" in html and "min-width:190px" in html)
+        for l in res: print(l)
+
     elif modo == "financeiro_tela_branca":
         # CAMP-FIN-CONSERTOS (24/11/2026). Rafael: "em qualquer aba, se eu clico num item pra ter infos dele, simplesmente fica tudo branco".
         # Causa: o painel lateral da receita tinha um <div class="fin-fila"> esquecido e ".fin-fila" era a camada FIXA de tela inteira da fila
@@ -25421,6 +25436,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saídas do Mercado Pago: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Financeiro · saídas do Mercado Pago: todas as verificações rodaram")
+
+print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
+rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")
+if rc != 0: ok(False, f"teste financeiro_botao_sincronizar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · Sincronizar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 5, "Financeiro · Sincronizar: todas as verificações rodaram")
 
 print("Financeiro · saída do Mercado Pago sem direção (Pix a empresa, Pix enviado, cartão) não é receita")
 rc, out = rodar("financeiro_mp_saida_sem_direcao", f"{tmp}/financeiro_mp_saida_sem_direcao.db")
