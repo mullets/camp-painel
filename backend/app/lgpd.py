@@ -150,8 +150,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_doa = doacoes_acervo.anonimizar_por_email(con, em)
     from . import patrocinios   # CAMP-PAT-EMPRESA 23/11/2026: responsável da proposta de patrocínio (empresa e valores ficam)
     n_pat = patrocinios.anonimizar_por_email(con, em)
+    from . import contas_fixas   # CAMP-FIN 24/11/2026: nome da pessoa nas contas fixas (salário) e nas despesas ligadas (os valores ficam)
+    n_cf = contas_fixas.anonimizar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "ingresso_pessoa": n_ing_p, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa, "patrocinio": n_pat}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "ingresso_pessoa": n_ing_p, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa, "patrocinio": n_pat, "conta_fixa": n_cf}
 
 
 def chamar_site(con, email: str) -> dict:

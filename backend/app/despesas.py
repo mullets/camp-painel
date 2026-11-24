@@ -46,9 +46,14 @@ router = APIRouter(prefix="/api/financeiro/despesas", tags=["despesas"])
 
 ROTA_REL = "/wp-json/camp/v1/painel/mp/relatorio"
 ROTA_RELS = "/wp-json/camp/v1/painel/mp/relatorios"
-CATEGORIAS_PADRAO = {"materiais": "Materiais de conservação e acondicionamento", "frete": "Frete e transporte", "servicos": "Serviços de terceiros",
+CATEGORIAS_PADRAO = {"materiais": "Materiais de conservação e acondicionamento", "frete": "Frete e transporte", "servicos": "Serviços de terceiros (PJ)",
                      "pessoal": "Pessoal e estagiários", "tecnologia": "Tecnologia e software", "tarifas": "Tarifas bancárias e do Mercado Pago",
-                     "eventos": "Eventos e visitas", "manutencao": "Manutenção do espaço", "impostos": "Impostos e taxas", "outras": "Outras despesas"}
+                     "eventos": "Eventos e visitas", "manutencao": "Manutenção do espaço", "impostos": "Impostos e taxas", "outras": "Outras despesas",
+                     # CAMP-FIN contas fixas (migração 252): aluguel, consumo e Pessoal em quatro
+                     "aluguel": "Aluguel e condomínio", "consumo": "Contas de consumo (luz, água, internet, telefone)", "salarios": "Salários",
+                     "encargos": "Encargos (INSS, FGTS, férias, 13º)", "bolsas": "Bolsas e estágio", "autonomos": "Autônomos e RPA"}
+# Pessoal: salário é dado sensível. Na exportação, "agrupar pessoal" (padrão ligado) junta estas categorias numa linha por categoria, sem nomes.
+PESSOAL = ("salarios", "encargos", "bolsas", "autonomos", "pessoal")
 MEIOS = {"pix": "Pix", "debito": "cartão de débito", "credito": "cartão de crédito", "boleto": "boleto", "dinheiro": "dinheiro", "tarifa": "tarifa",
          "saldo": "saldo do Mercado Pago", "transferencia": "transferência", "outro": "outro"}
 VINCULOS = {"doacao": "Doação de acervo", "patrocinio": "Patrocínio", "evento": "Evento", "projeto": "Projeto"}
@@ -216,7 +221,22 @@ def _linha_xlsx(x: dict) -> list:
     return [seg(v) for v in (f"{x['data'][8:10]}/{x['data'][5:7]}/{x['data'][:4]}", x["conta_nome"], x["categoria_nome"] or "sem categoria", x["contraparte"],
                              x["descricao"], x["justificativa"], x["meio_nome"], x["valor"], x["projeto"], "sim" if x["restrito"] else "não",
                              (VINCULOS.get(x["vinculo_tipo"], "") + " " + x["vinculo_ref"]).strip(), ", ".join(a["nome"] for a in x["anexos"]),
-                             {"mp": "Mercado Pago", "ofx": "extrato OFX", "manual": "lançada à mão"}.get(x["origem"], x["origem"]), x["mp_ref"])]
+                             {"mp": "Mercado Pago", "ofx": "extrato OFX", "manual": "lançada à mão", "agrupado": "agrupado (pessoal)"}.get(x["origem"], x["origem"]), x["mp_ref"])]
+
+
+def agrupar_pessoal(ls: list[dict], cats: dict, de: str, ate: str) -> list[dict]:
+    """Pessoal sem nomes: as despesas das categorias de PESSOAL viram UMA linha por categoria no período (total), sem contraparte nem
+    justificativa (que trazem o nome da pessoa). As outras ficam como estão."""
+    fora = [x for x in ls if x["categoria"] not in PESSOAL]
+    grupos = []
+    for k in PESSOAL:
+        xs = [x for x in ls if x["categoria"] == k]
+        if xs:
+            grupos.append({"id": 0, "data": ate, "conta_nome": "", "categoria": k, "categoria_nome": cats.get(k, k), "contraparte": "",
+                           "descricao": f"{len(xs)} {'pagamento' if len(xs) == 1 else 'pagamentos'} de {de[8:10]}/{de[5:7]}/{de[:4]} a {ate[8:10]}/{ate[5:7]}/{ate[:4]}",
+                           "justificativa": "Pessoal agrupado: total sem nomes", "meio_nome": "", "valor": round(sum(x["valor"] for x in xs), 2),
+                           "projeto": "", "restrito": any(x["restrito"] for x in xs), "vinculo_tipo": "", "vinculo_ref": "", "anexos": [], "origem": "agrupado", "mp_ref": ""})
+    return fora + grupos
 
 
 def abas_xlsx(wb, rel: dict) -> None:
@@ -226,6 +246,8 @@ def abas_xlsx(wb, rel: dict) -> None:
     con = connect()
     try:
         ls = listar(con, rel["periodo"]["de"], rel["periodo"]["ate"], rel.get("conta") or 0)
+        if rel.get("agrupar_pessoal", True):
+            ls = agrupar_pessoal(ls, categorias(con), rel["periodo"]["de"], rel["periodo"]["ate"])
     finally:
         con.close()
     p = rel["periodo"]
@@ -616,6 +638,33 @@ def ofx(b: dict, u: dict = Depends(auth.exige("admin"))) -> dict:
         return importar_ofx(con, int(b.get("conta_id") or 0), texto, bool(b.get("aplicar")), _ator(u))
     finally:
         con.close()
+
+
+@router.get("/exportar.csv")
+def exportar_csv(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = "", conta: int = 0, agrupar_pessoal: int = 1,
+                 u: dict = Depends(auth.exige("admin"))):
+    """Despesas do período em CSV. "Agrupar pessoal" (padrão ligado): Salários, Encargos, Bolsas e Autônomos numa linha por categoria, sem nomes."""
+    import csv
+    d1, d2 = _periodo(de, ate, mes, ano, tri)
+    con = connect()
+    try:
+        ls = listar(con, d1, d2, conta)
+        if agrupar_pessoal:
+            ls = agrupar_pessoal_fn(ls, categorias(con), d1, d2)
+    finally:
+        con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow([f"CAMP — Despesas · {d1[8:10]}/{d1[5:7]}/{d1[:4]} a {d2[8:10]}/{d2[5:7]}/{d2[:4]}" + (" · pessoal agrupado, sem nomes" if agrupar_pessoal else "")])
+    w.writerow(COLS)
+    num = lambda v: f"{v:.2f}".replace(".", ",") if isinstance(v, float) else v   # noqa: E731
+    for x in ls:
+        w.writerow([num(v) for v in _linha_xlsx(x)])
+    return Response(("\ufeff" + buf.getvalue()).encode("utf-8"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="camp-despesas-{d1}-a-{d2}.csv"'})
+
+
+agrupar_pessoal_fn = agrupar_pessoal
 
 
 @router.get("/comprovantes.zip")

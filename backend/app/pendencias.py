@@ -525,6 +525,27 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         nd += len(linhas_nf)   # entra no total do grupo (nd_tot), depois do título "Justificar N despesas"
         linhas += vis(linhas_al)
         nd_tot = nd + len(vis(linhas_al))
+        try:      # CAMP-FIN contas fixas: vencimento + 3 dias sem a saída no Mercado Pago. Pessoal sem o nome da pessoa (salário é sensível)
+            from .contas_fixas import atrasadas as _cf_atrasadas
+            from .financeiro import brl as _brl
+            cfa = _cf_atrasadas(con)
+        except Exception:  # noqa: BLE001
+            cfa = []
+        if len(cfa) == 1:
+            x = cfa[0]
+            linhas_cf = vis([{"sev": "a", "titulo": f"Conta fixa atrasada: {x['rotulo']}", "codigo": None,
+                              "detalhe": f"venceu em {x['vence'][8:10]}/{x['vence'][5:7]} · esperado {_brl(x['esperado'])} · sem a saída na conta do Mercado Pago",
+                              "adiar": f"contafixa:{x['id']}:{x['competencia']}", "espera_h": 0, "acao": _acao("Ver", "rota", "financeiro/contas-fixas")}])
+        elif cfa:   # várias: uma linha só, com o nome de cada conta (pessoal pela categoria)
+            rot = list(dict.fromkeys(x["rotulo"] for x in cfa))
+            linhas_cf = vis([{"sev": "a", "titulo": f"{len(cfa)} contas fixas atrasadas", "codigo": None,
+                              "detalhe": ", ".join(rot) + f" · {_brl(sum(x['esperado'] for x in cfa))} sem a saída na conta do Mercado Pago",
+                              "adiar": "contafixa:" + ",".join(f"{x['id']}:{x['competencia']}" for x in cfa), "espera_h": 0,
+                              "acao": _acao("Ver", "rota", "financeiro/contas-fixas")}])
+        else:
+            linhas_cf = []
+        linhas = linhas_cf + linhas
+        nd_tot += len(linhas_cf)
         if linhas:
             grupos.append({"id": "despesas", "titulo": "Financeiro", "quem": "admin", "total": nd_tot, "itens": linhas[:por_grupo + 1],
                            "ver_todos": {"rotulo": "Abrir o Financeiro", "rota": "financeiro/justificar"}})
