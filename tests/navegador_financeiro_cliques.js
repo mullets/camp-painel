@@ -186,6 +186,11 @@ async function varrer(P, w, rotulo, erros) {
       r = await estado(P); chk(ruim(r).length === 0 && r.ladoAberto, `[D ${w}] linha da busca abre o painel lateral`);
       await fechar(P);
       await P.evaluate(() => { FIN.q = ''; FIN.busca = null; finReceitas(); });
+      if (await irAba(P, 'projeto')) {
+        const bp = P.locator('#fin-p-projeto [data-fin-pj="preparar"]').first();
+        chk(await bp.count() > 0, `[D ${w}] "Preparar nota do mês" aparece no projeto incentivado`);
+        if (await bp.count()) { await bp.click(); await P.waitForTimeout(900); r = await estado(P); chk(ruim(r).length === 0, `[D ${w}] "Preparar nota do mês" não quebra a tela (${ruim(r).join('; ') || 'ok'})`); await fechar(P); }
+      }
       await ctx.close();
     }
 
