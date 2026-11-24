@@ -191,3 +191,10 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   déficit (nunca "lucro"), só com o livro do Financeiro, **por regime de caixa**; o aviso "Não substitui a demonstração oficial do contador (regime de
   competência, ITG 2002)" vai na tela e na exportação. Mapa `dre.mapa` (natureza/categoria → linha); fora do mapa = "Outras" com aviso. Visões:
   Consolidado, Operacional e cada conta com restrição separada. Colunas: período, anterior e acumulado do ano; e a visão mensal.
+- **Inteligência do Financeiro** (pedido do Rafael: "Capriche na inteligência do sistema"; `financeiro_ia.py`): toda sugestão diz o porquê e nada é
+  aplicado sem um clique. Categoria sugerida (regra da equipe → o que a equipe escolheu antes para a mesma contraparte/CNPJ → palavras da descrição),
+  com confiança; regra "Sempre classificar X como Y" sugerida quando a mesma escolha se repete 3 vezes (com histórico). Justificativa sugerida
+  (despesas parecidas e tarefas de doação com valor e data perto). Alertas (cobrança repetida, valor fora do usual, recorrente com a próxima data,
+  sem comprovante há N dias, doadores, orçamento de conta de projeto) no Destaques e na Home do admin (prioridade baixa). Projeção de 3 meses
+  rotulada como estimativa. Busca natural ("frete outubro", "doações acima de 500", "sem nota"). Leitura automática do comprovante só com um
+  leitor configurado e `financeiro.leitura_comprovante` = 1 (desligada; o painel não tem cliente de IA hoje).

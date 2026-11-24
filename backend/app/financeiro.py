@@ -197,8 +197,11 @@ def mapa(con) -> dict[str, str]:
     return m
 
 
-def periodo(de: str = "", ate: str = "", mes: str = "", ano: str = "") -> tuple[str, str]:
-    """Mês (AAAA-MM), ano (AAAA) ou de/até (AAAA-MM-DD). Sem nada: o mês corrente (São Paulo)."""
+def periodo(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = "") -> tuple[str, str]:
+    """Mês (AAAA-MM), trimestre (AAAA-Tn), ano (AAAA) ou de/até (AAAA-MM-DD). Sem nada: o mês corrente (São Paulo)."""
+    if tri:
+        from .despesas import _periodo as _p
+        return _p("", "", "", "", tri)
     try:
         if mes:
             a, m = (int(x) for x in mes.split("-"))
@@ -359,6 +362,8 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
             meio = mprow.get("meio") or meio
             estornos = _json(mprow.get("estornos"), [])
         conferir = tarifa is None
+        if st in ESTORNO and tarifa is not None:
+            liquido = None          # depois do estorno o Mercado Pago dá líquido 0; aqui a linha positiva fica bruto − tarifa e o estorno vem na linha negativa
         if tarifa is not None and liquido is None:
             liquido = round(valor - tarifa, 2)
         base = {"conta_id": CONTA_MP, "conta_nome": nome_mp, "natureza": nat, "natureza_nome": NATUREZAS[nat], "origem": origem, "origem_nome": ORIGENS[origem], "descricao": p["descricao"],
@@ -646,6 +651,7 @@ def relatorio(con, de: str, ate: str, natureza: str = "", origem: str = "", docs
         extra = despesas.frases_rascunho(desp, tot)
     except ImportError:
         pass
+    serie, anterior = _serie_e_anterior(con, de, ate, conta)
     nota = con.execute("SELECT texto, atualizado_por, atualizado_em FROM financeiro_nota WHERE periodo=?", (f"{de}|{ate}",)).fetchone()
     m = mapa(con)
     return {"periodo": {"de": de, "ate": ate}, "gerado_em": datetime.now(FUSO).strftime("%Y-%m-%d %H:%M"),
@@ -654,7 +660,37 @@ def relatorio(con, de: str, ate: str, natureza: str = "", origem: str = "", docs
             "linhas": filtrar(base, natureza, origem), "n_total": len(base), "conferencia": lv["conferencia"],
             "nota": dict(nota) if nota else {"texto": "", "atualizado_por": "", "atualizado_em": ""},
             "rascunho": rascunho(de, ate, tot, base, extra), "contas": ctas, "conta": conta,
-            "tipos_conta": TIPOS_CONTA, "mp": estado_mp(con), "despesas": desp, "documento": docs}
+            "tipos_conta": TIPOS_CONTA, "serie": serie, "anterior": anterior, "mp": estado_mp(con), "despesas": desp, "documento": docs}
+
+
+def _serie_e_anterior(con, de: str, ate: str, conta: int = 0) -> tuple[list[dict], dict]:
+    """12 meses até o fim do período (receitas brutas e líquidas, despesas, resultado) e os números do período anterior do mesmo tamanho."""
+    try:
+        from . import despesas, dre
+    except ImportError:
+        return [], {}
+    fim = date.fromisoformat(ate)
+    a, m = fim.year, fim.month - 11
+    while m < 1:
+        a, m = a - 1, m + 12
+    ini = date(a, m, 1).isoformat()
+    rec = filtrar(livro(con, ini, ate)["linhas"], conta=conta)
+    ds = despesas.listar(con, ini, ate, conta)
+    serie = []
+    for i in range(12):
+        mm = f"{a + (m - 1 + i) // 12}-{(m - 1 + i) % 12 + 1:02d}"
+        r_ = [x for x in rec if x["data"][:7] == mm]
+        b = round(sum(x["bruto"] for x in r_), 2)
+        lq = round(sum((x["liquido"] if x["liquido"] is not None else x["bruto"]) for x in r_), 2)
+        dv = round(sum(x["valor"] for x in ds if x["data"][:7] == mm), 2)
+        serie.append({"mes": mm, "receitas": b, "receitas_liquidas": lq, "despesas": dv, "resultado": round(lq - dv, 2)})
+    a1, a2 = dre.periodo_anterior(de, ate)
+    ra = filtrar(livro(con, a1, a2)["linhas"], conta=conta)
+    da = despesas.listar(con, a1, a2, conta)
+    ta = totais(ra)
+    dt = round(sum(x["valor"] for x in da), 2)
+    return serie, {"periodo": {"de": a1, "ate": a2}, "receitas": ta["geral"]["bruto"], "despesas": dt, "resultado": round(ta["geral"]["liquido"] - dt, 2),
+                   "doacoes": ta["doacoes"]["bruto"], "doacoes_n": ta["doacoes"]["n"], "comparavel": bool(ra or da)}
 
 
 def _seguro(v):
@@ -749,8 +785,8 @@ def exportar_xlsx(rel: dict) -> bytes:
 # ---------------------------------------------------------------- rotas (só admin e master)
 @router.get("")
 def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", natureza: str = "", origem: str = "", documento: int = 0,
-        conta: int = 0, u: dict = Depends(auth.exige("admin"))) -> dict:
-    d1, d2 = periodo(de, ate, mes, ano)
+        conta: int = 0, tri: str = "", u: dict = Depends(auth.exige("admin"))) -> dict:
+    d1, d2 = periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
         return relatorio(con, d1, d2, natureza, origem, bool(documento), conta)
@@ -764,8 +800,8 @@ def _nome_arq(d1: str, d2: str, ext: str) -> str:
 
 @router.get("/exportar.csv")
 def exportar_csv_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "", natureza: str = "", origem: str = "", documento: int = 0,
-                      conta: int = 0, u: dict = Depends(auth.exige("admin"))):
-    d1, d2 = periodo(de, ate, mes, ano)
+                      conta: int = 0, tri: str = "", u: dict = Depends(auth.exige("admin"))):
+    d1, d2 = periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
         rel = relatorio(con, d1, d2, natureza, origem, bool(documento), conta)
@@ -776,9 +812,9 @@ def exportar_csv_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "",
 
 
 @router.get("/exportar.xlsx")
-def exportar_xlsx_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "", documento: int = 0, conta: int = 0,
+def exportar_xlsx_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "", documento: int = 0, conta: int = 0, tri: str = "",
                        u: dict = Depends(auth.exige("admin"))):
-    d1, d2 = periodo(de, ate, mes, ano)
+    d1, d2 = periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
         rel = relatorio(con, d1, d2, "", "", bool(documento), conta)

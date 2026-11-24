@@ -85,6 +85,8 @@ from .despesas import router as rotas_despesas   # CAMP-FIN 24/11/2026: despesas
 app.include_router(rotas_despesas)
 from .dre import router as rotas_dre   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; não substitui a demonstração do contador)
 app.include_router(rotas_dre)
+from .financeiro_ia import router as rotas_financeiro_ia   # CAMP-FIN 24/11/2026: inteligência do Financeiro (sugestões explicáveis, alertas, projeção, busca)
+app.include_router(rotas_financeiro_ia)
 from .doacoes_central import router as rotas_doacoes_central   # CAMP-DOA-CENTRAL 21/11/2026: tarefas, arquivos e contrato assinado de cada doação
 app.include_router(rotas_doacoes_central)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)

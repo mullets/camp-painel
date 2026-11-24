@@ -283,7 +283,7 @@ def importar_saidas_mp(con, itens: list[dict]) -> dict:
         sid = _txt(x.get("source_id"), 60) or f"linha{int(x.get('linha') or 0)}"
         chave = f"mp:{sid}:{_txt(x.get('descricao'), 40).lower()}:{dia}:{valor:.2f}"
         desc = {"payout": "Pix enviado ou saque", "withdrawal": "Retirada para a conta bancária da CAMP", "payment": "Compra no Mercado Pago"}.get(
-            str(x.get("descricao") or "").lower(), _txt(x.get("descricao"), 80) or "Saída do Mercado Pago")
+            str(x.get("descricao") or "").lower(), "Tarifa do Mercado Pago" if cat == "tarifas" else (_txt(x.get("descricao"), 80) or "Saída do Mercado Pago"))
         if x.get("external_reference"):
             desc += f" · {_txt(x.get('external_reference'), 80)}"
         n = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, categoria, justificativa, mp_ref, criado_por)
@@ -451,9 +451,19 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
         return {"periodo": {"de": d1, "ate": d2}, "itens": ls, "total": round(sum(x["valor"] for x in ls), 2), "categorias": categorias(con), "meios": MEIOS,
                 "vinculos": VINCULOS, "contas": _fin().contas(con), "precisa_justificar": fila, "n_precisa": len(fila),
                 "transferencias": [x for x in listar(con, d1, d2, conta, com_transferencias=True) if x["tipo"] == "transferencia_propria"],
-                "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")]}
+                "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")],
+                "doacoes": _doacoes(con)}
     finally:
         con.close()
+
+
+def _doacoes(con) -> list[dict]:
+    """Doações de acervo e as tarefas delas, para o vínculo de uma despesa (ex.: "Cotar frete")."""
+    out = []
+    for r in con.execute("SELECT site_id, protocolo, autor FROM doacao_acervo WHERE anonimizado=0 ORDER BY site_id DESC LIMIT 200"):
+        out.append({"site_id": r["site_id"], "protocolo": r["protocolo"] or "", "autor": r["autor"] or "",
+                    "tarefas": [dict(t) for t in con.execute("SELECT id, titulo, valor FROM doacao_tarefa WHERE site_id=? ORDER BY ordem, id", (r["site_id"],))]})
+    return out
 
 
 class Despesa(BaseModel):

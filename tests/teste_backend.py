@@ -44,6 +44,7 @@ MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista d
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
+MODOS_RAPIDOS |= {"financeiro_inteligencia"}   # CAMP-FIN 24/11/2026: inteligência do Financeiro (regras aprendidas, alertas, recorrentes, projeção, busca natural, leitura desligada; linha própria)
 MODOS_RAPIDOS |= {"financeiro_dre"}   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; contas separadas; anterior e acumulado; mensal; linha própria)
 MODOS_RAPIDOS |= {"financeiro_despesas"}   # CAMP-FIN 24/11/2026: despesas (relatório de liberações do Mercado Pago pelo site, OFX, à mão, comprovantes; linha própria)
 MODOS_RAPIDOS |= {"financeiro_receitas"}   # CAMP-FIN 24/11/2026: Financeiro, receitas para o contador + conta do Mercado Pago pelo site (site e Mercado Pago falsos; contrato 1.33; linha própria)
@@ -20253,6 +20254,8 @@ def filho(modo):
             and M["avisos"]["texto"] == "1 despesa sem categoria: o resultado pode mudar.", M["avisos"])
         ver("colunas: período anterior (outubro, déficit) e acumulado do ano", M["anterior"] == {"de": "2026-10-01", "ate": "2026-10-31"} and L["receita_bruta"]["anterior"] == 450.0
             and L["resultado"]["anterior"] == -550.0 and L["receita_bruta"]["ytd"] == 19845.0 and L["despesas_total"]["ytd"] == 2346.4 and M["ytd"]["de"] == "2026-01-01", (L["resultado"], L["receita_bruta"]))
+        ver("o Resultado do resumo (cartão da tela) é o mesmo superávit da DRE (estorno sem descontar duas vezes)", fi.relatorio(c, "2026-11-01", "2026-11-30")["despesas"]["resultado"] == M["resultado"],
+            (fi.relatorio(c, "2026-11-01", "2026-11-30")["despesas"]["resultado"], M["resultado"]))
         Mo = dre.montar(c, "2026-10-01", "2026-10-31")
         ver("déficit do período (outubro)", Mo["situacao"] == "deficit" and Mo["resultado"] == -550.0 and [l for l in Mo["linhas"] if l["chave"] == "resultado"][0]["rotulo"] == "(=) Déficit do período")
         Op, Pj = dre.montar(c, "2026-11-01", "2026-11-30", "operacional"), dre.montar(c, "2026-11-01", "2026-11-30", "2")
@@ -20292,6 +20295,126 @@ def filho(modo):
             and any(str(r__[0]).strip().startswith("(=) Superávit") for r__ in aba) and len(next(wb["DRE mensal"].iter_rows(min_row=3, max_row=3))) == 14, aba[:6])
         cv = x.get("/api/financeiro/dre/exportar.csv?mes=2026-11").content.decode("utf-8-sig").splitlines()
         ver("CSV da DRE com o aviso e as colunas", cv[2] == dre.AVISO and cv[4] == "Linha;Período;Anterior;Acumulado do ano" and any(l_.startswith("(=) Receita bruta;19395,00") for l_ in cv), cv[:5])
+        for l in res: print(l)
+    elif modo == "financeiro_inteligencia":
+        # CAMP-FIN inteligência 24/11/2026. Rafael: "Capriche na inteligência do sistema". Tudo explicável e nada aplicado sozinho. Prova: 3 escolhas
+        # iguais → regra sugerida; confiança e motivo; regra vence o histórico; palavra-chave; justificativa por despesa parecida e por tarefa de doação;
+        # cobrança repetida e valor fora do usual; recorrente com a próxima data; projeção; busca natural; casar comprovante por valor e data; leitura
+        # automática DESLIGADA por padrão (o leitor falso não é chamado) e, ligada, usa só o leitor registrado.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, base64 as _b64
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, financeiro_ia as ia, despesas as dp
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 251: regras e a leitura de comprovante DESLIGADA por padrão", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='financeiro_regra'").fetchone()[0] == 1
+            and c.execute("SELECT valor FROM configuracao WHERE chave='financeiro.leitura_comprovante'").fetchone()[0] == "0" and not ia.leitura_ligada(c))
+        n = [0]
+        def d(data, valor, quem, cat=None, just=None, desc="Pix enviado ou saque"):
+            n[0] += 1
+            return c.execute("INSERT INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (data, valor, "pix", quem, desc, "mp", f"t{n[0]}", cat, just)).lastrowid
+        for dt, v in (("2026-08-05", 120.0), ("2026-09-04", 118.5), ("2026-10-06", 121.0)):
+            d(dt, v, "KALUNGA COMÉRCIO E INDÚSTRIA GRÁFICA LTDA", "materiais", "Caixas de papel alcalino para o acervo")
+        for dt in ("2026-08-10", "2026-09-10", "2026-10-10"):
+            d(dt, 89.9, "Hospedagem Web Ltda", "tecnologia", "Hospedagem do site")
+        nova = d("2026-11-07", 120.0, "Kalunga Comercio e Industria Grafica")
+        c.commit()
+        rs = ia.regras_sugeridas(c)
+        ver("aprender com 3 escolhas iguais: sugere a regra 'Sempre classificar Kalunga como Materiais'", any(r["padrao"] == "kalunga industria grafica" and r["alvo"] == "materiais" and r["n"] == 3 for r in rs)
+            and "3 vezes" in [r for r in rs if r["alvo"] == "materiais"][0]["motivo"], rs)
+        s1 = ia.sugerir_categoria(c, dict(c.execute("SELECT * FROM despesa WHERE id=?", (nova,)).fetchone()))
+        ver("sugestão com confiança alta e o motivo (nome normalizado, mesmo valor)", s1 and s1["categoria"] == "materiais" and s1["alta"] and s1["confianca"] >= 0.85
+            and s1["motivo"] == "igual às 3 últimas compras em Kalunga Comercio e Industria Grafica, com o mesmo valor" and s1["fonte"] == "historico", s1)
+        ver("nada é gravado ao sugerir", c.execute("SELECT categoria FROM despesa WHERE id=?", (nova,)).fetchone()[0] is None)
+        s2 = ia.sugerir_categoria(c, {"contraparte": "Agência dos Correios", "descricao": "SEDEX", "valor": 40})
+        ver("palavra-chave da descrição ('correios') com confiança média e o motivo", s2 and s2["categoria"] == "frete" and not s2["alta"] and s2["confianca"] == 0.6 and "correios" in s2["motivo"], s2)
+        ver("sem pista nenhuma: sem sugestão", ia.sugerir_categoria(c, {"contraparte": "Fulano", "descricao": "", "valor": 10}) is None)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        rr = x.post("/api/financeiro/ia/regras", json={"tipo": "despesa", "padrao": "KALUNGA COMÉRCIO E INDÚSTRIA GRÁFICA LTDA", "alvo": "tecnologia"})
+        s3 = ia.sugerir_categoria(c, dict(c.execute("SELECT * FROM despesa WHERE id=?", (nova,)).fetchone()))
+        ver("regra editável e com histórico: vence o histórico e diz que é regra", rr.status_code == 200 and s3["categoria"] == "tecnologia" and s3["fonte"] == "regra" and "regra da equipe" in s3["motivo"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='financeiro_regra' AND tipo='criada'").fetchone()[0] == 1
+            and not [r for r in x.get("/api/financeiro/ia/regras").json()["sugeridas"] if r["padrao"] == "kalunga industria grafica"], s3)
+        x.request("DELETE", f"/api/financeiro/ia/regras/{rr.json()['id']}")
+        ver("desligar a regra volta ao histórico", ia.sugerir_categoria(c, dict(c.execute("SELECT * FROM despesa WHERE id=?", (nova,)).fetchone()))["categoria"] == "materiais")
+        ver("operador: 403 na inteligência", all(r_.status_code == 403 for r_ in (op.get(f"/api/financeiro/ia/despesa/{nova}"), op.get("/api/financeiro/ia/regras"), op.post("/api/financeiro/ia/regras", json={"tipo": "despesa", "padrao": "x", "alvo": "frete"}),
+            op.get("/api/financeiro/ia/busca?q=frete"), op.get("/api/financeiro/ia/painel?mes=2026-11"), op.get("/api/financeiro/ia/casar?valor=1&data=2026-11-01"))))
+        c.execute("INSERT INTO doacao_acervo (site_id, protocolo, autor, etapa) VALUES (77, 'CAMP-2026-000077', 'Cassol', 'contrato_assinado')")
+        c.execute("INSERT INTO doacao_tarefa (site_id, titulo, valor, prazo) VALUES (77, 'Cotar frete', 380, '2026-11-15')"); c.commit()
+        fr = d("2026-11-14", 378.0, "Transportes Litoral")
+        c.commit()
+        sj = x.get(f"/api/financeiro/ia/despesa/{fr}").json()
+        tj = [j for j in sj["justificativas"] if j.get("vinculo")]
+        ver("justificativa pela tarefa da doação (valor e data perto): 'Cotar frete · doação Cassol', com o vínculo", tj and tj[0]["texto"] == "Cotar frete · doação Cassol" and tj[0]["vinculo"]["tipo"] == "doacao"
+            and tj[0]["vinculo"]["ref"] == "77" and "valor perto da tarefa" in tj[0]["motivo"], sj["justificativas"])
+        sk = x.get(f"/api/financeiro/ia/despesa/{nova}").json()
+        ver("justificativa de despesas parecidas, com o motivo", sk["justificativas"] and sk["justificativas"][0]["texto"] == "Caixas de papel alcalino para o acervo" and "usada em" in sk["justificativas"][0]["motivo"]
+            and sk["categoria"]["categoria"] == "materiais" and sk["leitura_ligada"] is False, sk)
+        d("2026-11-15", 89.9, "Hospedagem Web Ltda")      # mês 4 da hospedagem, e cobrança repetida em 2 dias:
+        d("2026-11-17", 89.9, "Hospedagem Web Ltda")
+        d("2026-11-18", 600.0, "KALUNGA COMÉRCIO E INDÚSTRIA GRÁFICA LTDA")
+        c.commit()
+        A = ia.alertas(c, "2026-11-01", "2026-11-30")
+        tipos = {}
+        for a_ in A: tipos.setdefault(a_["tipo"], []).append(a_)
+        ver("cobrança repetida (mesma contraparte e valor em até 3 dias)", "duplicada" in tipos and "Hospedagem Web Ltda, R$ 89,90" in tipos["duplicada"][0]["titulo"] and "15/11/2026" in tipos["duplicada"][0]["motivo"], tipos.get("duplicada"))
+        ver("valor acima do usual (R$ 600 numa contraparte de ~R$ 120)", "fora_do_usual" in tipos and "R$ 600,00" in tipos["fora_do_usual"][0]["titulo"] and "R$ 120,00" in tipos["fora_do_usual"][0]["motivo"], tipos.get("fora_do_usual"))
+        rc_ = [r for r in ia.recorrentes(c) if r["nome"] == "Hospedagem Web Ltda"]
+        ver("recorrente: assinatura mensal com a próxima data", rc_ and rc_[0]["texto"] == "assinatura mensal de ~R$ 89,90 em Hospedagem Web Ltda" and rc_[0]["proxima"] == "2026-12-17" and rc_[0]["meses"] >= 4, rc_)
+        ver("sem comprovante há mais de 15 dias", "sem_comprovante" in tipos and "há mais de 15 dias" in tipos["sem_comprovante"][0]["titulo"], tipos.get("sem_comprovante"))
+        ver("orçamento de projeto: só com orçamento (gancho da Rouanet)", "orcamento" not in tipos)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='financeiro.orcamento_projetos'", (_j.dumps({"1": {"materiais": 300}}),)); c.commit()
+        ver("orçamento de projeto: perto/acima do teto da rubrica", any(a_["tipo"] == "orcamento" and a_["titulo"].startswith("Acima do orçamento: materiais") for a_ in ia.alertas(c, "2026-11-01", "2026-11-30")))
+        c.execute("UPDATE configuracao SET valor='{}' WHERE chave='financeiro.orcamento_projetos'")
+        c.execute("INSERT INTO amigo (site_id, tipo, modalidade, nome, situacao, ultimo_valor, validade) VALUES (501, 'amigo', 'mensal', 'M1', 'pago', 45, '2026-12-20')")
+        c.execute("INSERT INTO amigo (site_id, tipo, modalidade, nome, situacao, ultimo_valor, validade) VALUES (502, 'amigo', 'mensal', 'M2', 'pago', 45, '2026-12-20')")
+        c.execute("INSERT INTO amigo (site_id, tipo, modalidade, nome, situacao, ultimo_valor, validade) VALUES (503, 'amigo', 'anual', 'A1', 'pago', 450, '2027-01-10')")
+        c.execute("INSERT INTO amigo (site_id, tipo, modalidade, nome, situacao, ultimo_valor, validade, inativo_em) VALUES (504, 'amigo', 'mensal', 'Inativo', 'pago', 45, '2026-12-20', '2026-11-01')")
+        c.execute("INSERT INTO patrocinio (site_id, cota, modalidade, empresa, etapa, valor_anual, meses_pagos) VALUES (801, 'parceiro', 'mensal', 'Grande SA', 'ativa', 12000, 11)")
+        c.commit()
+        P = ia.projecao(c, "2026-11-30")
+        pm = {m["mes"]: (m["receitas"], m["despesas"], m["resultado"]) for m in P["meses"]}
+        rec_ = sum(r["valor"] for r in ia.recorrentes(c))
+        ver("projeção de 3 meses: mensalidades (sem o inativo), renovação anual que vence, patrocínio que falta, menos as recorrentes; com o aviso de estimativa",
+            list(pm) == ["2026-12", "2027-01", "2027-02"] and pm["2026-12"][0] == 90 + 1000.0 and pm["2027-01"][0] == 90 + 450.0 and pm["2027-02"][0] == 90.0
+            and pm["2026-12"][1] == round(rec_, 2) and pm["2026-12"][2] == round(1090 - rec_, 2) and P["aviso"].startswith("Estimativa"), (pm, rec_))
+        cats = dp.categorias(c)
+        q1, q2, q3, q4 = ia.interpretar("frete outubro", cats), ia.interpretar("doações acima de 500", cats), ia.interpretar("sem nota", cats), ia.interpretar("Kalunga 2026", cats)
+        ver("busca natural: 'frete outubro', 'doações acima de 500', 'sem nota', 'Kalunga 2026'", q1["categoria"] == "frete" and q1["mes"] == 10 and q1["texto"] == ""
+            and q2["natureza"] == "doacoes" and q2["valor_min"] == 500.0 and q3.get("sem_nota") and q4["ano"] == 2026 and q4["texto"] == "kalunga"
+            and [ch["rotulo"] for ch in q1["chips"]] == ["outubro", "Frete e transporte"], (q1, q2, q3, q4))
+        ver("busca natural: 'abaixo de 100,50' e 'materiais set'", ia.interpretar("abaixo de 100,50", cats)["valor_max"] == 100.5 and ia.interpretar("materiais set", cats)["mes"] == 9
+            and ia.interpretar("materiais set", cats)["categoria"] == "materiais")
+        cs = x.get("/api/financeiro/ia/casar?valor=378.04&data=2026-11-16").json()["candidatos"]
+        ver("casar comprovante digitado com a saída (± R$ 0,05, ± 3 dias)", [k["id"] for k in cs] == [fr] and cs[0]["dias"] == 2 and "mesmo valor" in cs[0]["motivo"]
+            and x.get("/api/financeiro/ia/casar?valor=378.10&data=2026-11-16").json()["candidatos"] == [] and x.get("/api/financeiro/ia/casar?valor=378&data=2026-11-20").json()["candidatos"] == [], cs)
+        chamadas = []
+        ia.LEITORES["falso"] = lambda b, m: chamadas.append((len(b), m)) or {"cnpj": "11222333000181", "emissor": "Transportes Litoral", "data": "2026-11-14", "total": 378.0, "itens": ["frete"]}
+        jpg = b"\xff\xd8\xff\xe0" + b"0" * 100
+        aid = x.post(f"/api/financeiro/despesas/{fr}/comprovante", json={"nome": "recibo.jpg", "base64": _b64.b64encode(jpg).decode()}).json()["anexos"][0]["id"]
+        r0 = x.post(f"/api/financeiro/ia/despesa/{fr}/comprovante/{aid}/ler")
+        ver("leitura do comprovante DESLIGADA por padrão: 409 e o leitor não é chamado (nada enviado)", r0.status_code == 409 and "desligada" in r0.json()["erro"] and chamadas == [], r0.text)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='financeiro.leitura_comprovante'"); c.commit()
+        r1 = x.post(f"/api/financeiro/ia/despesa/{fr}/comprovante/{aid}/ler")
+        ver("ligada mas sem leitor configurado: 409 dizendo o que falta; ainda nada enviado", r1.status_code == 409 and "Nenhum leitor" in r1.json()["erro"] and chamadas == [], r1.text)
+        c.execute("UPDATE configuracao SET valor='falso' WHERE chave='financeiro.leitor'"); c.commit()
+        r2 = x.post(f"/api/financeiro/ia/despesa/{fr}/comprovante/{aid}/ler").json()
+        ver("ligada e com o leitor (falso): propõe os campos e a saída do Mercado Pago que casa", len(chamadas) == 1 and r2["total"] == 378.0 and r2["emissor"] == "Transportes Litoral"
+            and [k["id"] for k in r2["casa_com"]] == [fr], r2)
+        P2 = x.get("/api/financeiro/ia/painel?mes=2026-11").json()
+        ver("painel da inteligência: alertas, projeção, recorrentes e regras sugeridas", {a_["tipo"] for a_ in P2["alertas"]} >= {"duplicada", "fora_do_usual", "recorrente"} and len(P2["projecao"]["meses"]) == 3
+            and P2["recorrentes"] and isinstance(P2["regras_sugeridas"], list))
+        from app import pendencias
+        g = [g_ for g_ in pendencias.tarefas(c, "admin") if g_["id"] == "despesas"]
+        ver("Home do admin: alertas do Financeiro com o porquê (prioridade baixa)", g and any("cobrança repetida" in i["titulo"] and i["sev"] == "b" and i["detalhe"] for i in g[0]["itens"]), g[0]["itens"] if g else None)
         for l in res: print(l)
     elif modo == "patrocinios_autentique":
         # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
@@ -24125,7 +24248,16 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · DRE: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 17, "Financeiro · DRE: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Financeiro · DRE: todas as verificações rodaram")
+
+print("Financeiro · inteligência: regra aprendida com 3 escolhas, confiança e motivo, justificativa pela tarefa da doação, repetida e fora do usual, recorrente, projeção, busca natural, casar comprovante, leitura desligada")
+rc, out = rodar("financeiro_inteligencia", f"{tmp}/financeiro_inteligencia.db")
+if rc != 0: ok(False, f"teste financeiro_inteligencia não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · inteligência: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Financeiro · inteligência: todas as verificações rodaram")
 
 print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
 rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")
