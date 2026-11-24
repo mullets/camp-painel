@@ -79,6 +79,7 @@ MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
+MODOS_RAPIDOS |= {"financeiro_mp_saida_sem_direcao"}   # CAMP-FIN 24/11/2026: Pix pago a empresa, Pix enviado e cartão SEM direção entravam como receita (contrato 1.36; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_direcao"}   # CAMP-FIN 24/11/2026: compra paga PELA CAMP (Anthropic* claude sub) aparecia como receita; direção do site, heurística, refazer, sem duplicar, Isto é uma saída/entrada; linha própria
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -20522,6 +20523,77 @@ def filho(modo):
             fi._wp = fi_wp
         for l in res: print(l)
 
+    elif modo == "financeiro_mp_saida_sem_direcao":
+        # CAMP-FIN (24/11/2026). Rafael: "vc ta colocando despesa como receita, e eh saida de dinheiro e nao entrada". Pix pago a uma empresa
+        # ("DSC - MATERIAIS PARA CONSTRUCAO LTDA", líquido = bruto 69,00), "Pix enviado" (Danilo, 750,00) e compra no cartão ("Anthropic* claude
+        # sub", sem tarifa somada) chegavam do site 1.44.0 SEM direção (o Mercado Pago não manda payer.id) e a heurística (só líquido > bruto com
+        # o saldo) os deixava como RECEITA. Site falso. Prova: sem direção, os três viram despesa; site 1.45.0 (direcao "saida") idem; o
+        # recebido de verdade fica receita; linha antiga guardada como receita vira despesa na leitura; sem duplicar com o Extrato.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import sys as _s, base64 as _b64
+        _s.path.insert(0, str(RAIZ / "tests"))
+        import semente_financeiro as sf
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, dre as dr
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        sf.semear(c)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        PAG = {"itens": []}
+        class H:
+            def get(s, path, params=None): return Resp(200, {"itens": PAG["itens"], "mais": False, "pagina": 1})
+        class WPF: h = H()
+        def sinc(itens): PAG["itens"] = itens; return fi.coletar_mp(c, WPF(), de="2026-11-01", ate="2026-11-30")
+        def ids_rec(): return {x["mp_id"] for x in fi.livro(c, "2026-11-01", "2026-11-30")["linhas"]}
+        def desp(mid): return [dict(r) for r in c.execute("SELECT * FROM despesa WHERE mp_ref=? AND apagado_em IS NULL ORDER BY id", (mid,))]
+        def pg(i, quando, valor, desc, meio, metodo, liq=None, ref="", pagador="", **k):   # como o site 1.44.0 devolvia (sem direcao)
+            return dict({"id": i, "date_approved": quando, "status": "approved", "transaction_amount": valor, "fee_details": [], "tarifa": 0,
+                         "net_received_amount": valor if liq is None else liq, "payment_type_id": meio, "payment_method_id": metodo,
+                         "external_reference": ref, "description": desc, "pagador": pagador}, **k)
+        DSC, DAN, ANT, DOA = "1323001", "1323002", "1323003", "1323004"
+        novos = [pg(DSC, "2026-11-19T15:00:00.000-03:00", 69.0, "DSC - MATERIAIS PARA CONSTRUCAO LTDA", "bank_transfer", "pix"),
+                 pg(DAN, "2026-11-20T16:00:00.000-03:00", 750.0, "Pix enviado", "bank_transfer", "pix"),
+                 pg(ANT, "2026-11-21T09:00:00.000-03:00", 110.0, "Anthropic* claude sub", "credit_card", "visa"),
+                 pg(DOA, "2026-11-21T11:00:00.000-03:00", 200.0, "", "bank_transfer", "pix", pagador="Carla Doadora Ltda")]
+        o = sinc(sf.conta_mp() + novos)
+        R = ids_rec()
+        ver("site 1.44.0 (sem direção): Pix à empresa (líquido = bruto), Pix enviado e compra no cartão NÃO são receita", not o["erro"] and not ({DSC, DAN, ANT} & R), sorted(R))
+        ver("os três viram DESPESA a justificar, pelo valor que saiu, com 'confira'", all(len(desp(m)) == 1 for m in (DSC, DAN, ANT))
+            and [desp(m)[0]["valor"] for m in (DSC, DAN, ANT)] == [69.0, 750.0, 110.0] and all("confira" in desp(m)[0]["descricao"] for m in (DSC, DAN, ANT)),
+            [desp(m) for m in (DSC, DAN, ANT)])
+        ver("recebido de verdade fica receita: Pix de doação (pagador empresa, sem descrição), Pix recebido, QR, cartão de Amigo", {DOA, "9001", "9004", "5002", "5001"} <= R
+            and not desp(DOA) and not desp("9001"), sorted(R))
+        o = sinc(sf.conta_mp() + [dict(x, direcao="saida", contraparte=x["description"], valor_debitado=x["transaction_amount"]) for x in novos[:3]] + [dict(novos[3], direcao="entrada")])
+        ver("site 1.45.0 (direcao 'saida' pelo recebedor): continuam despesa, uma vez só; a doação (entrada) segue receita",
+            not ({DSC, DAN, ANT} & ids_rec()) and DOA in ids_rec() and all(len(desp(m)) == 1 for m in (DSC, DAN, ANT)), [len(desp(m)) for m in (DSC, DAN, ANT)])
+        OLD = "1323005"
+        c.execute("""INSERT INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, metodo, external_reference, descricao, pagador, classificar, nota)
+                     VALUES (?, '2026-11-11 13:00:00', 'approved', 42, 0, 42, 'bank_transfer', 'pix', NULL, 'Pagamento com Pix', NULL, 'doacoes', 'cimento')""", (OLD,)); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        Rt = x.get("/api/financeiro?mes=2026-11").json()
+        ver("linha antiga guardada como receita ('Pagamento com Pix'): ao abrir o Financeiro sai das receitas e vira despesa (a nota vira justificativa)",
+            not [l_ for l_ in Rt["linhas"] if l_["mp_id"] == OLD] and len(desp(OLD)) == 1 and desp(OLD)[0]["justificativa"] == "cimento", desp(OLD))
+        CSV = ("RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE\n"
+               f"19-11-2026;DSC - MATERIAIS PARA CONSTRUCAO LTDA · Pagamento com Pix;{DSC};-69,00;1.000,00\n"
+               f"20-11-2026;Pix enviado Danilo;{DAN};-750,00;250,00\n")
+        x.post("/api/financeiro/despesas/extrato-mp", json={"base64": _b64.b64encode(CSV.encode()).decode(), "aplicar": True})
+        x.get("/api/financeiro/despesas?mes=2026-11"); fi.reprocessar_saidas_mp(c)
+        ver("Extrato importado e refazer de novo: nada duplica", len(desp(DSC)) == 1 and len(desp(DAN)) == 1 and len(desp(OLD)) == 1, (desp(DSC), desp(DAN)))
+        V = dr.valores(c, "2026-11-01", "2026-11-30")["valores"]
+        ver("DRE: as saídas fora da receita bruta, dentro das despesas", V["despesas_total"] >= 69 + 750 + 110 + 42 and V["receita_bruta"] == fi.totais(fi.livro(c, "2026-11-01", "2026-11-30")["linhas"])["geral"]["bruto"], V)
+        for d_, esp in (("Pix enviado", True), ("Transferência Pix enviada", True), ("Pagamento de boleto", True), ("LOJA X EIRELI", True), ("MERCADOLIVRE*LOJA", True),
+                        ("Pix recebido", False), ("QR code da recepção", False), ("", False), ("Doação Amigo da CAMP", False), ("Mensalidade", False)):
+            ver(f"descrição '{d_}' → {'saída' if esp else 'entrada'}", fi.direcao_mp({"descricao": d_, "valor": 10, "liquido": 10})[0] == ("saida" if esp else "entrada"))
+        ver("referência CAMP-… é sempre recebido, mesmo com descrição de saída", fi.direcao_mp({"descricao": "Pagamento com Pix", "external_reference": "CAMP-COB-1"})[0] == "entrada")
+        for l in res: print(l)
+
     elif modo == "financeiro_mp_direcao":
         # CAMP-FIN (24/11/2026). Rafael, no print de Financeiro → Receitas: "isso é despesa… presta atenção". "Anthropic* claude sub" (assinatura
         # paga pela CAMP com o saldo do Mercado Pago, −R$ 569,25 no Extrato) aparecia como RECEITA "Recebido direto no Mercado Pago" (bruto
@@ -25151,6 +25223,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saídas do Mercado Pago: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Financeiro · saídas do Mercado Pago: todas as verificações rodaram")
+
+print("Financeiro · saída do Mercado Pago sem direção (Pix a empresa, Pix enviado, cartão) não é receita")
+rc, out = rodar("financeiro_mp_saida_sem_direcao", f"{tmp}/financeiro_mp_saida_sem_direcao.db")
+if rc != 0: ok(False, f"teste financeiro_mp_saida_sem_direcao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saída sem direção: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Financeiro · saída sem direção: todas as verificações rodaram")
 
 print("Financeiro · entrada ou saída do Mercado Pago: compra paga pela CAMP não é receita; site antigo (heurística); refazer linhas antigas; sem duplicar; Isto é uma saída/entrada")
 rc, out = rodar("financeiro_mp_direcao", f"{tmp}/financeiro_mp_direcao.db")

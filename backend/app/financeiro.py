@@ -24,6 +24,11 @@ contador.**
   CAMP pagou), `contraparte` e `valor_debitado`. Saída NUNCA é receita: vira despesa da conta do Mercado Pago (fila Precisa justificar), sem
   duplicar com o relatório de liberações nem com o Extrato importado (mesmo id do pagamento ou referência). Site antigo, sem `direcao`:
   líquido maior que o bruto, pago com o saldo e sem referência da CAMP = saída provável ("confira: parece pagamento feito pela CAMP").
+  Contrato 1.36 (site 1.45.0; Rafael: "vc ta colocando despesa como receita"): o Pix pago a uma empresa ("DSC - MATERIAIS PARA CONSTRUCAO
+  LTDA", líquido = bruto) e o "Pix enviado" vinham SEM direção e entravam como receita. O site agora diz "saida" sempre que o recebedor é
+  outra conta; sem direção, também é saída provável o líquido > bruto em qualquer meio e a descrição de saída (Pix enviado, Pagamento com
+  Pix, boleto, compra, saque, nome de empresa, descritor de cartão "Loja* …"); referência CAMP-… é sempre recebido. As linhas já guardadas
+  como receita viram despesa a justificar na leitura (o mesmo refazer, idempotente).
   Linhas já sincronizadas são refeitas na leitura (idempotente): a nota fica, a classificação manual cai (com registro no histórico).
   "Isto é uma saída (despesa)" (receita) e "Isto é uma entrada" (despesa) ficam lembrados (`financeiro_direcao`) e vencem o site.
 - Mapa origem → natureza em `financeiro.naturezas` (JSON; o admin muda na tela). Nenhum CPF/CNPJ no relatório, salvo `documento=1`
@@ -348,18 +353,36 @@ def _direcoes(con) -> dict[str, dict]:
 
 
 def direcao_mp(r: dict, manual: str | None = None) -> tuple[str, str]:
-    """('entrada'|'saida', motivo): motivo 'manual' (escolha da equipe), 'site' (o site 1.44.0 disse), 'provavel' (site antigo: líquido maior
-    que o bruto, pago com o saldo, sem referência da CAMP: a tarifa foi SOMADA, então o dinheiro saiu) ou '' (entrada, como antes)."""
+    """('entrada'|'saida', motivo): motivo 'manual' (escolha da equipe), 'site' (o site disse: só é entrada o que a CAMP recebeu,
+    contrato 1.36), 'provavel' (sem direção e sem referência da CAMP: líquido maior que o bruto — a tarifa foi SOMADA, o dinheiro saiu —, ou
+    a descrição é de saída: "Pix enviado", "Pagamento com Pix", boleto, compra, nome de empresa (LTDA…), descritor de cartão "Loja* …") ou ''
+    (entrada, como antes)."""
     if manual in ("entrada", "saida"):
         return manual, "manual"
     d = str(r.get("direcao") or "").lower()
     if d in ("entrada", "saida"):
         return d, "site"
+    if str(r.get("external_reference") or "").upper().startswith("CAMP-"):
+        return "entrada", ""        # cobrança, Amigos, ingresso, patrocínio: gerados pelo site da CAMP = recebidos
     v, liq = _num(r.get("valor")), _num(r.get("liquido"))
-    if (v is not None and liq is not None and liq > v + 0.005 and str(r.get("meio") or "").lower() == "account_money"
-            and not str(r.get("external_reference") or "").upper().startswith("CAMP-")):
+    if v is not None and liq is not None and liq > v + 0.005:
+        return "saida", "provavel"  # a tarifa foi SOMADA ao que saiu da conta
+    if _parece_saida(str(r.get("descricao") or "")):
         return "saida", "provavel"
     return "entrada", ""
+
+
+# Sem `direcao` (site até 1.44.0 deixava sem direção o Pix pago a uma empresa sem payer.id; linhas antigas): o que a descrição do Mercado
+# Pago diz. Só a DESCRIÇÃO (o pagador pode ser uma empresa que doou). Rafael: "vc ta colocando despesa como receita, e eh saida de dinheiro".
+_RE_SAIDA_ROTULO = re.compile(r"\b(pix enviado|transfer[eê]ncia (pix )?enviada|pagamento com pix|pagamento (de|do) boleto|boleto pago|pagamento de conta"
+                              r"|compra (com|no|de)|saque)\b", re.I)
+_RE_EMPRESA = re.compile(r"\b(ltda|eireli|s\.?\s?a\.?|s/a|me|mei|epp)\s*\.?\s*$|\bltda\b", re.I)
+_RE_DESCRITOR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 .&-]{1,24}\*\s?\S")   # "Anthropic* claude sub": descritor de fatura de cartão de um vendedor
+
+
+def _parece_saida(desc: str) -> bool:
+    d = " ".join(desc.split())
+    return bool(d) and bool(_RE_SAIDA_ROTULO.search(d) or _RE_EMPRESA.search(d) or _RE_DESCRITOR.match(d))
 
 
 def saidas_mp(con, mp: dict[str, dict] | None = None, dman: dict[str, dict] | None = None) -> dict[str, tuple[dict, str]]:
