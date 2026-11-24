@@ -775,6 +775,17 @@ Temperatura e umidade dos sensores Tuya (Wi-Fi), lidas da nuvem da Tuya em segun
   "temperatura um pouco alta (25,1°)" / "temperatura alta demais", "temperatura um pouco baixa" / "temperatura baixa demais" (o nome da sala
   vem antes dos dois-pontos para não errar o gênero); "Sem leitura há 4 h"; "Média de 2 sensores · lido há 5 min" (+ "1 sem leitura recente,
   fora da média"); a faixa desejada e o botão **Abrir Clima do acervo**.
+- **Sensores do clima** (CAMP-CLIMA, 24/11/2026; só admin e master; operador e leitura não veem o botão e a API responde 403): janela aberta
+  por **Gerenciar sensores** no painel Clima das salas. Cada sensor: o nome (editável; "Nome do sensor no painel"), "Na Tuya: <nome no app>",
+  **online** / **offline**, "Última leitura: 22,0° · 50% · há 5 min" (ou "sem leitura") e **Usar no clima** (desligado: sai da média e da parede,
+  não guarda leitura nova). Etiquetas: `novo` (achado pelo coletor há menos de 7 dias e que nenhum admin mexeu; entra ligado), `na média` /
+  `fora da média`, `fora de clima.sensores`, `não aparece mais na Tuya` (a Tuya não devolve o aparelho há mais de 24 h, contadas até a última
+  busca que deu certo: já fica fora da média e da parede sozinho) com "A Tuya não devolve este sensor há N h: ele já não entra na média nem na
+  parede." e **Remover da lista** (confirmação "O sensor sai do clima e da parede. Nada é apagado: as leituras antigas continuam guardadas…").
+  **Removidos da lista (N): as leituras antigas continuam guardadas**, com **Devolver à lista**. Botão **Buscar sensores agora** (a mesma
+  busca do coletor; "Buscando sensores na Tuya…", "Última busca há 5 min · 3 sensores lidos", "A última busca falhou há…"). Texto de ajuda:
+  "Para trocar sensores: adicione os novos no app da Tuya/Smart Life (a mesma conta ligada ao painel), clique em Buscar sensores agora e
+  desligue os antigos aqui."
 
 **Ingressos · lista de presença por pessoa** (CAMP-INGRESSOS, 20/11/2026, contrato 1.24): na aba **Por data · lista de presença**, uma linha por pessoa (colunas **Nome**, **Tipo**, **Amigo da CAMP**, **Pagamento**, **Código · pedido**, **E-mail**, **Entrou**, **Presença**). Quem comprou leva a etiqueta **comprador**; as outras pessoas mostram "comprou: <nome>". Compra antiga (sem os dados de cada pessoa) = uma linha com o comprador e "+ N". Meia-entrada mostra "motivo: …"; pessoa sem e-mail mostra "sem e-mail: só o comprador recebe". Botões: **Reenviar ingresso (a esta pessoa)**, **Reenviar ao comprador** e, uma vez por pedido, **Reenviar todos ao comprador** (um e-mail por ingresso). Ficam no menu **⋯** de cada linha, com **Histórico** e **Abrir ingresso**. Tela (redesenho de 20/11/2026): faixa recolhível **Avisos à equipe** ("vão para …", com **Mudar e-mail** e **Mandar aviso de teste**); cinco números numa linha (**pessoas no mês**, **recebido** com a divisão por meio, **por tipo** em etiquetas, **entraram**, **descontos de Amigo**); tabela de turmas com **Ocupação** ("5/15" e barra), **Pagos**, **Aguardando**, **Entraram**, **Recebido** — a linha inteira abre a lista ("sáb 28/11 · 10:00 — 1 pessoa"); Amigo sem adesão em dia: **Amigo · pagamento pendente**, **Amigo · adesão vencida**, **Amigo · pagamento recusado**, **Amigo · adesão cancelada**. A nota da referência do Mercado Pago fica no **?** ao lado do título.
 
