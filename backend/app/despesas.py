@@ -149,7 +149,8 @@ def _linha(con, r, cats: dict, contas: dict) -> dict:
             "vinculo_ref": r["vinculo_ref"] or "", "tarefa_id": r["tarefa_id"], "mp_ref": r["mp_ref"] or "", "anexos": ax, "falta": pendente(r, len(ax) + nota_pdf, proj),
             "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito")),
             "conta_projeto": proj, "orcamento_item": r["orcamento_item"], "nf_numero": r["nf_numero"] or "", "nota_camp": bool(nota_pdf),
-            "nota_pedida_em": r["nota_pedida_em"] if "nota_pedida_em" in r.keys() else None}   # CAMP-FIN pedir nota fiscal (notas_fiscais.py)
+            "nota_pedida_em": r["nota_pedida_em"] if "nota_pedida_em" in r.keys() else None,   # CAMP-FIN pedir nota fiscal (notas_fiscais.py)
+            "pode_ser_entrada": r["origem"] == "mp" and bool(r["mp_ref"]) and r["tipo"] == "despesa" and (r["categoria"] or "") not in ("tarifas", "impostos")}
 
 
 def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pendentes: bool = False, q: str = "", com_transferencias: bool = False) -> list[dict]:
@@ -346,6 +347,9 @@ def importar_saidas_mp(con, itens: list[dict]) -> dict:
         if x.get("source_id") and con.execute("SELECT 1 FROM despesa WHERE mp_ref=? AND chave LIKE 'mpx:%' AND ABS(valor-?)<0.005", (sid, valor)).fetchone():
             out["ja_no_extrato"] += 1
             continue
+        if x.get("source_id") and con.execute("SELECT 1 FROM despesa WHERE mp_ref=? AND chave LIKE 'mpp:%'", (sid,)).fetchone():
+            out["ja_nos_pagamentos"] = out.get("ja_nos_pagamentos", 0) + 1      # contrato 1.35: a saída já veio da busca de pagamentos (mesmo id)
+            continue
         chave = f"mp:{sid}:{_txt(x.get('descricao'), 40).lower()}:{dia}:{valor:.2f}"
         desc = rotulo
         if x.get("external_reference"):
@@ -478,6 +482,9 @@ def importar_extrato_mp(con, texto: str, aplicar: bool, ator: str) -> dict:
         chave = f"mpx:{t['ref']}" if t["ref"] else "mpx:h:" + hashlib.sha256(f"{t['data']}|{valor:.2f}|{t['texto'].lower()}".encode()).hexdigest()[:24]
         ja = con.execute("SELECT id FROM despesa WHERE chave=?", (chave,)).fetchone()
         rel = None if ja or not t["ref"] else con.execute("SELECT id, contraparte FROM despesa WHERE mp_ref=? AND chave LIKE 'mp:%' AND ABS(valor-?)<0.005", (t["ref"], valor)).fetchone()
+        if not ja and not rel and t["ref"]:       # contrato 1.35: a mesma saída já veio da busca de pagamentos (id do pagamento ou referência)
+            rel = con.execute("""SELECT d.id, d.contraparte FROM despesa d WHERE d.chave LIKE 'mpp:%' AND (d.mp_ref=? OR d.mp_ref IN
+                                 (SELECT mp_id FROM mp_pagamento WHERE external_reference=?))""", (t["ref"], t["ref"])).fetchone()
         linhas.append(dict(t, valor=valor, tipo=tipo, meio=meio, categoria=cat, descricao=rotulo, contraparte=quem, chave=chave,
                            situacao="ja_importada" if ja else ("completa" if rel else "nova"), despesa_id=(ja or rel or [None])[0]))
     if aplicar:
@@ -490,7 +497,8 @@ def importar_extrato_mp(con, texto: str, aplicar: bool, ator: str) -> dict:
                 if did:
                     _ev(con, did, "importada", ator, {"origem": "extrato do Mercado Pago", "ref": x["ref"]})
             elif x["situacao"] == "completa":
-                con.execute("UPDATE despesa SET contraparte=COALESCE(NULLIF(contraparte,''), ?), descricao=?, meio=?, alterado_por=? WHERE id=?",
+                con.execute("UPDATE despesa SET contraparte=COALESCE(NULLIF(contraparte,''), ?), descricao=CASE WHEN chave LIKE 'mpp:%' THEN descricao ELSE ? END, "
+                            "meio=CASE WHEN chave LIKE 'mpp:%' THEN meio ELSE ? END, alterado_por=? WHERE id=?",   # da busca de pagamentos: o meio exato fica
                             (_txt(x["contraparte"], 160) or None, x["descricao"], x["meio"], ator, x["despesa_id"]))
                 _ev(con, x["despesa_id"], "alterada", ator, {"origem": "extrato do Mercado Pago", "ref": x["ref"]})
         con.commit()
@@ -754,6 +762,7 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
     d1, d2 = _periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
+        _fin().reprocessar_saidas_mp(con)        # pagamentos feitos pela CAMP (busca do Mercado Pago) viram despesa; idempotente
         ls = listar(con, d1, d2, conta, categoria, bool(pendentes), q)
         fila = listar(con, "2000-01-01", "2100-12-31", so_pendentes=True)
         return {"periodo": {"de": d1, "ate": d2}, "itens": ls, "total": round(sum(x["valor"] for x in ls), 2), "categorias": categorias(con), "meios": MEIOS,
@@ -1097,6 +1106,27 @@ def mudar(did: int, b: Despesa, u: dict = Depends(auth.exige("admin"))) -> dict:
         _ev(con, did, "justificada" if just else "alterada", _ator(u), {k: v[k] for k in v if k != "justificativa"} | ({"justificativa": True} if "justificativa" in v else {}))
         con.commit()
         return _detalhe(con, did)
+    finally:
+        con.close()
+
+
+@router.post("/{did}/entrada")
+def marcar_entrada(did: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """"Isto é uma entrada" numa saída do Mercado Pago: sai das despesas (fica no histórico) e o pagamento volta às receitas. Lembrado: nem a
+    busca seguinte nem o relatório/Extrato trazem de volta como despesa."""
+    con = connect()
+    try:
+        x = _detalhe(con, did)
+        if not x["pode_ser_entrada"]:
+            raise HTTPException(400, "Só para saídas da conta do Mercado Pago (com a referência do pagamento). Lançamento à mão ou do OFX: use Apagar")
+        fi = _fin()
+        fi.gravar_direcao(con, x["mp_ref"], "entrada", None, _ator(u), {"despesa": did})
+        con.execute("UPDATE despesa SET apagado_em=datetime('now'), apagado_por=?, apagado_motivo=? WHERE id=?", (_ator(u), fi.MOTIVO_ENTRADA, did))
+        _ev(con, did, "apagada", _ator(u), {"motivo": fi.MOTIVO_ENTRADA, "mp_id": x["mp_ref"]})
+        con.commit()
+        fi.reprocessar_saidas_mp(con, _ator(u))
+        na = bool(con.execute("SELECT 1 FROM mp_pagamento WHERE mp_id=?", (x["mp_ref"],)).fetchone())
+        return {"ok": True, "direcao": "entrada", "na_receita": na}
     finally:
         con.close()
 

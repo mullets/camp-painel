@@ -19,6 +19,13 @@ contador.**
 - Estorno e contestação (chargeback) = linha negativa na data do estorno (sem a data: a do pagamento, com "data do estorno a conferir").
 - Sem a tarifa (pagamento que a busca do Mercado Pago ainda não trouxe): "a conferir no extrato". Registrado à mão (Pix na conta do
   banco, dinheiro): fora do Mercado Pago, sem tarifa.
+- Entrada ou saída (CAMP-FIN, Rafael: "isso é despesa… presta atenção"): a busca do Mercado Pago traz também os pagamentos FEITOS pela CAMP
+  (compra com o saldo, ex.: "Anthropic* claude sub"). O site 1.44.0 (contrato 1.35) manda `direcao` ("entrada": a CAMP recebeu; "saida": a
+  CAMP pagou), `contraparte` e `valor_debitado`. Saída NUNCA é receita: vira despesa da conta do Mercado Pago (fila Precisa justificar), sem
+  duplicar com o relatório de liberações nem com o Extrato importado (mesmo id do pagamento ou referência). Site antigo, sem `direcao`:
+  líquido maior que o bruto, pago com o saldo e sem referência da CAMP = saída provável ("confira: parece pagamento feito pela CAMP").
+  Linhas já sincronizadas são refeitas na leitura (idempotente): a nota fica, a classificação manual cai (com registro no histórico).
+  "Isto é uma saída (despesa)" (receita) e "Isto é uma entrada" (despesa) ficam lembrados (`financeiro_direcao`) e vencem o site.
 - Mapa origem → natureza em `financeiro.naturezas` (JSON; o admin muda na tela). Nenhum CPF/CNPJ no relatório, salvo `documento=1`
   (só admin, desligado por padrão).
 - Só admin e master. A busca na conta do Mercado Pago roda em segundo plano (`financeiro.mp_coleta_min`, 60; 0 desliga) e no botão
@@ -48,7 +55,7 @@ router = APIRouter(prefix="/api/financeiro", tags=["financeiro"])
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 ROTA_MP = "/wp-json/camp/v1/painel/mp/pagamentos"
-VERSAO_SITE = "1.42.0"
+VERSAO_SITE = "1.44.0"   # contrato 1.35: direção (entrada/saída) de cada pagamento
 NATUREZAS = {      # ordem do relatório (ITG 2002: doações e patrocínios separados das outras receitas)
     "doacoes": "Doações (sem restrição)",
     "doacoes_restricao": "Doações com restrição (vinculadas)",
@@ -185,6 +192,9 @@ def _tem_site(con) -> bool:
 
 
 CONTA_MP = 1                         # a conta do Mercado Pago (migração 249); toda receita de hoje entra nela
+AVISO_PROVAVEL = "confira: parece pagamento feito pela CAMP"
+MOTIVO_ENTRADA = "Isto é uma entrada (receita), não despesa"
+MEIO_DE_ROTULO = {v: k for k, v in reversed(list(MEIO.items()))}
 TIPOS_CONTA = {"operacional": "Operacional", "projeto_incentivado": "Projeto incentivado"}
 
 
@@ -328,6 +338,122 @@ def _origem_da_ref(ref: str) -> str:
     return "direto_mp"
 
 
+# ---------------------------------------------------------------- entrada ou saída (contrato 1.35)
+def _direcoes(con) -> dict[str, dict]:
+    """Escolhas manuais "Isto é uma saída (despesa)" / "Isto é uma entrada" (migração 255; banco sem ela: nenhuma)."""
+    try:
+        return {str(r["mp_id"]): dict(r) for r in con.execute("SELECT * FROM financeiro_direcao")}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def direcao_mp(r: dict, manual: str | None = None) -> tuple[str, str]:
+    """('entrada'|'saida', motivo): motivo 'manual' (escolha da equipe), 'site' (o site 1.44.0 disse), 'provavel' (site antigo: líquido maior
+    que o bruto, pago com o saldo, sem referência da CAMP: a tarifa foi SOMADA, então o dinheiro saiu) ou '' (entrada, como antes)."""
+    if manual in ("entrada", "saida"):
+        return manual, "manual"
+    d = str(r.get("direcao") or "").lower()
+    if d in ("entrada", "saida"):
+        return d, "site"
+    v, liq = _num(r.get("valor")), _num(r.get("liquido"))
+    if (v is not None and liq is not None and liq > v + 0.005 and str(r.get("meio") or "").lower() == "account_money"
+            and not str(r.get("external_reference") or "").upper().startswith("CAMP-")):
+        return "saida", "provavel"
+    return "entrada", ""
+
+
+def saidas_mp(con, mp: dict[str, dict] | None = None, dman: dict[str, dict] | None = None) -> dict[str, tuple[dict, str]]:
+    """mp_id → (dados do pagamento, motivo) de cada pagamento que é SAÍDA (feito pela CAMP)."""
+    mp = _mp_rows(con) if mp is None else mp
+    dman = _direcoes(con) if dman is None else dman
+    out: dict[str, tuple[dict, str]] = {}
+    for mid, r in mp.items():
+        d, motivo = direcao_mp(r, (dman.get(mid) or {}).get("direcao"))
+        if d == "saida" and (r.get("status") or "").lower() in CONTA:
+            out[mid] = (r, motivo)
+    for mid, x in dman.items():
+        if x.get("direcao") == "saida" and mid not in out:
+            out[mid] = (_json(x.get("dados"), {}), "manual")
+    return out
+
+
+def _debitado(r: dict) -> float:
+    """O que saiu da conta: o valor que o site mandou (total pago, com tarifas); senão o líquido quando é maior que o bruto; senão bruto + tarifa."""
+    deb, v, liq, tar = _num(r.get("debitado")), _num(r.get("valor")) or 0.0, _num(r.get("liquido")), _num(r.get("tarifa"))
+    if deb and deb > 0:
+        return deb
+    if liq is not None and liq > v:
+        return liq
+    return round(v + (tar or 0.0), 2)
+
+
+def _ev_mp(con, mid: str, tipo: str, ator: str, detalhe: dict) -> None:
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('mp_pagamento',?,?,?,?)", (mid, tipo, ator, json.dumps(detalhe, ensure_ascii=False)))
+
+
+def reprocessar_saidas_mp(con, ator: str = "painel") -> dict:
+    """Cada pagamento de SAÍDA vira (uma vez) despesa da conta do Mercado Pago, na fila Precisa justificar. Idempotente; roda depois de cada
+    busca e na leitura do Financeiro/Despesas/DRE (refaz as linhas antigas que entraram como receita). Não duplica: se o relatório de
+    liberações ou o Extrato já trouxe o movimento (mesmo id do pagamento ou referência), só completa quem recebeu. A nota da equipe vira a
+    justificativa; a classificação manual (natureza de receita) cai, com registro no histórico. Saída que voltou a ser entrada sai das despesas."""
+    from . import despesas
+    out = {"criadas": 0, "ja_existiam": 0, "reativadas": 0, "retiradas": 0, "classificacoes_descartadas": 0}
+    try:
+        mp, dman = _mp_rows(con), _direcoes(con)
+        alvos = saidas_mp(con, mp, dman)
+        sem_tarifa = "COALESCE(categoria,'') NOT IN ('tarifas','impostos')"
+        for mid, (r, motivo) in sorted(alvos.items()):
+            row = mp.get(mid) or {}
+            if row.get("classificar"):
+                con.execute("UPDATE mp_pagamento SET classificar=NULL, classificado_por=NULL, alterado_em=datetime('now') WHERE mp_id=? AND classificar IS NOT NULL", (mid,))
+                _ev_mp(con, mid, "classificacao_descartada", ator, {"de": row["classificar"], "motivo": "é saída (pagamento feito pela CAMP): virou despesa"})
+                out["classificacoes_descartadas"] += 1
+            ext = _txt(r.get("external_reference"), 80)
+            refs = [mid] + ([ext] if ext and ext != mid else [])
+            ph = ",".join("?" * len(refs))
+            achou = con.execute(f"SELECT id, apagado_em, apagado_motivo FROM despesa WHERE (mp_ref IN ({ph}) OR chave=?) AND {sem_tarifa} ORDER BY apagado_em IS NOT NULL, id",
+                                (*refs, f"mpp:{mid}")).fetchall()
+            ativa = next((a for a in achou if not a["apagado_em"]), None)
+            man = _json((dman.get(mid) or {}).get("dados"), {})     # "Isto é uma saída" numa receita: quem estava na linha (o pagador)
+            quem = _txt(r.get("contraparte") or man.get("contraparte") or r.get("descricao"), 160)
+            if ativa:
+                if quem:
+                    con.execute("UPDATE despesa SET contraparte=COALESCE(NULLIF(contraparte,''), ?) WHERE id=?", (quem, ativa["id"]))
+                out["ja_existiam"] += 1
+                continue
+            volta = next((a for a in achou if a["apagado_motivo"] == MOTIVO_ENTRADA), None)
+            if volta:
+                con.execute("UPDATE despesa SET apagado_em=NULL, apagado_por=NULL, apagado_motivo=NULL, alterado_por=?, alterado_em=datetime('now') WHERE id=?", (ator, volta["id"]))
+                despesas._ev(con, volta["id"], "reativada", ator, {"motivo": "é saída de novo", "mp_id": mid})
+                out["reativadas"] += 1
+                continue
+            if achou:                       # a equipe apagou de propósito (com motivo): não volta
+                out["ja_existiam"] += 1
+                continue
+            _, meio, _, rotulo = despesas._classificar_mp("payment", str(r.get("meio") or ""), str(r.get("metodo") or ""))
+            desc = rotulo + (f" · {AVISO_PROVAVEL}" if motivo == "provavel" else "")
+            dia = dia_sp(r.get("aprovado_em") or r.get("data")) or hoje().isoformat()
+            did = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, justificativa, mp_ref, criado_por)
+                                 VALUES (?,?,?,?,?,?, 'mp', ?, 'despesa', ?, ?, 'Mercado Pago')""",
+                              (CONTA_MP, dia, _debitado(r), meio, quem or None, desc, f"mpp:{mid}", _txt(row.get("nota"), 500) or None, mid)).lastrowid
+            if did:
+                despesas._ev(con, did, "importada", ator, {"origem": "pagamentos do Mercado Pago (saída)", "mp_id": mid, "motivo": motivo})
+                out["criadas"] += 1
+        # saída que deixou de ser (a equipe disse "Isto é uma entrada", ou o site corrigiu): some das despesas (fica no histórico)
+        entradas = {mid for mid, x in dman.items() if x.get("direcao") == "entrada"}
+        for d in con.execute(f"SELECT id, chave, mp_ref FROM despesa WHERE apagado_em IS NULL AND origem='mp' AND mp_ref IS NOT NULL AND {sem_tarifa}").fetchall():
+            fora = (d["chave"].startswith("mpp:") and d["chave"][4:] not in alvos) or d["mp_ref"] in entradas
+            if fora:
+                con.execute("UPDATE despesa SET apagado_em=datetime('now'), apagado_por=?, apagado_motivo=? WHERE id=?", (ator, MOTIVO_ENTRADA, d["id"]))
+                despesas._ev(con, d["id"], "apagada", ator, {"motivo": MOTIVO_ENTRADA, "mp_id": d["mp_ref"]})
+                out["retiradas"] += 1
+        con.commit()
+    except Exception as e:  # noqa: BLE001 (nunca derruba a tela)
+        registrar(logging.WARNING, "financeiro_saidas", "Saídas do Mercado Pago (pagamentos feitos pela CAMP) com problema", erro=type(e).__name__)
+        out["erro"] = type(e).__name__
+    return out
+
+
 # ---------------------------------------------------------------- o livro
 def livro(con, de: str, ate: str, docs: bool = False) -> dict:
     """Todas as linhas do período (São Paulo) + a conferência. Puro sobre o banco (os testes chamam direto)."""
@@ -335,6 +461,7 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
     mp = _mp_rows(con)
     r0 = con.execute("SELECT nome FROM financeiro_conta WHERE id=?", (CONTA_MP,)).fetchone()
     nome_mp = r0[0] if r0 else "Mercado Pago"
+    saidas = saidas_mp(con, mp)            # pagamentos FEITOS pela CAMP: nunca receita (viram despesa em reprocessar_saidas_mp)
     cob, sem1 = _de_cobrancas(con, docs)
     pat, sem2 = _de_patrocinios(con, docs)
     ing, sem3 = _de_ingressos(con)
@@ -372,7 +499,8 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
         base = {"conta_id": CONTA_MP, "conta_nome": nome_mp, "natureza": nat, "natureza_nome": NATUREZAS[nat], "origem": origem, "origem_nome": ORIGENS[origem], "descricao": p["descricao"],
                 "pagador": p["pagador"], "meio": MEIO.get(meio, meio or ""), "external_reference": p["ref"], "mp_id": p["mp_id"] or "",
                 "fonte": p["fonte"], "registro": p["registro"], "fora_mp": p["fora_mp"], "sem_par_painel": sem_par,
-                "classificavel": bool(mprow), "classificado": bool((mprow or {}).get("classificar")), "nota": (mprow or {}).get("nota") or ""}
+                "classificavel": bool(mprow), "classificado": bool((mprow or {}).get("classificar")), "nota": (mprow or {}).get("nota") or "",
+                "pode_ser_saida": bool(p["mp_id"]) and not p["fora_mp"]}
         if docs:
             base["documento"] = p.get("documento") or ""
         obs = []
@@ -398,6 +526,9 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
                                    observacao="estorno" + ("" if quando else "; data do estorno a conferir no extrato") + "; tarifa a conferir no extrato"))
 
     for p in cob + pat + ing + ami:
+        if p["mp_id"] and p["mp_id"] in saidas:
+            vistos.add(p["mp_id"])
+            continue
         if p["mp_id"]:
             if p["mp_id"] in vistos:
                 dup.append(p["mp_id"])
@@ -416,7 +547,7 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
         pass
     mp_sem_par, diretos = [], 0
     for mid, r in mp.items():
-        if mid in vistos or (r.get("status") or "").lower() not in CONTA:
+        if mid in vistos or mid in saidas or (r.get("status") or "").lower() not in CONTA:
             continue
         vistos.add(mid)
         ref = r.get("external_reference") or ""
@@ -444,6 +575,9 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
         "mp_sem_painel": mp_sem_par,
         "sem_confirmacao": sem1 + sem2 + sem3,
         "mp_cobre": {"de": cobre_de, "ate": cobre_ate},
+        "saidas_mp": [{"mp_id": mid, "data": dia_sp(r.get("aprovado_em") or r.get("data")), "valor": _debitado(r), "contraparte": _txt(r.get("contraparte") or r.get("descricao"), 160),
+                       "motivo": motivo, "aviso": AVISO_PROVAVEL if motivo == "provavel" else ""}
+                      for mid, (r, motivo) in sorted(saidas.items()) if de <= dia_sp(r.get("aprovado_em") or r.get("data")) <= ate],
     }
     return {"linhas": no_periodo, "conferencia": conf}
 
@@ -520,12 +654,20 @@ def _gravar_mp(con, x: dict) -> int:
          "estornos": json.dumps(est) if est else None, "meio": _txt(x.get("payment_type_id") or x.get("meio"), 30) or None,
          "metodo": _txt(x.get("payment_method_id") or x.get("metodo"), 30) or None, "external_reference": _txt(x.get("external_reference"), 80) or None,
          "descricao": _txt(x.get("description") or x.get("descricao"), 200) or None, "pagador": _txt(x.get("pagador") or x.get("payer_name"), 160) or None}
+    if _tem_coluna(con, "mp_pagamento", "direcao"):     # contrato 1.35 (OPCIONAL): site antigo não manda = NULL (heurística na leitura)
+        d = _txt(x.get("direcao"), 10).lower()
+        v.update({"direcao": d if d in ("entrada", "saida") else None, "contraparte": _txt(x.get("contraparte"), 160) or None,
+                  "debitado": _num(x.get("valor_debitado"))})
     ja = con.execute("SELECT 1 FROM mp_pagamento WHERE mp_id=?", (mid,)).fetchone()
     if ja:
         con.execute(f"UPDATE mp_pagamento SET {', '.join(k + '=?' for k in v)}, alterado_em=datetime('now') WHERE mp_id=?", (*v.values(), mid))
         return 0
     con.execute(f"INSERT INTO mp_pagamento (mp_id, {', '.join(v)}) VALUES (?{',?' * len(v)})", (mid, *v.values()))
     return 1
+
+
+def _tem_coluna(con, tabela: str, coluna: str) -> bool:
+    return any(r[1] == coluna for r in con.execute(f"PRAGMA table_info({tabela})"))
 
 
 def coletar_mp(con=None, wp=None, de: str | None = None, ate: str | None = None) -> dict:
@@ -573,6 +715,7 @@ def coletar_mp(con=None, wp=None, de: str | None = None, ate: str | None = None)
         for k in ("sem_rota", "desligado", "ultimo_erro"):
             _estado_set(con, k, "")
         con.commit()
+        out["saidas"] = reprocessar_saidas_mp(con, "Mercado Pago")
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:200]
         _estado_set(con, "ultimo_erro", out["erro"])
@@ -648,6 +791,7 @@ def _sincronizar_fundo() -> None:
 # ---------------------------------------------------------------- relatório completo
 def relatorio(con, de: str, ate: str, natureza: str = "", origem: str = "", docs: bool = False, conta: int = 0) -> dict:
     """Totais por conta separados; com `conta`, o resto do relatório (totais, linhas) fica só naquela conta."""
+    reprocessar_saidas_mp(con)                # linhas antigas que entraram como receita viram despesa (idempotente)
     lv = livro(con, de, ate, docs)
     ctas = contas(con)
     por_conta = totais(lv["linhas"], ctas)["por_conta"]
@@ -906,6 +1050,44 @@ def classificar(mp_id: str, b: Classificar, u: dict = Depends(auth.exige("admin"
                     (mp_id, u.get("email") or "painel", json.dumps({"de": r["classificar"], "para": b.natureza or None}, ensure_ascii=False)))
         con.commit()
         return {"ok": True, "natureza": b.natureza or None, "nota": nota or ""}
+    finally:
+        con.close()
+
+
+class Direcao(BaseModel):
+    motivo: str = ""
+
+
+def gravar_direcao(con, mid: str, direcao: str, dados: dict | None, ator: str, extra: dict | None = None) -> None:
+    """Lembra a escolha manual (vence o site e a heurística) e registra no histórico do pagamento."""
+    antes = (_direcoes(con).get(mid) or {}).get("direcao")
+    con.execute("INSERT INTO financeiro_direcao (mp_id, direcao, dados, por, em) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(mp_id) DO UPDATE SET "
+                "direcao=excluded.direcao, dados=COALESCE(excluded.dados, financeiro_direcao.dados), por=excluded.por, em=excluded.em",
+                (mid, direcao, json.dumps(dados, ensure_ascii=False) if dados else None, ator))
+    _ev_mp(con, mid, "direcao_manual", ator, dict({"de": antes or "automática", "para": direcao}, **(extra or {})))
+
+
+@router.post("/mp/{mp_id}/saida")
+def marcar_saida(mp_id: str, b: Direcao, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """"Isto é uma saída (despesa)" numa linha de receita: sai das receitas, vira despesa (Precisa justificar). Lembrado."""
+    mid = _txt(mp_id, 40)
+    ator = u.get("email") or "painel"
+    con = connect()
+    try:
+        linha = next((x for x in livro(con, "2000-01-01", "2100-12-31")["linhas"] if x["mp_id"] == mid and not x["estorno"]), None)
+        mpr = con.execute("SELECT 1 FROM mp_pagamento WHERE mp_id=?", (mid,)).fetchone()
+        if not mid or (not linha and not mpr):
+            raise HTTPException(404, "Pagamento do Mercado Pago não encontrado (sincronize antes)")
+        dados = None
+        if linha:
+            dados = {"data": linha["data"], "valor": linha["bruto"], "tarifa": linha["tarifa"], "liquido": linha["liquido"], "status": "approved",
+                     "meio": MEIO_DE_ROTULO.get(linha["meio"], linha["meio"]), "descricao": linha["descricao"], "contraparte": linha["pagador"] or linha["descricao"],
+                     "external_reference": linha["external_reference"]}
+        gravar_direcao(con, mid, "saida", dados, ator, {"motivo": _txt(b.motivo, 300)} if b.motivo else None)
+        con.commit()
+        reprocessar_saidas_mp(con, ator)
+        d = con.execute("SELECT id FROM despesa WHERE apagado_em IS NULL AND (mp_ref=? OR chave=?) ORDER BY id", (mid, f"mpp:{mid}")).fetchone()
+        return {"ok": True, "direcao": "saida", "despesa_id": d[0] if d else None}
     finally:
         con.close()
 

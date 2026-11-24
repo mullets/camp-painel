@@ -796,3 +796,15 @@ fiscal" (nunca "cobrar" o fornecedor: cobrança é do Mercado Pago).
 - Home do admin (prioridade baixa), depois de `notas.lembrete_dias` (7): "**N notas fiscais pedidas ainda não chegaram**" (1: "1 nota fiscal pedida ainda
   não chegou"), botão **Ver** (abre Despesas › Notas pedidas). Anexar a nota como comprovante tira o chip sozinho.
 - Em **E-mails enviados**: origem **Financeiro**, modelo "Pedido de nota fiscal ao fornecedor", canal **SMTP do painel**.
+
+## Financeiro · Entrada ou saída do Mercado Pago (CAMP-FIN, 24/11/2026)
+Rafael (print de Receitas): "isso é despesa… presta atenção". Pagamento FEITO pela CAMP (compra com o saldo ou o cartão, ex.: "Anthropic* claude sub")
+não é receita: vai para Despesas, na fila **Precisa justificar**, com quem recebeu, o valor que saiu e o meio (**saldo do Mercado Pago**, cartão…).
+Dizer "saída" e "entrada" (nunca "débito/crédito" na tela).
+- No detalhe de uma receita do Mercado Pago: botão **Isto é uma saída (despesa)**; confirmação "Isto é uma saída (despesa)? O pagamento sai das receitas
+  e vai para Precisa justificar. A escolha fica lembrada e no histórico."; toast "Agora é uma despesa: está em Precisa justificar".
+- No detalhe de uma despesa do Mercado Pago: botão **Isto é uma entrada**; confirmação "Isto é uma entrada? A linha sai das despesas e o pagamento volta
+  às receitas. A escolha fica lembrada e no histórico."; toast "Agora é uma entrada: está nas receitas" (ou "… aparece nas receitas na próxima
+  sincronização"). Lançamento à mão ou do OFX: "Só para saídas da conta do Mercado Pago (com a referência do pagamento). Lançamento à mão ou do OFX: use Apagar".
+- Site antigo, saída provável: na descrição da despesa, "Pagamento com o saldo do Mercado Pago · confira: parece pagamento feito pela CAMP".
+- Motivo no histórico de uma saída que virou entrada: "Isto é uma entrada (receita), não despesa".
