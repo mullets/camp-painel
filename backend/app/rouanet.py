@@ -548,7 +548,7 @@ def candidatos(con, nid: int) -> dict:
         deb.append(dict(r, dias=dist, motivo=f"mesmo valor{', ' + str(dist) + ' dia(s) depois da nota' if ref else ''}"))
     usados_mp = {r[0] for r in con.execute("SELECT receita_mp FROM nota_camp WHERE receita_mp IS NOT NULL AND id!=? AND situacao!='cancelada'", (nid,))}
     cre = []
-    for r in con.execute("SELECT mp_id, aprovado_em, valor, pagador, descricao FROM mp_pagamento WHERE abs(valor-?)<=0.01 ORDER BY aprovado_em", (n["valor"],)):
+    for r in con.execute("SELECT mp_id, aprovado_em, valor, pagador, descricao FROM mp_pagamento WHERE abs(valor-?)<=0.01 AND COALESCE(direcao,'')<>'saida' ORDER BY aprovado_em", (n["valor"],)):   # saída (paga pela CAMP) não é crédito
         d = _fin().dia_sp(r["aprovado_em"])
         if r["mp_id"] in usados_mp or (ref and d and not (ref - timedelta(days=5) <= date.fromisoformat(d) <= ref + timedelta(days=90))):
             continue

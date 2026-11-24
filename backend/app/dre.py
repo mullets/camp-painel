@@ -208,6 +208,7 @@ def periodo_anterior(de: str, ate: str) -> tuple[str, str]:
 
 
 def montar(con, de: str, ate: str, visao: str = "consolidado") -> dict:
+    _fin().reprocessar_saidas_mp(con)        # pagamentos feitos pela CAMP: despesa, nunca receita (idempotente)
     a1, a2 = periodo_anterior(de, ate)
     y1 = date.fromisoformat(ate).replace(month=1, day=1).isoformat()
     atual, ant, ytd = valores(con, de, ate, visao), valores(con, a1, a2, visao), valores(con, y1, ate, visao)
