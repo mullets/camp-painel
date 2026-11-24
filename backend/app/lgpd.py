@@ -139,6 +139,8 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_emkt = contatos_emkt.apagar_por_email(con, em)
     from . import emails_enviados   # CAMP-EMAIL 18/11/2026: o e-mail e o nome nas linhas da tela E-mails enviados
     n_em = emails_enviados.apagar_por_email(con, em)
+    from . import notas_fiscais   # CAMP-FIN 24/11/2026: contato guardado do fornecedor e os pedidos de nota fiscal (contam em email_enviado)
+    n_em += notas_fiscais.apagar_por_email(con, em)
     from . import ingressos   # CAMP-INGRESSOS 19/11/2026: compradores de ingresso (anonimiza; os valores ficam para a receita)
     n_ing = ingressos.anonimizar_por_email(con, em)
     n_ing_p = ingressos.anonimizar_pessoas_por_email(con, em)   # 20/11/2026: as pessoas de cada ingresso (contrato 1.24)

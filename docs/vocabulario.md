@@ -777,3 +777,22 @@ Temperatura e umidade dos sensores Tuya (Wi-Fi), lidas da nuvem da Tuya em segun
   fora da média"); a faixa desejada e o botão **Abrir Clima do acervo**.
 
 **Ingressos · lista de presença por pessoa** (CAMP-INGRESSOS, 20/11/2026, contrato 1.24): na aba **Por data · lista de presença**, uma linha por pessoa (colunas **Nome**, **Tipo**, **Amigo da CAMP**, **Pagamento**, **Código · pedido**, **E-mail**, **Entrou**, **Presença**). Quem comprou leva a etiqueta **comprador**; as outras pessoas mostram "comprou: <nome>". Compra antiga (sem os dados de cada pessoa) = uma linha com o comprador e "+ N". Meia-entrada mostra "motivo: …"; pessoa sem e-mail mostra "sem e-mail: só o comprador recebe". Botões: **Reenviar ingresso (a esta pessoa)**, **Reenviar ao comprador** e, uma vez por pedido, **Reenviar todos ao comprador** (um e-mail por ingresso). Ficam no menu **⋯** de cada linha, com **Histórico** e **Abrir ingresso**. Tela (redesenho de 20/11/2026): faixa recolhível **Avisos à equipe** ("vão para …", com **Mudar e-mail** e **Mandar aviso de teste**); cinco números numa linha (**pessoas no mês**, **recebido** com a divisão por meio, **por tipo** em etiquetas, **entraram**, **descontos de Amigo**); tabela de turmas com **Ocupação** ("5/15" e barra), **Pagos**, **Aguardando**, **Entraram**, **Recebido** — a linha inteira abre a lista ("sáb 28/11 · 10:00 — 1 pessoa"); Amigo sem adesão em dia: **Amigo · pagamento pendente**, **Amigo · adesão vencida**, **Amigo · pagamento recusado**, **Amigo · adesão cancelada**. A nota da referência do Mercado Pago fica no **?** ao lado do título.
+
+## Financeiro · Pedir nota fiscal ao fornecedor (CAMP-FIN, 24/11/2026)
+Rafael: "preparar para criar cobrança de nota fiscal para algum fornecedor". Só admin e master (a API responde 403 aos outros). Dizer "pedir a nota
+fiscal" (nunca "cobrar" o fornecedor: cobrança é do Mercado Pago).
+- Na despesa sem comprovante (painel lateral e fila **Precisa justificar**): **Pedir nota fiscal**; já pedida, o chip `nota pedida em dd/mm`
+  (âmbar depois do lembrete) e **Pedir de novo**. Na lista, o mesmo chip e o filtro **Notas pedidas** (todos os meses).
+- Formulário: **E-mail do fornecedor**, **WhatsApp do fornecedor (opcional, com DDD)**, **Descrição para a nota** (vem da justificativa), **Valor (R$)**,
+  **Data do pagamento**, **Referência do Mercado Pago**, **Prévia do texto**; "Contato guardado do último pedido a este fornecedor.". Botões **Copiar texto**,
+  **Abrir no WhatsApp**, **Já mandei: marcar como pedida** (aparece depois de copiar ou abrir o WhatsApp) e **Enviar por e-mail** (SMTP do painel).
+- Despesa de projeto (conta de projeto incentivado ou PRONAC no projeto/rubrica): a descrição leva "Projeto PRONAC 2613864 · Livro Karazawa" e o texto
+  diz "Conforme orientação do projeto, pedimos que a descrição da nota traga a identificação …". Tom cauteloso: não afirmar regra da lei.
+- **Dados da CAMP para a nota fiscal** (razão social, CNPJ, inscrição municipal se houver, endereço, **E-mail da CAMP que recebe as notas**): vazios até
+  alguém preencher; a tela pede uma vez ("Preencha uma vez: vão em todo pedido de nota. O painel não inventa nenhum destes dados.") e o botão é
+  **Salvar os dados da CAMP**. Sem eles: "Faltam os dados da CAMP para a nota fiscal: … o pedido não saiu."
+- Sem SMTP: "O e-mail do painel (SMTP) não está configurado em Configurações: use Copiar texto ou o WhatsApp.". E-mail que falha: "O e-mail não saiu (…).
+  Use Copiar texto ou o WhatsApp; a despesa não foi marcada como nota pedida."
+- Home do admin (prioridade baixa), depois de `notas.lembrete_dias` (7): "**N notas fiscais pedidas ainda não chegaram**" (1: "1 nota fiscal pedida ainda
+  não chegou"), botão **Ver** (abre Despesas › Notas pedidas). Anexar a nota como comprovante tira o chip sozinho.
+- Em **E-mails enviados**: origem **Financeiro**, modelo "Pedido de nota fiscal ao fornecedor", canal **SMTP do painel**.
