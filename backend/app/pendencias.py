@@ -13,7 +13,7 @@ from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 import json
 import re
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from .filas_fase import fase_da_lista
 from .publicacao import TRAVA_SQL
@@ -494,6 +494,30 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     if linhas:
         grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} empréstimos atrasados", "rota": "emprestimos/atrasado"}})
+
+    # CAMP-FIN (24/11/2026): despesas importadas do Mercado Pago/extrato sem categoria, justificativa ou comprovante — só admin, prioridade baixa
+    if admin:
+        try:
+            from .despesas import pendentes_total
+            nd = pendentes_total(con)
+        except Exception:  # noqa: BLE001
+            nd = 0
+        try:      # alertas do Financeiro (cobrança repetida, valor fora do usual, sem comprovante antigo): prioridade baixa, cada um com o porquê
+            from .financeiro_ia import alertas as _alertas
+            h0 = date.today()
+            al = [x for x in _alertas(con, (h0 - timedelta(days=60)).isoformat(), h0.isoformat()) if x["tipo"] in ("duplicada", "fora_do_usual", "sem_comprovante", "orcamento")]
+        except Exception:  # noqa: BLE001
+            al = []
+        linhas_al = [{"sev": "b", "titulo": x["titulo"], "codigo": None, "detalhe": x["motivo"], "adiar": f"fin:{x['tipo']}:{','.join(map(str, x.get('ids') or []))}",
+                      "espera_h": 0, "acao": _acao("Ver", "rota", "financeiro")} for x in al[:3]]
+        linhas = vis([{"sev": "b", "titulo": f"Justificar {nd} {'despesa' if nd == 1 else 'despesas'}", "codigo": None,
+                       "detalhe": "saídas da conta sem categoria, justificativa ou comprovante", "adiar": "despesas:justificar", "espera_h": 0,
+                       "acao": _acao("Justificar", "rota", "financeiro/justificar")}] if nd else [])
+        linhas += vis(linhas_al)
+        nd_tot = nd + len(vis(linhas_al))
+        if linhas:
+            grupos.append({"id": "despesas", "titulo": "Financeiro", "quem": "admin", "total": nd_tot, "itens": linhas[:por_grupo + 1],
+                           "ver_todos": {"rotulo": "Abrir o Financeiro", "rota": "financeiro/justificar"}})
 
     # 6) melhorar a base (qualidade_base): fila única com prioridade; "Agora não" esconde por 7 dias só para esta pessoa
     from . import qualidade_base as qb
