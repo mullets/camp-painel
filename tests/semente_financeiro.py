@@ -77,6 +77,57 @@ def conta_mp() -> list[dict]:
     ]
 
 
+def semear_despesas(con) -> None:
+    """Para o navegador: 3 saídas do Mercado Pago a justificar, 1 tarifa, 1 lançada à mão, 1 transferência própria e uma tarefa de doação."""
+    ds = [("2026-11-06", 320.0, "pix", "Transportadora Litoral", "Pix enviado ou saque", "mp", None, None),
+          ("2026-11-07", 89.9, "debito", "Papelaria Arte Final", "Compra no Mercado Pago", "mp", None, None),
+          ("2026-11-12", 450.0, "pix", "Ana Restauradora", "Pix enviado ou saque", "mp", None, None),
+          ("2026-11-10", 4.5, "tarifa", "Mercado Pago", "Tarifa do Mercado Pago", "mp", "tarifas", "Tarifa cobrada pelo Mercado Pago"),
+          ("2026-11-20", 45.5, "dinheiro", "Papelaria Central", None, "manual", "materiais", "Papel alcalino para envelopes")]
+    for i, (d, v, m, q, desc, org, cat, just) in enumerate(ds):
+        con.execute("INSERT INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa, mp_ref) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (d, v, m, q, desc, org, f"semente:{i}", cat, just, f"S{i}" if org == "mp" else None))
+    con.execute("INSERT INTO despesa (data, valor, meio, descricao, origem, chave, tipo) VALUES ('2026-11-08', 1000, 'transferencia', 'Retirada para a conta bancária da CAMP', 'mp', 'semente:t', 'transferencia_propria')")
+    con.execute("INSERT INTO doacao_tarefa (site_id, titulo) VALUES (901, 'Cotar frete')")
+    con.commit()
+
+
+def semear_demo(con) -> None:
+    """Para as capturas de tela: agosto a novembro de 2026 com algumas dezenas de linhas realistas (inventadas, sem pessoas reais)."""
+    import random
+    random.seed(7)
+    nomes = ["Marina Alves", "Paulo Rezende", "Helena Costa", "Rui Tavares", "Lia Monteiro", "Otávio Prado", "Beatriz Lemos", "Caio Siqueira", "Teresa Moura", "Igor Paiva"]
+    n = 0
+    for mes in ("2026-08", "2026-09", "2026-10", "2026-11"):
+        for k in range(7):
+            n += 1
+            dia = f"{mes}-{random.randint(1, 28):02d}"
+            v = random.choice([50, 80, 100, 150, 200, 300, 500])
+            con.execute("INSERT OR IGNORE INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, metodo, external_reference, descricao, pagador) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (f"7{n:04d}", dia + " 15:00:00", "approved", v, round(v * 0.0099, 2), round(v * 0.9901, 2), "bank_transfer", "pix", "", "Pix recebido", random.choice(nomes)))
+        for k in range(3):
+            n += 1
+            dia = f"{mes}-{random.randint(1, 28):02d}"
+            con.execute("INSERT OR IGNORE INTO mp_pagamento (mp_id, aprovado_em, status, valor, tarifa, liquido, meio, metodo, external_reference, descricao, pagador) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (f"7{n:04d}", dia + " 12:00:00", "approved", 450, 22.45, 427.55, "credit_card", "visa", f"CAMP-AMIGO-{900 + n}", "Amigos da CAMP", random.choice(nomes)))
+        cats = [("materiais", "Papelaria Arte Final", "Caixas e envelopes de papel alcalino"), ("frete", "Transportadora Litoral", "Frete de acervo doado"),
+                ("tecnologia", "Hospedagem Web", "Hospedagem do site e do painel"), ("pessoal", "Estagiária de catalogação", "Bolsa-estágio do mês"),
+                ("manutencao", "Eletricista Silva", "Reparo na iluminação da reserva técnica"), ("eventos", "Café da Esquina", "Café para a visita guiada")]
+        for k, (cat, quem, just) in enumerate(cats):
+            n += 1
+            v = {"pessoal": 1200, "tecnologia": 89.9, "frete": 380, "materiais": 260, "manutencao": 420, "eventos": 95}[cat] + random.randint(0, 40)
+            con.execute("INSERT OR IGNORE INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa, mp_ref) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (f"{mes}-{random.randint(1, 28):02d}", v, random.choice(["pix", "debito"]), quem, "Pix enviado ou saque", "mp", f"demo:{n}", cat, just, f"D{n}"))
+            if random.random() < 0.85:          # quase todas com o comprovante (um JPG mínimo na pasta ao lado do banco)
+                did = con.execute("SELECT id FROM despesa WHERE chave=?", (f"demo:{n}",)).fetchone()[0]
+                import os
+                pasta = os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "despesas_comprovantes", str(did))
+                os.makedirs(pasta, exist_ok=True)
+                open(os.path.join(pasta, "1.jpg"), "wb").write(b"\xff\xd8\xff\xe0" + b"0" * 64)
+                con.execute("INSERT INTO despesa_anexo (despesa_id, nome, arquivo, mime, tamanho) VALUES (?,?,?,?,?)", (did, "recibo.jpg", f"{did}/1.jpg", "image/jpeg", 68))
+    con.commit()
+
+
 if __name__ == "__main__":
     sys.path.insert(0, __import__("os").path.join(__import__("os").path.dirname(__file__), "..", "backend"))
     c = sqlite3.connect(sys.argv[1])
@@ -94,4 +145,9 @@ if __name__ == "__main__":
     class _W:
         h = _H()
     f.coletar_mp(c, _W(), de="2026-11-01", ate="2026-11-30")
+    semear_despesas(c)
+    if "--demo" in sys.argv:
+        semear_demo(c)
+        c.execute("INSERT OR REPLACE INTO financeiro_estado (chave, valor) VALUES ('mp_de', '2026-08-01')")
+        c.commit()
     c.close()
