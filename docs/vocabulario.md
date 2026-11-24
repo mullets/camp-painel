@@ -819,3 +819,21 @@ Dizer "saída" e "entrada" (nunca "débito/crédito" na tela).
   sincronização"). Lançamento à mão ou do OFX: "Só para saídas da conta do Mercado Pago (com a referência do pagamento). Lançamento à mão ou do OFX: use Apagar".
 - Site antigo, saída provável: na descrição da despesa, "Pagamento com o saldo do Mercado Pago · confira: parece pagamento feito pela CAMP".
 - Motivo no histórico de uma saída que virou entrada: "Isto é uma entrada (receita), não despesa".
+
+## Financeiro · Livro da conta, compras que faltavam e comprovante (CAMP-FIN, 24/11/2026)
+Rafael: "subi a nota errada, e ainda estou sentindo falta de outras despesas.. paguei uma compra de mais de 1700 reais e não está lá". A direção (entrada
+ou saída) vem do sinal que o próprio Mercado Pago dá no relatório de liberações e no Extrato; a descrição só decide quando não há outra fonte (com "confira").
+- Título de uma despesa do Mercado Pago sem o nome de quem recebeu: **Pago pelo Mercado Pago** (nunca "Recebido direto no Mercado Pago" numa saída).
+- Em cada comprovante: **Abrir**, **Trocar** e **Tirar este comprovante**; confirmação "Tirar este comprovante da despesa? O arquivo fica guardado e a
+  retirada fica no histórico."; toasts "Comprovante retirado", "Comprovante trocado". Repetido: "Este arquivo já está anexado a esta despesa."; em
+  outra despesa: "Atenção: o mesmo arquivo também está na despesa de dd/mm/aaaa · R$ … · <quem>. Se foi engano, use Tirar este comprovante."
+- Em Despesas, a lista **De onde vêm as saídas**: **Compras e pagamentos** (cartão, saldo, Pix a uma loja) com "última leitura … de … a …" e o botão
+  **Buscar outro período**; **Relatório de liberações** (Pix enviados, transferências, boletos) com "último recebido …", "configurado, nenhum recebido
+  ainda", "configuração ainda não conferida" ou "não configurado no Mercado Pago" e **Configurar relatório**; **Extrato importado** "até dd/mm/aaaa
+  (N saídas; importado …)" ou "nenhum Extrato importado" e **Importar Extrato**. Aviso: "Pix enviados, transferências e boletos de mm/aaaa ainda não estão
+  nas despesas: eles só chegam pelo relatório de liberações do mês ou pelo Extrato. Importe o Extrato de mm/aaaa ou configure o relatório."
+  Site antigo: "O site ainda não traz as compras pagas pela CAMP (plugin da CAMP 1.46.0 ou mais novo)."; falha: "A busca das compras pagas pela CAMP
+  falhou na última leitura."
+- Painel lateral **Buscar outro período**: "Lê de novo no Mercado Pago as compras, os pagamentos e os recebimentos desse período (até 12 meses de cada
+  vez). Nada se repete."; campos **De**, **Até**; botão **Buscar** (**Buscando…**); toasts "Buscando o período no Mercado Pago…", "Período lido no Mercado
+  Pago.", "A busca falhou: …". Erros: "Período inválido: use datas no formato AAAA-MM-DD", "Período longo demais: busque até 12 meses de cada vez".

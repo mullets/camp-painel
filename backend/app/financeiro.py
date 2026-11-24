@@ -60,7 +60,7 @@ router = APIRouter(prefix="/api/financeiro", tags=["financeiro"])
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 ROTA_MP = "/wp-json/camp/v1/painel/mp/pagamentos"
-VERSAO_SITE = "1.44.0"   # contrato 1.35: direção (entrada/saída) de cada pagamento
+VERSAO_SITE = "1.46.0"   # contrato 1.37: + o que a CAMP pagou (busca payer.id); 1.35: direção (entrada/saída) de cada pagamento
 NATUREZAS = {      # ordem do relatório (ITG 2002: doações e patrocínios separados das outras receitas)
     "doacoes": "Doações (sem restrição)",
     "doacoes_restricao": "Doações com restrição (vinculadas)",
@@ -352,13 +352,72 @@ def _direcoes(con) -> dict[str, dict]:
         return {}
 
 
-def direcao_mp(r: dict, manual: str | None = None) -> tuple[str, str]:
+# ---------------------------------------------------------------- o livro da conta (migração 258)
+# Rafael: "a direção tem de vir do sistema, de forma confiável, pela documentação do Mercado Pago". Relatório de liberações: NET_CREDIT_AMOUNT
+# = creditado no saldo (entrada), NET_DEBIT_AMOUNT = debitado (saída). Extrato: valor positivo = entrada, negativo = saída. Tarifas e impostos
+# do mesmo pagamento não contam para a direção (são do recebedor e viriam com sinal contrário ao da venda).
+_RE_MOV_ACESSORIO = re.compile(r"tarifa|imposto|^tax|fee|shipping|reserve|chargeback|dispute|mediation|refund|estorno|devolu", re.I)
+
+
+def gravar_movimento(con, fonte: str, ref: str, data: str, credito: float, debito: float, descricao: str = "") -> int:
+    """Um movimento do saldo com o sinal do Mercado Pago (único pela chave). 0 se já estava ou sem referência."""
+    ref = _txt(ref, 100)
+    if not ref or fonte not in ("relatorio", "extrato"):
+        return 0
+    cr, db = round(abs(_num(credito) or 0.0), 2), round(abs(_num(debito) or 0.0), 2)
+    if not cr and not db:
+        return 0
+    desc = _txt(descricao, 120)
+    try:
+        return con.execute("INSERT OR IGNORE INTO mp_movimento (fonte, ref, data, credito, debito, descricao, chave) VALUES (?,?,?,?,?,?,?)",
+                           (fonte, ref, data or None, cr, db, desc or None, f"{fonte}:{ref}:{data or ''}:{cr:.2f}:{db:.2f}:{desc.lower()[:60]}")).rowcount
+    except Exception:  # noqa: BLE001 (banco sem a migração 258)
+        return 0
+
+
+def movimentos(con) -> dict[str, dict]:
+    """ref → {credito, debito, fonte, direcao}: a soma dos movimentos principais (sem tarifa/imposto/estorno) de cada operação. direcao só quando
+    o sinal é inequívoco (só crédito = entrada; só débito = saída); crédito E débito (venda e estorno, por exemplo) = '' (não decide)."""
+    out: dict[str, dict] = {}
+    try:
+        rows = con.execute("SELECT fonte, ref, credito, debito, descricao FROM mp_movimento").fetchall()
+    except Exception:  # noqa: BLE001
+        return out
+    for r in rows:
+        if r["descricao"] and _RE_MOV_ACESSORIO.search(r["descricao"]):
+            continue
+        x = out.setdefault(r["ref"], {"credito": 0.0, "debito": 0.0, "fontes": set()})
+        x["fontes"].add(r["fonte"])
+        # a mesma operação no relatório E no Extrato: não soma duas vezes (fica o maior de cada lado por fonte)
+        x.setdefault("_por_fonte", {}).setdefault(r["fonte"], [0.0, 0.0])
+        x["_por_fonte"][r["fonte"]][0] += r["credito"] or 0.0
+        x["_por_fonte"][r["fonte"]][1] += r["debito"] or 0.0
+    for ref, x in out.items():
+        pf = x.pop("_por_fonte")
+        x["credito"] = round(max(v[0] for v in pf.values()), 2)
+        x["debito"] = round(max(v[1] for v in pf.values()), 2)
+        x["fonte"] = "relatorio" if "relatorio" in x["fontes"] else "extrato"
+        x["fontes"] = sorted(x["fontes"])
+        x["direcao"] = "saida" if x["debito"] > 0 and not x["credito"] else ("entrada" if x["credito"] > 0 and not x["debito"] else "")
+    return out
+
+
+def _mov_de(mov: dict[str, dict] | None, mid: str, r: dict) -> dict | None:
+    if not mov:
+        return None
+    ext = str(r.get("external_reference") or "")
+    return mov.get(str(mid)) or (mov.get(ext) if ext and not ext.upper().startswith("CAMP-") else None)
+
+
+def direcao_mp(r: dict, manual: str | None = None, mov: dict | None = None) -> tuple[str, str]:
     """('entrada'|'saida', motivo): motivo 'manual' (escolha da equipe), 'site' (o site disse: só é entrada o que a CAMP recebeu,
     contrato 1.36), 'provavel' (sem direção e sem referência da CAMP: líquido maior que o bruto — a tarifa foi SOMADA, o dinheiro saiu —, ou
     a descrição é de saída: "Pix enviado", "Pagamento com Pix", boleto, compra, nome de empresa (LTDA…), descritor de cartão "Loja* …") ou ''
     (entrada, como antes)."""
     if manual in ("entrada", "saida"):
         return manual, "manual"
+    if mov and mov.get("direcao") in ("entrada", "saida"):
+        return mov["direcao"], "livro"   # o sinal do Mercado Pago (relatório de liberações ou Extrato): vence o site e a heurística
     d = str(r.get("direcao") or "").lower()
     if d in ("entrada", "saida"):
         return d, "site"
@@ -389,9 +448,10 @@ def saidas_mp(con, mp: dict[str, dict] | None = None, dman: dict[str, dict] | No
     """mp_id → (dados do pagamento, motivo) de cada pagamento que é SAÍDA (feito pela CAMP)."""
     mp = _mp_rows(con) if mp is None else mp
     dman = _direcoes(con) if dman is None else dman
+    mov = movimentos(con)
     out: dict[str, tuple[dict, str]] = {}
     for mid, r in mp.items():
-        d, motivo = direcao_mp(r, (dman.get(mid) or {}).get("direcao"))
+        d, motivo = direcao_mp(r, (dman.get(mid) or {}).get("direcao"), _mov_de(mov, mid, r))
         if d == "saida" and (r.get("status") or "").lower() in CONTA:
             out[mid] = (r, motivo)
     for mid, x in dman.items():
@@ -400,18 +460,35 @@ def saidas_mp(con, mp: dict[str, dict] | None = None, dman: dict[str, dict] | No
     return out
 
 
-def _debitado(r: dict) -> float:
-    """O que saiu da conta: o valor que o site mandou (total pago, com tarifas); senão o líquido quando é maior que o bruto; senão bruto + tarifa."""
-    deb, v, liq, tar = _num(r.get("debitado")), _num(r.get("valor")) or 0.0, _num(r.get("liquido")), _num(r.get("tarifa"))
+def _debitado(r: dict, mov: dict | None = None) -> float:
+    """O que saiu da conta: o débito do livro (relatório de liberações/Extrato: o valor exato do Mercado Pago); senão o valor que o site mandou
+    (total pago); senão o líquido quando é maior que o bruto (site antigo); senão o bruto. As tarifas (fee_details) são do RECEBEDOR: somá-las
+    dava −R$ 482,24 numa compra que o Extrato mostra −R$ 472,24."""
+    if mov and (mov.get("debito") or 0) > 0 and not mov.get("credito"):
+        return round(mov["debito"], 2)
+    deb, v, liq = _num(r.get("debitado")), _num(r.get("valor")) or 0.0, _num(r.get("liquido"))
     if deb and deb > 0:
         return deb
     if liq is not None and liq > v:
         return liq
-    return round(v + (tar or 0.0), 2)
+    return round(v, 2)
 
 
 def _ev_mp(con, mid: str, tipo: str, ator: str, detalhe: dict) -> None:
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('mp_pagamento',?,?,?,?)", (mid, tipo, ator, json.dumps(detalhe, ensure_ascii=False)))
+
+
+def rotulo_generico(txt: str) -> bool:
+    """Texto que é rótulo do painel ou do Mercado Pago, não o nome de quem recebeu ("Recebido direto no Mercado Pago", "Pagamento com o saldo do
+    Mercado Pago"…). Rafael viu uma despesa com o título "Recebido direto no Mercado Pago": o "Isto é uma saída" levava o rótulo da receita como
+    quem recebeu."""
+    from . import despesas
+    t = " ".join(str(txt or "").split()).lower()
+    if not t:
+        return True
+    rot = {v.lower() for v in ORIGENS.values()} | {"pagamento do mercado pago"}
+    rot |= {str(x).lower() for x in getattr(despesas, "ROTULOS_MP", ())}
+    return t in rot or t.startswith("pagamento com o saldo do mercado pago") or t.startswith("recebido direto no mercado pago")
 
 
 def reprocessar_saidas_mp(con, ator: str = "painel") -> dict:
@@ -424,6 +501,10 @@ def reprocessar_saidas_mp(con, ator: str = "painel") -> dict:
     try:
         mp, dman = _mp_rows(con), _direcoes(con)
         alvos = saidas_mp(con, mp, dman)
+        mov = movimentos(con)
+        for d in con.execute("SELECT id, contraparte FROM despesa WHERE origem='mp' AND COALESCE(contraparte,'')<>''").fetchall():
+            if rotulo_generico(d["contraparte"]):    # linha antiga com o rótulo da receita no lugar de quem recebeu: limpa (o nome real entra a seguir)
+                con.execute("UPDATE despesa SET contraparte=NULL WHERE id=?", (d["id"],))
         sem_tarifa = "COALESCE(categoria,'') NOT IN ('tarifas','impostos')"
         for mid, (r, motivo) in sorted(alvos.items()):
             row = mp.get(mid) or {}
@@ -438,10 +519,16 @@ def reprocessar_saidas_mp(con, ator: str = "painel") -> dict:
                                 (*refs, f"mpp:{mid}")).fetchall()
             ativa = next((a for a in achou if not a["apagado_em"]), None)
             man = _json((dman.get(mid) or {}).get("dados"), {})     # "Isto é uma saída" numa receita: quem estava na linha (o pagador)
-            quem = _txt(r.get("contraparte") or man.get("contraparte") or r.get("descricao"), 160)
+            quem = next((q for q in (_txt(v, 160) for v in (r.get("contraparte"), man.get("contraparte"), r.get("descricao"))) if q and not rotulo_generico(q)), "")
             if ativa:
                 if quem:
                     con.execute("UPDATE despesa SET contraparte=COALESCE(NULLIF(contraparte,''), ?) WHERE id=?", (quem, ativa["id"]))
+                certo = _debitado(r, _mov_de(mov, mid, r))
+                va = con.execute("SELECT valor, chave FROM despesa WHERE id=?", (ativa["id"],)).fetchone()
+                if va and va["chave"].startswith("mpp:") and certo > 0 and abs((va["valor"] or 0) - certo) > 0.005:   # o valor exato do Mercado Pago
+                    con.execute("UPDATE despesa SET valor=?, alterado_por=?, alterado_em=datetime('now') WHERE id=?", (certo, ator, ativa["id"]))
+                    despesas._ev(con, ativa["id"], "valor_corrigido", ator, {"de": va["valor"], "para": certo, "mp_id": mid})
+                    out["valores_corrigidos"] = out.get("valores_corrigidos", 0) + 1
                 out["ja_existiam"] += 1
                 continue
             volta = next((a for a in achou if a["apagado_motivo"] == MOTIVO_ENTRADA), None)
@@ -458,7 +545,7 @@ def reprocessar_saidas_mp(con, ator: str = "painel") -> dict:
             dia = dia_sp(r.get("aprovado_em") or r.get("data")) or hoje().isoformat()
             did = con.execute("""INSERT OR IGNORE INTO despesa (conta_id, data, valor, meio, contraparte, descricao, origem, chave, tipo, justificativa, mp_ref, criado_por)
                                  VALUES (?,?,?,?,?,?, 'mp', ?, 'despesa', ?, ?, 'Mercado Pago')""",
-                              (CONTA_MP, dia, _debitado(r), meio, quem or None, desc, f"mpp:{mid}", _txt(row.get("nota"), 500) or None, mid)).lastrowid
+                              (CONTA_MP, dia, _debitado(r, _mov_de(mov, mid, r)), meio, quem or None, desc, f"mpp:{mid}", _txt(row.get("nota"), 500) or None, mid)).lastrowid
             if did:
                 despesas._ev(con, did, "importada", ator, {"origem": "pagamentos do Mercado Pago (saída)", "mp_id": mid, "motivo": motivo})
                 out["criadas"] += 1
@@ -724,6 +811,10 @@ def coletar_mp(con=None, wp=None, de: str | None = None, ate: str | None = None)
             if not isinstance(d, dict):
                 raise RuntimeError("O site devolveu formato inválido para os pagamentos do Mercado Pago")
             out["paginas"] += 1
+            bp = str(d.get("busca_pagos") or "")      # contrato 1.37 (site 1.46.0): a busca do que a CAMP pagou (payer.id)
+            if bp and out.get("busca_pagos") != "falhou":
+                out["busca_pagos"] = bp
+            out["pagos"] = out.get("pagos", 0) + int(d.get("pagos") or 0)
             for x in d.get("itens") or []:
                 if isinstance(x, dict):
                     out["lidos"] += 1
@@ -737,6 +828,8 @@ def coletar_mp(con=None, wp=None, de: str | None = None, ate: str | None = None)
         _estado_set(con, "mp_ate", max(_estado(con, "mp_ate") or ate, ate))
         for k in ("sem_rota", "desligado", "ultimo_erro"):
             _estado_set(con, k, "")
+        _estado_set(con, "busca_pagos", out.get("busca_pagos") or "site_antigo")
+        _estado_set(con, "ultimo_periodo", f"{de}|{ate}")
         con.commit()
         out["saidas"] = reprocessar_saidas_mp(con, "Mercado Pago")
     except Exception as e:  # noqa: BLE001
@@ -787,19 +880,20 @@ def estado_mp(con) -> dict:
     return {"ultima_busca": _estado(con, "ultima_busca"), "ultimo_erro": _estado(con, "ultimo_erro"), "sem_rota": bool(_estado(con, "sem_rota")),
             "desligado": bool(_estado(con, "desligado")), "de": _estado(con, "mp_de"), "ate": _estado(con, "mp_ate"),
             "em_andamento": bool(_SINC.locked()), "pagamentos": con.execute("SELECT COUNT(*) FROM mp_pagamento").fetchone()[0],
-            "tem_site": _tem_site(con), "versao_site": VERSAO_SITE}
+            "tem_site": _tem_site(con), "versao_site": VERSAO_SITE, "busca_pagos": _estado(con, "busca_pagos") or None,
+            "ultimo_periodo": _estado(con, "ultimo_periodo") or None}
 
 
 _SINC = threading.Lock()
 
 
-def _sincronizar_fundo() -> None:
+def _sincronizar_fundo(de: str | None = None, ate: str | None = None) -> None:
     if not _SINC.acquire(blocking=False):
         return
     try:
         con = connect()
         try:
-            coletar_mp(con)
+            coletar_mp(con, de=de, ate=ate)
             try:
                 from . import despesas
                 despesas.rodada_mp(con, force=True)
@@ -1124,8 +1218,34 @@ def mp_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+class Periodo(BaseModel):
+    de: str = ""
+    ate: str = ""
+
+
+def periodo_valido(de: str, ate: str) -> tuple[str, str] | tuple[None, None]:
+    """("AAAA-MM-DD", "AAAA-MM-DD") de um período escolhido pela equipe (Buscar período), ou (None, None) sem período. 400 se inválido:
+    datas reais, de <= até, até no máximo hoje, no máximo 366 dias de uma vez, nada antes de 2020."""
+    de, ate = (de or "").strip(), (ate or "").strip()
+    if not de and not ate:
+        return None, None
+    try:
+        d0, d1 = date.fromisoformat(de), date.fromisoformat(ate or hoje().isoformat())
+    except ValueError as e:
+        raise HTTPException(400, "Período inválido: use datas no formato AAAA-MM-DD") from e
+    d1 = min(d1, hoje())
+    if d0 > d1 or d0.year < 2020:
+        raise HTTPException(400, "Período inválido: a data inicial tem de ser antes da final (e de 2020 em diante)")
+    if (d1 - d0).days > 366:
+        raise HTTPException(400, "Período longo demais: busque até 12 meses de cada vez")
+    return d0.isoformat(), d1.isoformat()
+
+
 @router.post("/mp/sincronizar")
-def mp_sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
+def mp_sincronizar(b: Periodo | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Sem corpo: a volta de sempre (últimos 40 dias). Com {de, ate} (CAMP-FIN, "Buscar período"): relê esse período no Mercado Pago, para
+    compras e recebimentos mais antigos que a janela automática (Rafael: "paguei uma compra de mais de 1700 reais e não está lá")."""
+    de, ate = periodo_valido(b.de, b.ate) if b else (None, None)
     con = connect()
     try:
         if not _tem_site(con):
@@ -1134,8 +1254,9 @@ def mp_sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
     if _SINC.locked():
         return {"ok": True, "iniciado": False, "mensagem": "Já está sincronizando."}
-    threading.Thread(target=_sincronizar_fundo, daemon=True).start()
-    return {"ok": True, "iniciado": True, "mensagem": "Sincronizando com o Mercado Pago em segundo plano. Atualize a tela em alguns minutos."}
+    threading.Thread(target=_sincronizar_fundo, args=(de, ate), daemon=True).start()
+    return {"ok": True, "iniciado": True, "de": de, "ate": ate,
+            "mensagem": "Sincronizando com o Mercado Pago em segundo plano. Atualize a tela em alguns minutos."}
 
 
 class Conta(BaseModel):

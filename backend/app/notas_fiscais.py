@@ -266,7 +266,7 @@ def preparar(did: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         hist = [{"canal": h["canal"], "canal_nome": CANAIS.get(h["canal"], h["canal"]), "situacao": h["situacao"], "para": h["para"] or "", "erro": h["erro"] or "",
                  "quando": h["criado_em"], "por": h["criado_por"] or ""}
                 for h in con.execute("SELECT * FROM nota_pedido WHERE despesa_id=? ORDER BY id DESC LIMIT 20", (did,))]
-        tem_comp = bool(con.execute("SELECT 1 FROM despesa_anexo WHERE despesa_id=?", (did,)).fetchone())
+        tem_comp = bool(con.execute("SELECT 1 FROM despesa_anexo WHERE despesa_id=? AND apagado_em IS NULL", (did,)).fetchone())
         return {"despesa_id": did, "email": ct["email"], "whatsapp": ct["whatsapp"], "contato_guardado": bool(ct["email"] or ct["whatsapp"]), **m,
                 "situacao": situacao(con, r), "historico": hist, "tem_comprovante": tem_comp,
                 "smtp": email_envio.configurado(email_envio.configuracao(con)), "dados_camp": dados_camp(con)}
@@ -307,7 +307,7 @@ def pedir(did: int, b: Pedido, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         r = _despesa(con, did)
-        if con.execute("SELECT 1 FROM despesa_anexo WHERE despesa_id=?", (did,)).fetchone():
+        if con.execute("SELECT 1 FROM despesa_anexo WHERE despesa_id=? AND apagado_em IS NULL", (did,)).fetchone():
             raise HTTPException(409, "Esta despesa já tem comprovante: não é preciso pedir a nota")
         m = montar(con, r, b)
         if m["faltam"]:
