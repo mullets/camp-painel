@@ -44,6 +44,7 @@ MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista d
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"patrocinios_autentique"}   # CAMP-PAT-AUTENTIQUE 23/11/2026: contrato do patrocínio pela Autentique (site e Autentique falsos; contrato 1.32)
+MODOS_RAPIDOS |= {"financeiro_contas_fixas"}   # CAMP-FIN 24/11/2026: aluguel, pessoal e contas fixas (categorias, DRE, casar com o Mercado Pago, situação do mês, projeção, privacidade, LGPD; linha própria)
 MODOS_RAPIDOS |= {"financeiro_inteligencia"}   # CAMP-FIN 24/11/2026: inteligência do Financeiro (regras aprendidas, alertas, recorrentes, projeção, busca natural, leitura desligada; linha própria)
 MODOS_RAPIDOS |= {"financeiro_dre"}   # CAMP-FIN 24/11/2026: DRE gerencial (regime de caixa; contas separadas; anterior e acumulado; mensal; linha própria)
 MODOS_RAPIDOS |= {"financeiro_despesas"}   # CAMP-FIN 24/11/2026: despesas (relatório de liberações do Mercado Pago pelo site, OFX, à mão, comprovantes; linha própria)
@@ -20096,7 +20097,7 @@ def filho(modo):
         c = connect()
         cf = c.execute("SELECT valor FROM configuracao WHERE chave='despesas.categorias'").fetchone()
         ver("migração 250: tabelas e as 10 categorias padrão (ITG 2002)", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('despesa','despesa_anexo','mp_relatorio')").fetchone()[0] == 3
-            and cf is not None and len(_j.loads(cf[0])) == 10 and "Tarifas bancárias e do Mercado Pago" in _j.loads(cf[0]).values())
+            and cf is not None and len(_j.loads(cf[0])) >= 10 and "Tarifas bancárias e do Mercado Pago" in _j.loads(cf[0]).values())
         c.execute("UPDATE configuracao SET valor='2026-10-01' WHERE chave='financeiro.mp_inicio'"); c.commit()
         sf.semear(c)
         class Resp:
@@ -20415,6 +20416,158 @@ def filho(modo):
         from app import pendencias
         g = [g_ for g_ in pendencias.tarefas(c, "admin") if g_["id"] == "despesas"]
         ver("Home do admin: alertas do Financeiro com o porquê (prioridade baixa)", g and any("cobrança repetida" in i["titulo"] and i["sev"] == "b" and i["detalhe"] for i in g[0]["itens"]), g[0]["itens"] if g else None)
+        for l in res: print(l)
+    elif modo == "financeiro_contas_fixas":
+        # CAMP-FIN contas fixas 24/11/2026. Rafael: "Aluguel, funcionário?". Prova: categorias novas (as antigas ficam; migração idempotente e
+        # sem trocar nome que o admin mudou); DRE com Pessoal (salários, encargos, bolsas, autônomos) e Ocupação (aluguel, consumo), configurável;
+        # conta fixa casada pela pista + valor (± 5%) + data, com a categoria e a justificativa sugeridas e confirmadas num clique; situações
+        # pago / a vencer / atrasado (vencimento + 3 dias) / valor diferente; projeção pelas contas fixas; sugestão do detector de recorrentes;
+        # exportação com o pessoal agrupado sem nomes (padrão); 403 fora de admin; nome fora da Home e do operador; exclusão LGPD tira o nome.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, io as _io
+        from fastapi.testclient import TestClient
+        from app import auth, financeiro as fi, financeiro_ia as ia, despesas as dp, dre, pendencias, lgpd
+        from app import contas_fixas as cfx
+        from app.db import executar_script_idempotente
+        from app.main import app
+        from datetime import date as _date
+        fi._HOJE = _date(2026, 11, 24)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cats = dp.categorias(c)
+        ver("migração 252: categorias novas (aluguel, consumo, Pessoal em quatro) e as 10 de antes ficam", cats.get("aluguel") == "Aluguel e condomínio"
+            and cats.get("consumo") == "Contas de consumo (luz, água, internet, telefone)" and cats.get("salarios") == "Salários" and cats.get("encargos") == "Encargos (INSS, FGTS, férias, 13º)"
+            and cats.get("bolsas") == "Bolsas e estágio" and cats.get("autonomos") == "Autônomos e RPA" and cats.get("servicos") == "Serviços de terceiros (PJ)"
+            and {"materiais", "frete", "pessoal", "tecnologia", "tarifas", "eventos", "manutencao", "impostos", "outras"} <= set(cats) and len(cats) == 16, cats)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='despesas.categorias'", (_j.dumps({"materiais": "Materiais", "aluguel": "Meu aluguel", "servicos": "Terceiros"}),))
+        executar_script_idempotente(c, (RAIZ / "db" / "migrations" / "252_contas_fixas.sql").read_text(encoding="utf-8")); c.commit()
+        c2 = dp.categorias(c)
+        ver("migração 252 de novo: idempotente, não troca o nome que o admin mudou", c2["aluguel"] == "Meu aluguel" and c2["materiais"] == "Materiais" and c2["servicos"] == "Terceiros"
+            and c2["salarios"] == "Salários" and len(c2) == 8, c2)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='despesas.categorias'", (_j.dumps(dict(dp.CATEGORIAS_PADRAO, servicos="Serviços de terceiros (PJ)"), ensure_ascii=False),)); c.commit()
+        n = [0]
+        def d(data, valor, quem, desc="Pix enviado ou saque", cat=None, just=None):
+            n[0] += 1
+            return c.execute("INSERT INTO despesa (data, valor, meio, contraparte, descricao, origem, chave, categoria, justificativa) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (data, valor, "pix", quem, desc, "mp", f"cf{n[0]}", cat, just)).lastrowid
+        for dt in ("2026-09-05", "2026-10-06"):
+            d(dt, 3000.0, "IMOBILIARIA SOL LTDA")
+        alu = d("2026-11-05", 3050.0, "IMOBILIARIA SOL LTDA")
+        net = d("2026-11-10", 199.9, "Vivo Telefonica", "Pix enviado · CNPJ 02558157000162")
+        sal = d("2026-11-05", 2500.0, "ANA SOUZA")
+        for dt in ("2026-08-12", "2026-09-12", "2026-10-12", "2026-11-12"):
+            d(dt, 89.9, "Hospedagem Web Ltda")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def novo(**k): return x.post("/api/financeiro/contas-fixas", json=dict({"inicio": "2026-01-01", "periodicidade": "mensal"}, **k))
+        r_alu = novo(nome="Aluguel da sede", categoria="aluguel", valor=3000, dia=5, pista="Imobiliária Sol")
+        r_net = novo(nome="Internet", categoria="consumo", valor=150, dia=10, pista="02.558.157/0001-62")
+        r_sal = novo(nome="Salário · Ana Souza", categoria="salarios", valor=2500, dia=5, pista="Ana Souza", pessoa_nome="Ana Souza", pessoa_email="ana@exemplo.com")
+        r_inss = novo(nome="INSS", categoria="encargos", valor=700, dia=20, pista="INSS")
+        r_con = novo(nome="Condomínio", categoria="aluguel", valor=380, valor_max=420, dia=28, pista="Condominio Edificio Azul")
+        r_13 = novo(nome="13º · Ana Souza", categoria="salarios", valor=2500, periodicidade="decimo_terceiro", pista="Ana Souza", pessoa_nome="Ana Souza", pessoa_email="ana@exemplo.com")
+        ids = {k: r_.json().get("id") for k, r_ in (("alu", r_alu), ("net", r_net), ("sal", r_sal), ("inss", r_inss), ("con", r_con), ("13", r_13))}
+        ver("Novo compromisso: 6 contas fixas (mensal, faixa de valor, 13º com dia 20 por padrão), com histórico sem o nome da pessoa",
+            all(r_.status_code == 200 for r_ in (r_alu, r_net, r_sal, r_inss, r_con, r_13)) and r_13.json()["dia"] == 20 and r_con.json()["esperado"] == 400.0
+            and r_sal.json()["pessoal"] and "Ana Souza" not in "".join(r[0] for r in c.execute("SELECT detalhe FROM evento WHERE entidade='conta_fixa'")), [r_.text[:120] for r_ in (r_alu, r_13)])
+        ver("validação: categoria desconhecida, fim antes do começo, dia 0 = 400", novo(nome="X", categoria="xyz", valor=1, dia=1).status_code == 400
+            and novo(nome="X", categoria="aluguel", valor=1, dia=1, fim="2025-01-01").status_code == 400 and novo(nome="X", categoria="aluguel", valor=1, dia=0).status_code == 400)
+        cas = cfx.casamentos(c, _date(2026, 11, 1), _date(2026, 11, 30))
+        ca = cas.get((ids["alu"], "2026-11"))
+        ver("casa a saída do Mercado Pago pela pista + valor (± 5%: R$ 3.050 de R$ 3.000) + data, sem gravar nada", ca and ca["despesa"]["id"] == alu and ca["valor_ok"]
+            and not ca["confirmado"] and "Imobiliária Sol" in ca["motivo"] and c.execute("SELECT categoria FROM despesa WHERE id=?", (alu,)).fetchone()[0] is None, ca)
+        sg = x.get(f"/api/financeiro/ia/despesa/{alu}").json().get("conta_fixa") or {}
+        ver("fila Precisa justificar: sugere a conta fixa com a categoria e a justificativa prontas ('Aluguel da sede · novembro/2026')", sg.get("conta_fixa_id") == ids["alu"]
+            and sg.get("categoria") == "aluguel" and sg.get("justificativa") == "Aluguel da sede · novembro/2026" and sg.get("competencia") == "2026-11" and sg.get("motivo"), sg)
+        G = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        cel = lambda k, m: next(l_ for l_ in G["contas"] if l_["id"] == ids[k])["meses"][m - 1]
+        ver("situação: pago (a confirmar) com a despesa; valor diferente (a pista do CNPJ, R$ 199,90 de R$ 150)", cel("alu", 11)["situacao"] == "pago" and cel("alu", 11)["despesa_id"] == alu
+            and not cel("alu", 11)["confirmado"] and cel("net", 11)["situacao"] == "valor_diferente" and cel("net", 11)["despesa_id"] == net, (cel("alu", 11), cel("net", 11)))
+        ver("situação: atrasado depois do vencimento + 3 dias (INSS dia 20, hoje 24/11; salário de outubro sem pagamento)", cel("inss", 11)["situacao"] == "atrasado"
+            and cel("sal", 10)["situacao"] == "atrasado" and cel("sal", 11)["situacao"] == "pago", (cel("inss", 11), cel("sal", 10)))
+        ver("situação: a vencer (condomínio dia 28; 13º só em dezembro; sem célula antes do começo nem nos outros meses do 13º)", cel("con", 11)["situacao"] == "a_vencer"
+            and cel("13", 12)["situacao"] == "a_vencer" and cel("13", 11) is None and cel("alu", 12)["situacao"] == "a_vencer", (cel("con", 11), cel("13", 12)))
+        fi._HOJE = _date(2026, 11, 23)
+        G23 = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        ver("no 3º dia depois do vencimento ainda é 'a vencer'", next(l_ for l_ in G23["contas"] if l_["id"] == ids["inss"])["meses"][10]["situacao"] == "a_vencer")
+        fi._HOJE = _date(2026, 11, 24)
+        tn = G["totais"][10]
+        ver("Este mês e o total do mês: comprometido × pago", G["este_mes"]["texto"] == "Este mês: 3 contas fixas pagas de 5 · R$ 1.100,00 a pagar" and G["este_mes"]["atrasadas"] == 1
+            and tn["comprometido"] == 6750.0 and tn["pago"] == round(3050 + 199.9 + 2500, 2), (G["este_mes"], tn))
+        rc_ = x.post(f"/api/financeiro/contas-fixas/{ids['alu']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"})
+        dd = c.execute("SELECT categoria, justificativa FROM despesa WHERE id=?", (alu,)).fetchone()
+        G2 = x.get("/api/financeiro/contas-fixas?ano=2026").json()
+        ver("um clique confirma: a despesa ganha a categoria e a justificativa e o mês fica pago e confirmado, com histórico", rc_.status_code == 200 and tuple(dd) == ("aluguel", "Aluguel da sede · novembro/2026")
+            and next(l_ for l_ in G2["contas"] if l_["id"] == ids["alu"])["meses"][10]["confirmado"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='conta_fixa' AND tipo='pagamento_confirmado'").fetchone()[0] == 1, (rc_.text[:200], tuple(dd)))
+        ver("confirmar a mesma despesa em outra conta fixa: 409; mês em que não vence: 400", x.post(f"/api/financeiro/contas-fixas/{ids['inss']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"}).status_code == 409
+            and x.post(f"/api/financeiro/contas-fixas/{ids['13']}/confirmar", json={"despesa_id": sal, "competencia": "2026-11"}).status_code == 400)
+        x.post(f"/api/financeiro/contas-fixas/{ids['sal']}/confirmar", json={"despesa_id": sal, "competencia": "2026-11"})
+        sgd = {s_["nome"]: s_ for s_ in G["sugeridas"]}
+        ver("detector de recorrentes: 'Parece um pagamento mensal: transformar em conta fixa?' (hospedagem), e não o aluguel, que já é conta fixa",
+            "Hospedagem Web Ltda" in sgd and sgd["Hospedagem Web Ltda"]["texto"] == "Parece um pagamento mensal: transformar em conta fixa?" and sgd["Hospedagem Web Ltda"]["dia"] == 12
+            and not any("IMOBILIARIA" in k_.upper() for k_ in sgd), list(sgd))
+        P = ia.projecao(c, "2026-11-30")
+        pm = {m["mes"]: m for m in P["meses"]}
+        ver("projeção de 3 meses pelas contas fixas (dezembro com o 13º) + a recorrente que não é conta fixa, sem contar o aluguel duas vezes",
+            pm["2026-12"]["despesas"] == round(3000 + 150 + 2500 + 700 + 400 + 2500 + 89.9, 2) and pm["2027-01"]["despesas"] == round(3000 + 150 + 2500 + 700 + 400 + 89.9, 2)
+            and any(e_.startswith("conta fixa (Aluguel da sede)") for e_ in pm["2026-12"]["explica"]) and not any("IMOBILIARIA" in e_ for e_ in pm["2026-12"]["explica"]), pm["2026-12"])
+        Hm = [g_ for g_ in pendencias.tarefas(c, "admin") if g_["id"] == "despesas"]
+        hi = [i_ for i_ in (Hm[0]["itens"] if Hm else []) if "contas fixas atrasadas" in i_["titulo"]]
+        ver("Home do admin: as contas atrasadas numa linha (vencimento + 3 dias); pessoal pela categoria, sem o nome da pessoa", len(hi) == 1 and hi[0]["titulo"] == "5 contas fixas atrasadas"
+            and hi[0]["detalhe"].startswith("Condomínio, Encargos (INSS, FGTS, férias, 13º), Internet, Salários ·") and "Ana Souza" not in _j.dumps(Hm, ensure_ascii=False)
+            and hi[0]["acao"]["alvo"] == "financeiro/contas-fixas" and hi[0]["sev"] == "a", hi)
+        Ho = pendencias.tarefas(c, "operador")
+        ver("operador: nada do Financeiro na Home e nenhum nome", not [g_ for g_ in Ho if g_["id"] == "despesas"] and "Ana Souza" not in _j.dumps(Ho, ensure_ascii=False))
+        ver("operador: 403 em contas fixas (ver, criar, mudar, apagar, confirmar) e na exportação das despesas", all(r_.status_code == 403 for r_ in (
+            op.get("/api/financeiro/contas-fixas"), op.post("/api/financeiro/contas-fixas", json={"nome": "x"}), op.put(f"/api/financeiro/contas-fixas/{ids['alu']}", json={"nome": "x"}),
+            op.delete(f"/api/financeiro/contas-fixas/{ids['alu']}"), op.post(f"/api/financeiro/contas-fixas/{ids['alu']}/confirmar", json={"despesa_id": alu, "competencia": "2026-11"}),
+            op.get("/api/financeiro/despesas/exportar.csv?mes=2026-11"), op.get("/api/financeiro/despesas?mes=2026-11"))))
+        cv1 = x.get("/api/financeiro/despesas/exportar.csv?mes=2026-11").content.decode("utf-8-sig")
+        cv0 = x.get("/api/financeiro/despesas/exportar.csv?mes=2026-11&agrupar_pessoal=0").content.decode("utf-8-sig")
+        lsal = [l_ for l_ in cv1.splitlines() if ";Salários;" in l_]
+        ver("exportação CSV: 'agrupar pessoal' ligado por padrão (Salários numa linha, total, sem nomes); desligado mostra as linhas", "ANA SOUZA" not in cv1 and "Ana Souza" not in cv1
+            and len(lsal) == 1 and "2500,00" in lsal[0] and "Pessoal agrupado: total sem nomes" in lsal[0] and "pessoal agrupado, sem nomes" in cv1.splitlines()[0]
+            and "ANA SOUZA" in cv0 and "IMOBILIARIA SOL LTDA" in cv1, lsal)
+        from openpyxl import load_workbook
+        def aba_desp(q):
+            wb = load_workbook(_io.BytesIO(x.get("/api/financeiro/exportar.xlsx?mes=2026-11" + q).content))
+            return "\n".join(" ".join(str(v_) for v_ in r__ if v_ is not None) for r__ in wb["Despesas"].iter_rows(values_only=True))
+        a1, a0 = aba_desp(""), aba_desp("&agrupar_pessoal=0")
+        ver("exportação XLSX: pessoal agrupado sem nomes por padrão; com agrupar_pessoal=0, as linhas", "ANA SOUZA" not in a1 and "Ana Souza" not in a1 and "Pessoal agrupado" in a1 and "ANA SOUZA" in a0, a1[-300:])
+        for i, (cat, v) in enumerate((("aluguel", 3000), ("consumo", 150), ("salarios", 2500), ("encargos", 700), ("bolsas", 800), ("autonomos", 300), ("servicos", 400), ("pessoal", 100))):
+            c.execute("INSERT INTO despesa (data, valor, origem, chave, categoria, justificativa) VALUES (?,?,?,?,?,?)", (f"2026-12-0{i + 1}", v, "manual", f"dre{i}", cat, "ok"))
+        c.commit()
+        M = dre.montar(c, "2026-12-01", "2026-12-31")
+        L = {l_["chave"]: l_ for l_ in M["linhas"]}
+        ordem = [l_["chave"] for l_ in M["linhas"]]
+        ver("DRE: Pessoal soma salários, encargos, bolsas, autônomos (e o 'pessoal' antigo); Ocupação soma aluguel e consumo; PJ em atividades",
+            L["desp_pessoal"]["atual"] == 4400.0 and L["desp_ocupacao"]["atual"] == 3150.0 and L["desp_atividades"]["atual"] == 400.0 and L["despesas_total"]["atual"] == 7950.0
+            and L["desp_pessoal"]["rotulo"].startswith("Pessoal") and L["desp_ocupacao"]["rotulo"] == "Ocupação (aluguel, condomínio e contas de consumo)", {k: L[k]["atual"] for k in L if k.startswith("desp")})
+        ver("DRE: as linhas de Pessoal e Ocupação abertas por categoria logo abaixo (só mostram, não somam de novo)", L["categoria:salarios"]["atual"] == 2500.0
+            and L["categoria:encargos"]["tipo"] == "det" and L["categoria:encargos"]["nivel"] == 2 and ordem.index("categoria:salarios") == ordem.index("desp_pessoal") + 1
+            and L["categoria:aluguel"]["atual"] == 3000.0 and ordem.index("categoria:aluguel") > ordem.index("desp_ocupacao") and L["categoria:autonomos"]["rotulo"] == "Autônomos e RPA", ordem)
+        dl = x.get("/api/financeiro/dre/linha?linha=categoria:salarios&mes=2026-12").json()
+        ver("DRE: clicar na linha da categoria abre os lançamentos", dl.get("total") == 2500.0 and len(dl.get("itens") or []) == 1 and dl.get("rotulo") == "Salários", dl)
+        x.put("/api/financeiro/dre/mapa", json={"mapa": {"categoria:aluguel": "desp_admin", "categoria:consumo": "desp_admin"}})
+        L2 = {l_["chave"]: l_ for l_ in dre.montar(c, "2026-12-01", "2026-12-31")["linhas"]}
+        ver("DRE configurável: aluguel e consumo em Administrativas; a linha Ocupação some", L2["desp_admin"]["atual"] == 3150.0 and "desp_ocupacao" not in L2
+            and L2["despesas_total"]["atual"] == 7950.0, {k: L2[k]["atual"] for k in L2 if k.startswith("desp")})
+        lg = lgpd.apagar_pessoa_local(c, "ana@exemplo.com")
+        tudo = _j.dumps([tuple(r) for r in c.execute("SELECT * FROM conta_fixa")] + [tuple(r) for r in c.execute("SELECT * FROM despesa")], ensure_ascii=False)
+        ver("exclusão LGPD da pessoa: o nome sai das contas fixas e das despesas ligadas; os valores ficam", lg.get("conta_fixa") == 2 and "Ana Souza" not in tudo and "ANA SOUZA" not in tudo
+            and tuple(c.execute("SELECT contraparte, valor FROM despesa WHERE id=?", (sal,)).fetchone()) == ("(nome removido)", 2500.0)
+            and c.execute("SELECT nome FROM conta_fixa WHERE id=?", (ids["sal"],)).fetchone()[0] == "Salário · (nome removido)"
+            and c.execute("SELECT valor FROM conta_fixa WHERE id=?", (ids["sal"],)).fetchone()[0] == 2500.0, lg)
+        ver("busca natural entende as categorias novas ('aluguel outubro', 'salários 2026')", ia.interpretar("aluguel outubro", dp.categorias(c)).get("categoria") == "aluguel"
+            and ia.interpretar("salários 2026", dp.categorias(c)).get("categoria") == "salarios")
+        ver("palavra-chave: conta de energia vai para consumo (não para manutenção)", (ia.sugerir_categoria(c, {"contraparte": "ENEL ENERGIA ELETRICA", "descricao": "", "valor": 300}) or {}).get("categoria") == "consumo")
+        rd = x.delete(f"/api/financeiro/contas-fixas/{ids['con']}")
+        ver("apagar uma conta fixa: sai da grade", rd.status_code == 200 and ids["con"] not in [l_["id"] for l_ in x.get("/api/financeiro/contas-fixas?ano=2026").json()["contas"]])
         for l in res: print(l)
     elif modo == "patrocinios_autentique":
         # CAMP-PAT-AUTENTIQUE 23/11/2026 (Autentique e site FALSOS). Rafael: "sim, igual da doação no autentique". Prova: PDF → documento na
@@ -24258,6 +24411,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · inteligência: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 26, "Financeiro · inteligência: todas as verificações rodaram")
+
+print("Financeiro · contas fixas: categorias novas, DRE (Pessoal e Ocupação), casar com o Mercado Pago, pago/a vencer/atrasado/valor diferente, um clique na fila, projeção, sugestão, exportação sem nomes, 403, Home, LGPD")
+rc, out = rodar("financeiro_contas_fixas", f"{tmp}/financeiro_contas_fixas.db")
+if rc != 0: ok(False, f"teste financeiro_contas_fixas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · contas fixas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 28, "Financeiro · contas fixas: todas as verificações rodaram")
 
 print("Patrocínio de empresas · contrato pela Autentique: PDF → documento, e-mail do site com o link (e o pagamento junto), reaproveita, assinatura confere a etapa, PDF assinado, desligada, site antigo")
 rc, out = rodar("patrocinios_autentique", f"{tmp}/patrocinios_autentique.db")

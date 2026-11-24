@@ -813,11 +813,12 @@ def exportar_csv_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "",
 
 @router.get("/exportar.xlsx")
 def exportar_xlsx_rota(de: str = "", ate: str = "", mes: str = "", ano: str = "", documento: int = 0, conta: int = 0, tri: str = "",
-                       u: dict = Depends(auth.exige("admin"))):
+                       agrupar_pessoal: int = 1, u: dict = Depends(auth.exige("admin"))):
     d1, d2 = periodo(de, ate, mes, ano, tri)
     con = connect()
     try:
         rel = relatorio(con, d1, d2, "", "", bool(documento), conta)
+        rel["agrupar_pessoal"] = bool(agrupar_pessoal)   # CAMP-FIN contas fixas: pessoal numa linha por categoria, sem nomes (padrão)
     finally:
         con.close()
     return Response(exportar_xlsx(rel), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
