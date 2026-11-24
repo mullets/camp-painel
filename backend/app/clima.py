@@ -30,6 +30,8 @@ MARGEM_TEMP_C = 3.0            # fora da faixa por mais que isto = crítico
 MARGEM_UMID = 10.0
 VELHA_S = 3 * 3600             # leitura mais velha que isto = sensor "sem leitura recente"
 SOME_S = 7 * 86400             # sem leitura há mais que isto (ou nunca): o sensor some da tela
+SUMIU_S = 24 * 3600            # CAMP-CLIMA: a Tuya não devolve o aparelho há mais que isto (contado até a última coleta que deu certo) = "não aparece mais na Tuya"
+NOVO_S = 7 * 86400             # sensor achado pelo coletor há menos que isto e que nenhum admin mexeu = selo "novo"
 
 _lock = threading.Lock()
 _token: dict = {}              # {"chave": (id, base), "valor": str, "vence": monotonic}
@@ -240,7 +242,7 @@ def coletar() -> dict:
         try:
             with _cliente() as cliente:
                 api = Tuya(aid, seg, regiao, cliente)
-                leituras = []
+                leituras, fora_vistos = [], []
                 for d in api.dispositivos():
                     did = str(d.get("id") or "")
                     bruto = interpretar(d.get("status") or [])
@@ -248,6 +250,8 @@ def coletar() -> dict:
                         continue                                   # não é sensor de clima (tomada, lâmpada…)
                     ja = conhecidos.get(did)
                     if not _entra(so, did, d.get("name"), (ja or {}).get("nome")):
+                        if ja:
+                            fora_vistos.append((did, int(bool(d.get("online", True)))))   # conhecido: só anota que a Tuya ainda o devolve
                         continue                                   # fora da lista de clima.sensores: nem guarda
                     if ja and ja["escalas"]:
                         esc = json.loads(ja["escalas"] or "{}")
@@ -268,6 +272,8 @@ def coletar() -> dict:
                 if online and (conhecidos.get(did) or {}).get("ativo", 1):       # aparelho desconectado: a Tuya devolve o último valor; não vira leitura nova
                     con.execute("INSERT INTO clima_leitura (sensor_id, temperatura_c, umidade_pct, bateria_pct) VALUES (?,?,?,?)",
                                 (did, v["temperatura_c"], v["umidade_pct"], v["bateria_pct"]))
+            for did, online in fora_vistos:                # a Tuya ainda devolve: não é "não aparece mais na Tuya"
+                con.execute("UPDATE clima_sensor SET visto_em=datetime('now'), online=? WHERE id=?", (online, did))
             con.execute("DELETE FROM clima_leitura WHERE lido_em < datetime('now', ?)", (f"-{RETENCAO_DIAS} days",))
             con.commit()
         finally:
@@ -296,10 +302,25 @@ def serie(con, sensor_id: str, dias: int = 1, pontos: int = 120) -> list[dict]:
     return [{"em": r[0], "temperatura_c": r[1], "umidade_pct": r[2]} for r in linhas[::passo]]
 
 
+def ultima_coleta_ok(con) -> str | None:
+    r = con.execute("SELECT MAX(quando) FROM clima_coleta WHERE erro IS NULL").fetchone()
+    return r[0] if r else None
+
+
+def _sql_sumiu(ref: str | None) -> tuple[str, tuple]:
+    """Expressão SQL (0/1) de "não aparece mais na Tuya": a Tuya não devolve o aparelho há mais de 24 h, contadas até a ÚLTIMA COLETA
+    QUE DEU CERTO (Tuya sem responder ou credencial errada não faz todos os sensores 'sumirem'). Sem nenhuma coleta boa: ninguém sumiu."""
+    if not ref:
+        return "0", ()
+    return "(COALESCE(visto_em, criado_em) < datetime(?, ?))", (ref, f"-{SUMIU_S} seconds")
+
+
 def resumo(con, com_serie: bool = True) -> dict:
     fx = faixa(con)
     sensores, so = [], escolhidos(con)
-    for s in con.execute("SELECT id, nome, nome_tuya, online, ativo, visto_em FROM clima_sensor WHERE ativo=1 ORDER BY nome COLLATE NOCASE, id"):
+    sumiu, p_sumiu = _sql_sumiu(ultima_coleta_ok(con))
+    for s in con.execute(f"""SELECT id, nome, nome_tuya, online, ativo, visto_em FROM clima_sensor
+                              WHERE ativo=1 AND removido=0 AND NOT {sumiu} ORDER BY nome COLLATE NOCASE, id""", p_sumiu):
         u = con.execute("""SELECT lido_em, temperatura_c, umidade_pct, bateria_pct,
                                   CAST((julianday('now') - julianday(lido_em)) * 86400 AS INTEGER) AS idade_s
                              FROM clima_leitura WHERE sensor_id=? ORDER BY id DESC LIMIT 1""", (s["id"],)).fetchone()
@@ -323,6 +344,35 @@ def resumo(con, com_serie: bool = True) -> dict:
     return {"sensores": sensores, "faixa": fx, "coleta": dict(c) if c else None, "coletando": em_andamento(),
             "ligado": coleta_min(con) > 0, "coleta_min": coleta_min(con),
             "configurado": bool(_cfg(con, "clima.tuya_access_id") and _cfg(con, "clima.tuya_access_secret"))}
+
+
+def lista_sensores(con) -> dict:
+    """CAMP-CLIMA: todos os sensores conhecidos para a tela "Sensores" (admin), com o que a tela precisa para decidir: nome, nome na Tuya,
+    online, última leitura, "Usar no clima", "novo", "não aparece mais na Tuya" e se entra na média agora. Os removidos vêm à parte."""
+    so = escolhidos(con)
+    sumiu, p_sumiu = _sql_sumiu(ultima_coleta_ok(con))
+    linhas = con.execute(f"""SELECT id, nome, nome_tuya, online, ativo, removido, removido_em, visto_em, criado_em, alterado_em,
+                                    CAST((julianday('now') - julianday(COALESCE(visto_em, criado_em))) * 86400 AS INTEGER) AS visto_ha_s,
+                                    CASE WHEN alterado_em IS NULL AND criado_em >= datetime('now', ?) THEN 1 ELSE 0 END AS novo,
+                                    {sumiu} AS sumiu
+                               FROM clima_sensor ORDER BY removido, nome COLLATE NOCASE, id""", (f"-{NOVO_S} seconds", *p_sumiu)).fetchall()
+    sensores, removidos = [], []
+    for s in linhas:
+        u = con.execute("""SELECT lido_em, temperatura_c, umidade_pct, CAST((julianday('now') - julianday(lido_em)) * 86400 AS INTEGER) AS idade_s
+                             FROM clima_leitura WHERE sensor_id=? ORDER BY id DESC LIMIT 1""", (s["id"],)).fetchone()
+        n = con.execute("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id=?", (s["id"],)).fetchone()[0]
+        fora = not _entra(so, s["id"], s["nome"], s["nome_tuya"])
+        fresca = bool(u and u["idade_s"] <= VELHA_S)
+        item = {"id": s["id"], "nome": s["nome"], "nome_tuya": s["nome_tuya"], "online": bool(s["online"]), "ativo": bool(s["ativo"]),
+                "removido": bool(s["removido"]), "removido_em": s["removido_em"], "novo": bool(s["novo"]) and not s["removido"],
+                "sumiu": bool(s["sumiu"]), "visto_em": s["visto_em"], "visto_ha_s": s["visto_ha_s"], "fora_da_lista": fora, "leituras": n,
+                "ultima": ({"lido_em": u["lido_em"], "idade_s": u["idade_s"], "temperatura_c": u["temperatura_c"], "umidade_pct": u["umidade_pct"]}
+                           if u else None),
+                "na_media": bool(s["ativo"] and not s["removido"] and not s["sumiu"] and not fora and fresca)}
+        (removidos if s["removido"] else sensores).append(item)
+    c = con.execute("SELECT quando, sensores, erro, CAST((julianday('now') - julianday(quando)) * 86400 AS INTEGER) AS idade_s FROM clima_coleta ORDER BY id DESC LIMIT 1").fetchone()
+    return {"sensores": sensores, "removidos": removidos, "coleta": dict(c) if c else None, "coletando": em_andamento(),
+            "filtro_nomes": bool(so), "configurado": bool(_cfg(con, "clima.tuya_access_id") and _cfg(con, "clima.tuya_access_secret"))}
 
 
 def _ha(idade_s: int | None) -> str:

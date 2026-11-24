@@ -36,6 +36,7 @@ MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
 MODOS_RAPIDOS |= {"clima_resumo"}   # CAMP-HOME-CLIMA 21/11/2026: média do clima na barra do topo (GET /api/clima/resumo; linha própria)
+MODOS_RAPIDOS |= {"clima_sensores"}   # CAMP-CLIMA 24/11/2026: gerenciar sensores (nome, Usar no clima, Remover da lista) e sensor que sumiu da Tuya (linha própria)
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
@@ -2389,6 +2390,118 @@ def filho(modo):
             d.get("nivel") == "sem_leitura" and d.get("temperatura_c") is None and d.get("frase") == "Sem leitura há 4 h" and d.get("na_media") == 0, d)
         c.execute("UPDATE configuracao SET valor='0' WHERE chave='clima.coleta_min'"); c.commit()
         ver("desligado (clima.coleta_min = 0): não mostra nada, mesmo com sensores", le() == {"mostrar": False}, le())
+        for l in res: print(l)
+    elif modo == "clima_sensores":
+        # CAMP-CLIMA 24/11/2026. Rafael: "adicionei outros sensores de temperatura na sala, e vamos tirar aqueles 2 que já existiam."
+        # Tela "Sensores" (admin): nome, "Usar no clima", sensor novo achado pelo coletor, sensor que não aparece mais na Tuya (mais de 24 h)
+        # e "Remover da lista" (ativo=0 + removido; as leituras FICAM). A Tuya aqui é FALSA (httpx.MockTransport): nunca a de verdade.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import httpx
+        from fastapi import HTTPException, Request
+        from fastapi.testclient import TestClient
+        from app import auth, clima, rotas_clima
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        def disp(did, nome, t, u):
+            return {"id": did, "name": nome, "category": "wsdcg", "online": True, "status": [{"code": "va_temperature", "value": t}, {"code": "va_humidity", "value": u}]}
+        tuya = {"aparelhos": [disp("velho1", "Sala antiga 1", 200, 50), disp("velho2", "Sala antiga 2", 240, 60)], "erro": False}
+        def falsa(req):
+            caminho = req.url.raw_path.decode()
+            if caminho.startswith("/v1.0/token"):
+                return httpx.Response(200, json={"success": True, "result": {"access_token": "tok", "expire_time": 7200}})
+            if tuya["erro"]:
+                return httpx.Response(200, json={"success": False, "code": 500, "msg": "fora do ar"})
+            if caminho.startswith("/v1.0/iot-01/associated-users/devices"):
+                return httpx.Response(200, json={"success": True, "result": {"devices": list(tuya["aparelhos"]), "has_more": False, "last_row_key": ""}})
+            if caminho.endswith("/specification"):
+                return httpx.Response(200, json={"success": True, "result": {"status": [{"code": "va_temperature", "values": '{"scale": 1}'}, {"code": "va_humidity", "values": '{"scale": 0}'}]}})
+            return httpx.Response(404, json={"success": False, "msg": "rota desconhecida"})
+        clima._cliente = lambda: httpx.Client(transport=httpx.MockTransport(falsa), timeout=5)
+        c.execute("UPDATE configuracao SET valor='id-teste' WHERE chave='clima.tuya_access_id'")
+        c.execute("UPDATE configuracao SET valor='segredo-teste' WHERE chave='clima.tuya_access_secret'")
+        c.execute("UPDATE configuracao SET valor='10' WHERE chave='clima.coleta_min'"); c.commit()
+        cols = {r[1] for r in c.execute("PRAGMA table_info(clima_sensor)")}
+        ver("migração 255: clima_sensor ganha removido (padrão 0), removido_em, alterado_em e alterado_por", {"removido", "removido_em", "alterado_em", "alterado_por"} <= cols, cols)
+        auth.criar_usuario("Leitor", "leitor@camp.arq.br", "senha-bem-longa-123", "leitura", forcar_troca=False)
+        auth.criar_usuario("Oper", "oper@camp.arq.br", "senha-bem-longa-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-bem-longa-123", "admin", forcar_troca=False)
+        def entra(email):
+            k = TestClient(app, raise_server_exceptions=False); k.post("/api/auth/login", json={"email": email, "senha": "senha-bem-longa-123"}); return k
+        anon, lei, op, adm = TestClient(app, raise_server_exceptions=False), entra("leitor@camp.arq.br"), entra("oper@camp.arq.br"), entra("adm@camp.arq.br")
+        def lista():
+            r = adm.get("/api/clima/sensores"); return r.json() if r.status_code == 200 else {"status": r.status_code, "sensores": [], "removidos": []}
+        class _D(dict):
+            def __missing__(self, k): return None                 # sem o sensor (ou sem a rota): cada conferência falha sozinha, sem derrubar o modo
+        def item(did, chave="sensores"):
+            return _D(next((x for x in lista().get(chave, []) if x["id"] == did), {}))
+        def barra():
+            r = lei.get("/api/clima/resumo"); return r.json() if r.status_code == 200 else {}
+        def lan():
+            return rotas_clima.parede(Request({"type": "http", "client": ("192.168.15.77", 1), "method": "GET", "path": "/api/clima/parede", "headers": []}))
+        r = clima.coletar()
+        ver("coleta (Tuya falsa): os 2 sensores antigos, média 22,0° · 55%", r.get("erro") is None and r.get("sensores") == 2 and barra().get("temperatura_c") == 22.0 and barra().get("umidade_pct") == 55.0, (r, barra()))
+        # 1) só admin
+        ver("GET /api/clima/sensores: sem login 401, leitura 403, operador 403, admin 200", anon.get("/api/clima/sensores").status_code == 401
+            and lei.get("/api/clima/sensores").status_code == 403 and op.get("/api/clima/sensores").status_code == 403 and adm.get("/api/clima/sensores").status_code == 200)
+        ver("PUT sensor (nome, Usar no clima, Remover da lista): leitura e operador 403, nada muda",
+            all(k.put("/api/clima/sensores/velho1", json=j).status_code == 403 for k in (lei, op) for j in ({"nome": "X"}, {"ativo": False}, {"removido": True}))
+            and um("SELECT nome, ativo, removido FROM clima_sensor WHERE id='velho1'") == ("Sala antiga 1", 1, 0))
+        ver("PUT em sensor que não existe: 404", adm.put("/api/clima/sensores/nao-existe", json={"removido": True}).status_code == 404)
+        v1 = item("velho1")
+        ver("a lista traz nome, nome na Tuya, online, última leitura e quando, Usar no clima e se entra na média", bool(v1) and v1["nome_tuya"] == "Sala antiga 1"
+            and v1["online"] is True and v1["ativo"] is True and (v1["ultima"] or {}).get("temperatura_c") == 20.0 and (v1["ultima"] or {}).get("idade_s") is not None and v1["na_media"] is True
+            and v1["sumiu"] is False and v1["removido"] is False and "segredo-teste" not in str(lista()), v1)
+        # 2) sensor novo achado pelo coletor: aparece sozinho, ativo, com o selo "novo"
+        tuya["aparelhos"].append(disp("novo1", "Sala do acervo A", 230, 52)); clima.coletar()
+        n1 = item("novo1")
+        ver("sensor novo na conta da Tuya: aparece sozinho na lista, ativo e com o selo 'novo'", bool(n1) and n1["novo"] is True and n1["ativo"] is True and n1["na_media"] is True, n1)
+        ver("o sensor novo entra na média da barra (3 sensores: 22,3°)", barra().get("na_media") == 3 and barra().get("temperatura_c") == 22.3, barra())
+        ver("os antigos (achados há mais de 7 dias) não têm o selo 'novo'", (c.execute("UPDATE clima_sensor SET criado_em=datetime('now','-10 days') WHERE id LIKE 'velho%'"), c.commit()) and item("velho1")["novo"] is False)
+        r = adm.put("/api/clima/sensores/novo1", json={"nome": "Reserva técnica (nova)"})
+        ver("admin troca o nome: vale na lista, na barra e na parede; o selo 'novo' sai depois que um admin mexeu",
+            r.status_code == 200 and item("novo1")["nome"] == "Reserva técnica (nova)" and item("novo1")["novo"] is False
+            and "Reserva técnica (nova)" in [x["nome"] for x in (barra().get("salas") or [])] and "Reserva técnica (nova)" in [x["nome"] for x in lan()["sensores"]], item("novo1"))
+        # 3) tirar do clima ("Usar no clima" desligado): sai da média
+        adm.put("/api/clima/sensores/velho2", json={"ativo": False})
+        b = barra()
+        ver("'Usar no clima' desligado: o sensor sai da média (22,3° → 21,5°) e da parede", b.get("na_media") == 2 and b.get("temperatura_c") == 21.5
+            and "Sala antiga 2" not in [x["nome"] for x in lan()["sensores"]] and item("velho2")["ativo"] is False and item("velho2")["na_media"] is False, b)
+        # 4) sensor que não aparece mais na Tuya (mais de 24 h): marcado e fora da média e da parede, sem ninguém clicar
+        tuya["aparelhos"] = [x for x in tuya["aparelhos"] if x["id"] != "velho1"]; clima.coletar()
+        c.execute("UPDATE clima_sensor SET visto_em=datetime('now','-23 hours') WHERE id='velho1'"); c.commit()
+        ver("a Tuya não devolve o sensor há 23 h: ainda NÃO é 'não aparece mais na Tuya' (continua na média)", item("velho1")["sumiu"] is False and barra().get("na_media") == 2, item("velho1"))
+        c.execute("UPDATE clima_sensor SET visto_em=datetime('now','-25 hours') WHERE id='velho1'"); c.commit()
+        ver("há mais de 24 h: 'não aparece mais na Tuya', fora da média da barra (só o novo: 23,0°) e da parede",
+            item("velho1")["sumiu"] is True and item("velho1")["na_media"] is False and barra().get("na_media") == 1 and barra().get("temperatura_c") == 23.0
+            and "Sala antiga 1" not in [x["nome"] for x in lan()["sensores"]] and "velho1" not in {x["id"] for x in clima.resumo(c)["sensores"]}, (item("velho1"), barra()))
+        # a Tuya sem responder não faz todo mundo 'sumir': as 24 h contam até a última coleta que DEU CERTO
+        c.execute("UPDATE clima_coleta SET quando=datetime('now','-30 hours') WHERE erro IS NULL"); c.commit()
+        tuya["erro"] = True; clima.coletar(); tuya["erro"] = False
+        c.execute("UPDATE clima_sensor SET visto_em=datetime('now','-31 hours') WHERE id='novo1'")
+        c.execute("UPDATE clima_sensor SET visto_em=datetime('now','-60 hours') WHERE id='velho1'"); c.commit()
+        ver("Tuya sem responder há 30 h: o sensor visto na última coleta boa NÃO vira 'não aparece mais na Tuya'", item("novo1")["sumiu"] is False and item("velho1")["sumiu"] is True, item("novo1"))
+        clima.coletar()
+        # 5) clima.sensores (lista de nomes) não faz o sensor de fora 'sumir': a Tuya ainda o devolve
+        c.execute("UPDATE clima_sensor SET visto_em=datetime('now','-25 hours') WHERE id='velho2'")
+        c.execute("UPDATE configuracao SET valor='Sala do acervo A' WHERE chave='clima.sensores'"); c.commit(); clima.coletar()
+        ver("sensor fora de clima.sensores que a Tuya ainda devolve não é 'não aparece mais na Tuya'", item("velho2")["sumiu"] is False and item("velho2")["fora_da_lista"] is True, item("velho2"))
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='clima.sensores'"); c.commit()
+        # 6) Remover da lista: esconde (ativo=0 + removido), NUNCA apaga as leituras
+        n_v1 = um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='velho1'")[0]
+        r = adm.put("/api/clima/sensores/velho1", json={"removido": True})
+        ver("Remover da lista: ativo=0 e removido=1; sai da lista de sensores e vai para 'removidos'", r.status_code == 200
+            and um("SELECT ativo, removido FROM clima_sensor WHERE id='velho1'") == (0, 1) and not item("velho1") and bool(item("velho1", "removidos")), r.text[:200])
+        ver("Remover da lista não apaga nada: o sensor e as leituras ficam (histórico)", n_v1 >= 1 and um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='velho1'")[0] == n_v1
+            and um("SELECT COUNT(*) FROM clima_sensor WHERE id='velho1'")[0] == 1 and len(lei.get("/api/clima/serie?sensor=velho1&dias=7").json().get("serie", [])) == n_v1, n_v1)
+        tuya["aparelhos"].append(disp("velho1", "Sala antiga 1", 200, 50)); clima.coletar()
+        ver("removido que volta à Tuya continua fora (sem leitura nova, fora da média) até alguém devolver",
+            um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='velho1'")[0] == n_v1 and "velho1" not in {x["id"] for x in clima.resumo(c)["sensores"]} and not item("velho1"))
+        adm.put("/api/clima/sensores/velho1", json={"removido": False})
+        ver("Devolver à lista: volta para a lista, ainda com 'Usar no clima' desligado", bool(item("velho1")) and item("velho1")["ativo"] is False
+            and um("SELECT removido FROM clima_sensor WHERE id='velho1'")[0] == 0)
         for l in res: print(l)
     elif modo == "protocolos":
         # 02/11/2026 · protocolos (contrato 1.7): formato único, o do site quando vem, calculado quando não vem; telas, busca e avisos.
@@ -24557,6 +24670,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Clima na barra: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Sensores do clima: nome, Usar no clima, sensor novo, sensor que sumiu da Tuya, Remover da lista (só admin; leituras ficam)")
+rc, out = rodar("clima_sensores", f"{tmp}/clima_sensores.db")
+if rc != 0: ok(False, f"teste clima_sensores não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sensores do clima: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Relatório do CAMP Vision e gasto por fundo (diário do CV2, contrato 2.6)")
 rc, out = rodar("relatorio_cv", f"{tmp}/relatorio_cv.db")

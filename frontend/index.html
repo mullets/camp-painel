@@ -1249,6 +1249,20 @@ body.na-painel #system-banner.impede.on{display:flex!important}
 .clima-salas li span{margin-left:auto;color:var(--ink2);white-space:nowrap}
 .clima-pe{display:flex;gap:8px;border-top:1px solid var(--line2);padding-top:8px}
 @media (max-width:720px){.clima-btn{padding:6px 10px 6px 8px}.clima-umid,.clima-sem{display:none}.clima-painel{position:fixed;left:12px;right:12px;top:64px;width:auto}}
+/* CAMP-CLIMA (24/11/2026): janela "Sensores do clima" (admin), aberta pela pílula do clima */
+.modal .box.csen-box{width:min(720px,100%)}
+.csen-ajuda{margin:0;color:var(--ink2);font-size:var(--fs-2nd)}
+.csen-acoes{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}.csen-coleta{font-size:var(--fs-2nd);color:var(--ink2)}.csen-coleta.erro{color:var(--red)}
+.csen-lista{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.csen-item{border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:start}
+.csen-item.sumiu{border-color:var(--amber);background:var(--amber-soft)}.csen-item.desligado{background:var(--surface2)}
+.csen-nome{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}.csen-nome input{flex:1 1 180px;min-width:0;min-height:36px;font-weight:600;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);font-size:inherit}
+.csen-nome input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px var(--blue-soft)}
+.csen-meta{grid-column:1/-1;margin:0;font-size:var(--fs-2nd);color:var(--ink2);display:flex;flex-wrap:wrap;gap:4px 12px}
+.csen-usar{display:inline-flex;gap:6px;align-items:center;white-space:nowrap;min-height:36px;cursor:pointer}
+.csen-sumiu{grid-column:1/-1;margin:0;font-size:var(--fs-2nd);display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.csen-removidos summary{cursor:pointer;color:var(--ink2);font-size:var(--fs-2nd)}.csen-removidos .csen-lista{margin-top:8px}
+@media (max-width:720px){.csen-item{grid-template-columns:1fr}}
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
@@ -3406,6 +3420,16 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
     <label class="field"><span><input type="checkbox"> Lote de teste (não entra no inventário)</span></label>
   </div>
   <div class="pf"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="addLista()">Adicionar à fila</button></div>
+</div></div>
+
+<div class="modal" id="m-clima-sensores"><div class="box csen-box">
+  <div class="ph"><h2>Sensores do clima</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="pb">
+    <p class="csen-ajuda">Para trocar sensores: adicione os novos no app da Tuya/Smart Life (a mesma conta ligada ao painel), clique em Buscar sensores agora e desligue os antigos aqui.</p>
+    <div class="csen-acoes"><button class="btn" type="button" id="csen-buscar" data-trabalhando="Buscando…">Buscar sensores agora</button><span class="csen-coleta" id="csen-coleta" role="status" aria-live="polite"></span></div>
+    <div id="csen-corpo"></div>
+  </div>
+  <div class="pf"><button class="btn" onclick="closeModal()">Fechar</button></div>
 </div></div>
 
 <div class="modal" id="m-fundo"><div class="box">
@@ -12293,7 +12317,7 @@ function climaTopoHTML(d){
     <div class="clima-painel" role="region" aria-labelledby="clima-tit"><h2 id="clima-tit">Clima das salas</h2>
     <p class="clima-frase ${cls}">${escHtml(d.frase)}</p><p class="clima-conta">${escHtml(conta)}</p>
     ${salas?`<ul class="clima-salas" aria-label="Salas">${salas}</ul>`:''}${faixa}
-    <div class="clima-pe"><a class="btn sm" href="/clima" target="_blank" rel="noopener">Abrir Clima do acervo</a></div></div></details>`}
+    <div class="clima-pe"><a class="btn sm" href="/clima" target="_blank" rel="noopener">Abrir Clima do acervo</a>${EU&&['admin','master'].includes(EU.papel)?'<button class="btn sm" type="button" id="clima-gerenciar">Gerenciar sensores</button>':''}</div></div></details>`}
 async function atualizarClimaTopo(){
   const el=document.getElementById('clima-topo');if(!el||!EU||document.hidden&&el.dataset.lido)return;
   let d;try{d=await API('/api/clima/resumo')}catch(_){return}   /* falhou: fica o que já estava (o painel tenta de novo em 5 min) */
@@ -12301,6 +12325,50 @@ async function atualizarClimaTopo(){
   if(!d||!d.mostrar){el.hidden=true;el.innerHTML='';return}
   const aberto=!!el.querySelector('details.clima[open]');el.innerHTML=climaTopoHTML(d);if(aberto)el.querySelector('details.clima').open=true;el.hidden=false}
 document.addEventListener('click',e=>{const ab=document.querySelector('#clima-topo details.clima[open]');if(ab&&!e.target.closest('#clima-topo'))ab.open=false});
+/* CAMP-CLIMA (24/11/2026). Rafael: "adicionei outros sensores de temperatura na sala, e vamos tirar aqueles 2 que já existiam."
+   Janela "Sensores do clima" (admin), aberta por "Gerenciar sensores" na pílula: nome (editável), nome na Tuya, online, última leitura,
+   "Usar no clima"; sensor achado pelo coletor vem com a etiqueta "novo"; o que a Tuya não devolve há mais de 24 h vem como
+   "não aparece mais na Tuya" (já fora da média e da parede) com "Remover da lista" (só esconde: as leituras ficam). Lê /api/clima/sensores. */
+function csLeitura(x){const u=x.ultima;if(!u)return 'sem leitura';return `${climaGrau(u.temperatura_c)} · ${climaPct(u.umidade_pct)} · há ${climaHa(u.idade_s)}`}
+function csItemHTML(x){
+  const id=escHtml(x.id),tags=[x.novo?'<span class="tag b">novo</span>':'',x.sumiu?'<span class="tag a">não aparece mais na Tuya</span>':'',
+    x.removido?'':(x.na_media?'<span class="tag g">na média</span>':'<span class="tag">fora da média</span>'),x.fora_da_lista?'<span class="tag">fora de clima.sensores</span>':''].join('');
+  if(x.removido)return `<li class="csen-item desligado" data-sensor="${id}"><div class="csen-nome"><b>${escHtml(x.nome)}</b></div><button class="btn sm" type="button" data-csen-devolver>Devolver à lista</button>
+    <p class="csen-meta"><span>Na Tuya: ${escHtml(x.nome_tuya||'—')}</span><span>${fmtN(x.leituras)} leituras guardadas</span><span>Última leitura: ${escHtml(csLeitura(x))}</span></p></li>`;
+  return `<li class="csen-item${x.sumiu?' sumiu':''}${x.ativo?'':' desligado'}" data-sensor="${id}">
+    <div class="csen-nome"><input type="text" maxlength="80" value="${escHtml(x.nome)}" aria-label="Nome do sensor no painel" data-csen-nome>${tags}</div>
+    <label class="csen-usar"><input type="checkbox" data-csen-ativo${x.ativo?' checked':''}> Usar no clima</label>
+    <p class="csen-meta"><span>Na Tuya: ${escHtml(x.nome_tuya||'—')}</span>${x.sumiu?'':`<span>${x.online?'online':'offline'}</span>`}<span>Última leitura: ${escHtml(csLeitura(x))}</span></p>
+    ${x.sumiu?`<p class="csen-sumiu"><span>A Tuya não devolve este sensor há ${escHtml(climaHa(x.visto_ha_s))}: ele já não entra na média nem na parede.</span><button class="btn sm" type="button" data-csen-remover>Remover da lista</button></p>`:''}</li>`}
+function csHTML(d){
+  const s=d.sensores||[],r=d.removidos||[];
+  const lista=s.length?`<ul class="csen-lista" aria-label="Sensores">${s.map(csItemHTML).join('')}</ul>`:'<p class="empty">Nenhum sensor ainda. Ligue os sensores no app da Tuya/Smart Life e clique em Buscar sensores agora.</p>';
+  const rem=r.length?`<details class="csen-removidos"><summary>Removidos da lista (${fmtN(r.length)}): as leituras antigas continuam guardadas</summary><ul class="csen-lista">${r.map(csItemHTML).join('')}</ul></details>`:'';
+  return lista+rem}
+function csColetaTxt(d){const c=d.coleta;if(d.coletando)return {t:'Buscando sensores na Tuya…'};if(!d.configurado)return {t:'Faltam as credenciais da Tuya em Configurações.',erro:true};
+  if(!c)return {t:'Ainda não houve leitura dos sensores.'};if(c.erro)return {t:`A última busca falhou há ${climaHa(c.idade_s)}: ${c.erro}`,erro:true};
+  return {t:`Última busca há ${climaHa(c.idade_s)} · ${c.sensores===1?'1 sensor lido':fmtN(c.sensores)+' sensores lidos'}`}}
+async function carregarSensoresClima(){
+  const el=document.getElementById('csen-corpo'),st=document.getElementById('csen-coleta');let d;
+  try{d=await API('/api/clima/sensores')}catch(e){el.innerHTML=`<p class="empty">Não consegui ler os sensores: ${escHtml(e.message||String(e))}</p>`;return null}
+  el.innerHTML=csHTML(d);const c=csColetaTxt(d);st.textContent=c.t;st.classList.toggle('erro',!!c.erro);return d}
+async function abrirSensoresClima(){const ab=document.querySelector('#clima-topo details.clima[open]');if(ab)ab.open=false;
+  document.getElementById('csen-corpo').innerHTML='<p class="empty">Carregando sensores…</p>';openModal('m-clima-sensores');await carregarSensoresClima()}
+async function csSalvar(li,dados,msg){try{await API('/api/clima/sensores/'+encodeURIComponent(li.dataset.sensor),{method:'PUT',body:JSON.stringify(dados)});toast(msg)}
+  catch(e){toast('Não consegui salvar: '+(e.message||e))}await carregarSensoresClima();atualizarClimaTopo()}
+document.addEventListener('click',async e=>{
+  if(e.target.closest('#clima-gerenciar')){e.preventDefault();abrirSensoresClima();return}
+  const li=e.target.closest('#m-clima-sensores .csen-item');
+  if(li&&e.target.closest('[data-csen-remover]')){const nome=(li.querySelector('[data-csen-nome]')||{}).value||'';if(!(await confirmar({titulo:'Remover da lista?',alvo:nome,texto:'O sensor sai do clima e da parede. Nada é apagado: as leituras antigas continuam guardadas, e dá para devolver depois em Removidos da lista.',botao:'Remover da lista'})))return;csSalvar(li,{removido:true},'Sensor removido da lista. As leituras antigas continuam guardadas.');return}
+  if(li&&e.target.closest('[data-csen-devolver]')){csSalvar(li,{removido:false},'Sensor devolvido à lista. Ligue "Usar no clima" para ele voltar à média.');return}
+  if(e.target.closest('#csen-buscar')){const st=document.getElementById('csen-coleta');
+    try{await API('/api/clima/coletar',{method:'POST'})}catch(err){st.textContent='Não consegui pedir a busca: '+(err.message||err);st.classList.add('erro');return}
+    st.textContent='Buscando sensores na Tuya…';st.classList.remove('erro');
+    for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,1000));const d=await carregarSensoresClima();if(!d||!d.coletando)break}
+    atualizarClimaTopo()}});
+document.addEventListener('change',e=>{const li=e.target.closest('#m-clima-sensores .csen-item');if(!li)return;
+  if(e.target.matches('[data-csen-ativo]'))csSalvar(li,{ativo:e.target.checked},e.target.checked?'Sensor volta a entrar no clima.':'Sensor fora do clima: não entra mais na média nem na parede.');
+  else if(e.target.matches('[data-csen-nome]')){const v=e.target.value.trim();if(v.length<2){toast('Escreva o nome do sensor (2 letras ou mais).');e.target.value=e.target.defaultValue;return}if(v!==e.target.defaultValue)csSalvar(li,{nome:v},'Nome do sensor salvo.')}});
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const ab=document.querySelector('#clima-topo details.clima[open]');if(ab){e.stopImmediatePropagation();ab.open=false;ab.querySelector('summary').focus()}},true);
 document.addEventListener('click',async e=>{const v=e.target.closest('[data-sis-verificar]');if(v){v.disabled=true;v.textContent='Verificando…';try{SIS_ERRO=null;await atualizarTopoEstacoes(await API('/api/estacoes?fresco=1'))}catch(err){SIS_ERRO=err.message;sisQuando();toast('Não consegui verificar agora: '+err.message)}return}
   const f=e.target.closest('[data-sis-fechar]');if(f){const dt=f.closest('details');if(dt){dt.open=false;dt.querySelector('summary').focus()}return}
