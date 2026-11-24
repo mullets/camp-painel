@@ -56,6 +56,7 @@ NATUREZAS = {      # ordem do relatório (ITG 2002: doações e patrocínios sep
     "patrocinios": "Patrocínios",
     "servicos": "Receitas de serviços e venda de ingressos",
     "outras": "Outras receitas",
+    "servicos_projeto": "Serviços prestados ao projeto incentivado",   # CAMP-ROUANET: notas da CAMP pagas pelo projeto (transferência interna no Consolidado)
 }
 ABA_XLSX = {"doacoes": "Doações", "doacoes_restricao": "Doações com restrição", "contribuicoes": "Contribuições (Amigos)",
             "patrocinios": "Patrocínios", "servicos": "Serviços e ingressos", "outras": "Outras receitas"}
@@ -70,10 +71,11 @@ ORIGENS = {
     "ingresso": "Ingresso (visita guiada)",
     "servico": "Cobrança avulsa (serviço)",
     "cobranca": "Cobrança avulsa (outra finalidade)",
+    "nota_projeto": "Nota da CAMP para o projeto incentivado",
 }
 MAPA_PADRAO = {"doacao": "doacoes", "direto_mp": "doacoes", "doacao_acervo": "doacoes_restricao", "adocao": "doacoes_restricao",
                "amigos_anual": "contribuicoes", "amigos_mensal": "contribuicoes", "patrocinio": "patrocinios", "ingresso": "servicos",
-               "servico": "servicos", "cobranca": "outras"}
+               "servico": "servicos", "cobranca": "outras", "nota_projeto": "servicos_projeto"}
 EXPLICA_NATUREZA = {
     "doacoes": "Dinheiro dado sem destino definido: doações pela cobrança avulsa e o que chega direto na conta do Mercado Pago sem referência nossa.",
     "doacoes_restricao": "Dinheiro dado para um fim definido: a contribuição da doação de acervo (preservação do acervo) e as adoções de projeto ou arquiteto.",
@@ -81,6 +83,7 @@ EXPLICA_NATUREZA = {
     "patrocinios": "Cotas de patrocínio de empresas (à vista ou em 12 meses), com contrapartidas.",
     "servicos": "Ingressos da visita guiada e cobranças de serviço.",
     "outras": "Cobranças avulsas de outra finalidade.",
+    "servicos_projeto": "Notas que a CAMP emite ao projeto incentivado (Rouanet), pagas pela conta do projeto. No Consolidado são transferência interna.",
 }
 CONTA = ("approved", "accredited", "authorized", "refunded", "charged_back", "in_mediation")
 ESTORNO = ("refunded", "charged_back")
@@ -404,6 +407,13 @@ def livro(con, de: str, ate: str, docs: bool = False) -> dict:
         emitir(p, mprow)
         if p["mp_id"] and not mprow and cobre_de and cobre_de <= p["data"] <= cobre_ate and de <= p["data"] <= ate:
             sem_no_mp.append({"mp_id": p["mp_id"], "data": p["data"], "origem": ORIGENS[p["origem"]], "external_reference": p["ref"], "valor": p["valor"]})
+    try:                                     # CAMP-ROUANET: notas da CAMP pagas pelo projeto = receita da conta da CAMP (o crédito no Mercado Pago não vira doação)
+        from . import rouanet
+        mp_int, lin_int = rouanet.receitas_livro(con)
+        vistos |= mp_int
+        linhas += lin_int
+    except ImportError:
+        pass
     mp_sem_par, diretos = [], 0
     for mid, r in mp.items():
         if mid in vistos or (r.get("status") or "").lower() not in CONTA:
@@ -445,7 +455,8 @@ def _soma(ls: list[dict]) -> dict:
 
 
 def totais(linhas: list[dict], ctas: list[dict] | None = None) -> dict:
-    por_nat = {k: dict(_soma([x for x in linhas if x["natureza"] == k]), natureza=k, nome=v) for k, v in NATUREZAS.items()}
+    por_nat = {k: dict(_soma([x for x in linhas if x["natureza"] == k]), natureza=k, nome=v) for k, v in NATUREZAS.items()
+               if k != "servicos_projeto" or any(x["natureza"] == k for x in linhas)}   # CAMP-ROUANET: só aparece quando houver nota da CAMP paga
     meses = sorted({x["data"][:7] for x in linhas})
     por_mes = [dict(_soma([x for x in linhas if x["data"][:7] == mm]), mes=mm) for mm in meses]
     doa = [x for x in linhas if x["natureza"] in ("doacoes", "doacoes_restricao")]
@@ -655,8 +666,8 @@ def relatorio(con, de: str, ate: str, natureza: str = "", origem: str = "", docs
     nota = con.execute("SELECT texto, atualizado_por, atualizado_em FROM financeiro_nota WHERE periodo=?", (f"{de}|{ate}",)).fetchone()
     m = mapa(con)
     return {"periodo": {"de": de, "ate": ate}, "gerado_em": datetime.now(FUSO).strftime("%Y-%m-%d %H:%M"),
-            "naturezas": [{"chave": k, "nome": v, "explica": EXPLICA_NATUREZA[k]} for k, v in NATUREZAS.items()],
-            "origens": [{"chave": k, "nome": v, "natureza": m[k]} for k, v in ORIGENS.items()], "mapa": m, "totais": tot,
+            "naturezas": [{"chave": k, "nome": v, "explica": EXPLICA_NATUREZA[k]} for k, v in NATUREZAS.items() if k != "servicos_projeto"],   # vem só das notas da CAMP
+            "origens": [{"chave": k, "nome": v, "natureza": m[k]} for k, v in ORIGENS.items() if k != "nota_projeto"], "mapa": m, "totais": tot,
             "linhas": filtrar(base, natureza, origem), "n_total": len(base), "conferencia": lv["conferencia"],
             "nota": dict(nota) if nota else {"texto": "", "atualizado_por": "", "atualizado_em": ""},
             "rascunho": rascunho(de, ate, tot, base, extra), "contas": ctas, "conta": conta,
@@ -767,6 +778,13 @@ def exportar_xlsx(rel: dict) -> bytes:
         for x in rel["linhas"]:
             if x["natureza"] == k:
                 sh.append([_seguro(v) for v in _linha_csv(x, rel["documento"])])
+    if any(x["natureza"] == "servicos_projeto" for x in rel["linhas"]):   # CAMP-ROUANET: só quando houver
+        sh = wb.create_sheet("Serviços ao projeto")
+        sh.append([f"{NATUREZAS['servicos_projeto']} · {_dbr(p['de'])} a {_dbr(p['ate'])} · transferência interna no Consolidado"])
+        sh.append(cols)
+        for x in rel["linhas"]:
+            if x["natureza"] == "servicos_projeto":
+                sh.append([_seguro(v) for v in _linha_csv(x, rel["documento"])])
     try:
         from . import despesas
         despesas.abas_xlsx(wb, rel)
@@ -830,7 +848,7 @@ class Mapa(BaseModel):
 
 @router.put("/mapa")
 def gravar_mapa(b: Mapa, u: dict = Depends(auth.exige("admin"))) -> dict:
-    ruins = [k for k, v in b.mapa.items() if k not in ORIGENS or v not in NATUREZAS]
+    ruins = [k for k, v in b.mapa.items() if k not in ORIGENS or v not in NATUREZAS or (v == "servicos_projeto") != (k == "nota_projeto")]
     if ruins:
         raise HTTPException(400, "Origem ou natureza desconhecida: " + ", ".join(ruins[:5]))
     con = connect()
@@ -873,7 +891,7 @@ class Classificar(BaseModel):
 
 @router.post("/mp/{mp_id}/classificar")
 def classificar(mp_id: str, b: Classificar, u: dict = Depends(auth.exige("admin"))) -> dict:
-    if b.natureza and b.natureza not in NATUREZAS:
+    if b.natureza and (b.natureza not in NATUREZAS or b.natureza == "servicos_projeto"):   # CAMP-ROUANET: essa natureza vem só das notas da CAMP
         raise HTTPException(400, "Natureza desconhecida")
     con = connect()
     try:

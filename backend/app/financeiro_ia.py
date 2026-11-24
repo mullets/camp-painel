@@ -349,6 +349,11 @@ def orcamento_projetos(con, ate: str) -> list[dict]:
     except ValueError:
         orc = {}
     out = []
+    try:                         # CAMP-ROUANET: orçamento do projeto por item (90% âmbar, acima do orçado vermelho, total usado)
+        from . import rouanet
+        out += rouanet.alertas(con)
+    except ImportError:
+        pass
     for cid, itens in (orc.items() if isinstance(orc, dict) else []):
         try:
             cid_i = int(cid)
@@ -477,7 +482,8 @@ def ver_sugestoes(did: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(404, "Despesa não encontrada")
         d = dict(r)
         hist = _historico(con, did)
-        return {"categoria": sugerir_categoria(con, d, hist), "justificativas": sugerir_justificativa(con, d, hist),
+        from . import rouanet
+        return {"categoria": sugerir_categoria(con, d, hist), "justificativas": sugerir_justificativa(con, d, hist), "item": rouanet.sugerir_item(con, d),
                 "leitura_ligada": leitura_ligada(con), "leitor": bool(LEITORES.get(_cfg(con, "financeiro.leitor", "")))}
     finally:
         con.close()

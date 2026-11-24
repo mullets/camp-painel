@@ -108,11 +108,22 @@ def _anexos(con, did: int) -> list[dict]:
             for r in con.execute("SELECT id, nome, mime, tamanho FROM despesa_anexo WHERE despesa_id=? ORDER BY id", (did,))]
 
 
-def pendente(r, n_anexos: int) -> list[str]:
-    """O que falta numa despesa importada: categoria, justificativa, comprovante (vazio = justificada)."""
-    if r["tipo"] != "despesa" or r["apagado_em"] or r["origem"] == "manual":
+def pendente(r, n_anexos: int, projeto: bool = False) -> list[str]:
+    """O que falta numa despesa importada: categoria, justificativa, comprovante (vazio = justificada). Conta de projeto incentivado
+    (CAMP-ROUANET): também a lançada à mão, com o item do orçamento e a nota fiscal ("Projeto incentivado: nota fiscal obrigatória")."""
+    if r["tipo"] != "despesa" or r["apagado_em"] or (r["origem"] == "manual" and not projeto):
         return []
     falta = []
+    if projeto:
+        if not r["orcamento_item"]:
+            falta.append("item do orçamento")
+        if not r["categoria"]:
+            falta.append("categoria")
+        if not (r["justificativa"] or "").strip():
+            falta.append("justificativa")
+        if not n_anexos and r["categoria"] != "tarifas":
+            falta.append("nota fiscal")
+        return falta
     if not r["categoria"]:
         falta.append("categoria")
     if not (r["justificativa"] or "").strip():
@@ -124,12 +135,15 @@ def pendente(r, n_anexos: int) -> list[str]:
 
 def _linha(con, r, cats: dict, contas: dict) -> dict:
     ax = _anexos(con, r["id"])
+    proj = contas.get(r["conta_id"], {}).get("tipo") == "projeto_incentivado"
+    nota_pdf = proj and bool(con.execute("SELECT 1 FROM nota_camp WHERE despesa_id=? AND situacao='paga' AND nf_arquivo IS NOT NULL", (r["id"],)).fetchone())
     return {"id": r["id"], "conta_id": r["conta_id"], "conta_nome": contas.get(r["conta_id"], {}).get("nome", ""), "data": r["data"], "valor": r["valor"],
             "meio": r["meio"] or "", "meio_nome": MEIOS.get(r["meio"] or "", r["meio"] or ""), "contraparte": r["contraparte"] or "", "descricao": r["descricao"] or "",
             "origem": r["origem"], "tipo": r["tipo"], "categoria": r["categoria"] or "", "categoria_nome": cats.get(r["categoria"] or "", "") if r["categoria"] else "",
             "justificativa": r["justificativa"] or "", "projeto": r["projeto"] or "", "restrito": bool(r["restrito"]), "vinculo_tipo": r["vinculo_tipo"] or "",
-            "vinculo_ref": r["vinculo_ref"] or "", "tarefa_id": r["tarefa_id"], "mp_ref": r["mp_ref"] or "", "anexos": ax, "falta": pendente(r, len(ax)),
-            "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito"))}
+            "vinculo_ref": r["vinculo_ref"] or "", "tarefa_id": r["tarefa_id"], "mp_ref": r["mp_ref"] or "", "anexos": ax, "falta": pendente(r, len(ax) + nota_pdf, proj),
+            "criado_por": r["criado_por"] or "", "alterado_por": r["alterado_por"] or "", "conta_restrita": bool(contas.get(r["conta_id"], {}).get("restrito")),
+            "conta_projeto": proj, "orcamento_item": r["orcamento_item"], "nf_numero": r["nf_numero"] or "", "nota_camp": bool(nota_pdf)}
 
 
 def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pendentes: bool = False, q: str = "", com_transferencias: bool = False) -> list[dict]:
@@ -155,8 +169,11 @@ def listar(con, de: str, ate: str, conta: int = 0, categoria: str = "", so_pende
 
 def pendentes_total(con) -> int:
     n = 0
-    for r in con.execute("SELECT d.*, (SELECT COUNT(*) FROM despesa_anexo a WHERE a.despesa_id=d.id) AS nax FROM despesa d WHERE apagado_em IS NULL AND tipo='despesa' AND origem!='manual'"):
-        n += 1 if pendente(r, r["nax"]) else 0
+    for r in con.execute("""SELECT d.*, (SELECT COUNT(*) FROM despesa_anexo a WHERE a.despesa_id=d.id)
+                                + (SELECT COUNT(*) FROM nota_camp nc WHERE nc.despesa_id=d.id AND nc.situacao='paga' AND nc.nf_arquivo IS NOT NULL) AS nax,
+                                (SELECT tipo FROM financeiro_conta c WHERE c.id=d.conta_id) = 'projeto_incentivado' AS proj
+                            FROM despesa d WHERE apagado_em IS NULL AND tipo='despesa'"""):
+        n += 1 if pendente(r, r["nax"], bool(r["proj"])) else 0
     return n
 
 
@@ -452,9 +469,18 @@ def ver(de: str = "", ate: str = "", mes: str = "", ano: str = "", tri: str = ""
                 "vinculos": VINCULOS, "contas": _fin().contas(con), "precisa_justificar": fila, "n_precisa": len(fila),
                 "transferencias": [x for x in listar(con, d1, d2, conta, com_transferencias=True) if x["tipo"] == "transferencia_propria"],
                 "mp_relatorios": [dict(r) for r in con.execute("SELECT periodo, pedido_em, baixado_em, linhas, erro FROM mp_relatorio ORDER BY periodo")],
-                "doacoes": _doacoes(con)}
+                "doacoes": _doacoes(con), "orcamento": _orcamento_opcoes(con)}
     finally:
         con.close()
+
+
+def _orcamento_opcoes(con) -> dict:
+    """CAMP-ROUANET: itens do orçamento de cada conta de projeto, para o seletor "Item do orçamento" ("16 · Impressão")."""
+    try:
+        from . import rouanet
+        return rouanet.opcoes_todas(con)
+    except Exception:  # noqa: BLE001 (banco sem a migração 254)
+        return {}
 
 
 def _doacoes(con) -> list[dict]:
@@ -482,6 +508,8 @@ class Despesa(BaseModel):
     tarefa_id: int | None = None
     preencher_tarefa: bool = False
     tipo: str | None = None
+    orcamento_item: int | None = None      # CAMP-ROUANET: item do orçamento (conta de projeto; obrigatório nela)
+    nf_numero: str | None = None           # número da nota fiscal (prestação de contas)
 
 
 def _validar(con, b: Despesa, novo: bool) -> dict:
@@ -519,7 +547,9 @@ def _validar(con, b: Despesa, novo: bool) -> dict:
         if b.tipo not in ("despesa", "transferencia_propria"):
             raise HTTPException(400, "Tipo inválido")
         v["tipo"] = b.tipo
-    for k, n in (("contraparte", 160), ("descricao", 300), ("justificativa", 2000), ("projeto", 120), ("vinculo_ref", 80)):
+    if b.orcamento_item is not None:
+        v["orcamento_item"] = b.orcamento_item or None
+    for k, n in (("contraparte", 160), ("descricao", 300), ("justificativa", 2000), ("projeto", 120), ("vinculo_ref", 80), ("nf_numero", 40)):
         if getattr(b, k) is not None:
             v[k] = _txt(getattr(b, k), n) or None
     if b.restrito is not None:
@@ -529,6 +559,18 @@ def _validar(con, b: Despesa, novo: bool) -> dict:
             raise HTTPException(400, "Tarefa da doação não encontrada")
         v["tarefa_id"] = b.tarefa_id or None
     return v
+
+
+def _item_projeto(con, conta_id: int, v: dict, antes: dict | None, justificando: bool) -> None:
+    """CAMP-ROUANET: na conta de projeto incentivado, o item do orçamento é obrigatório e precisa existir no orçamento da conta."""
+    from . import rouanet
+    if not rouanet.eh_projeto(con, conta_id):
+        return
+    item = v["orcamento_item"] if "orcamento_item" in v else (antes or {}).get("orcamento_item")
+    if item and not rouanet.item_existe(con, conta_id, item):
+        raise HTTPException(400, f"O item {item} não está no orçamento deste projeto")
+    if not item and (justificando or antes is None or "orcamento_item" in v):
+        raise HTTPException(400, "Projeto incentivado: escolha o item do orçamento")
 
 
 def _detalhe(con, did: int) -> dict:
@@ -559,6 +601,7 @@ def criar(b: Despesa, u: dict = Depends(auth.exige("admin"))) -> dict:
         v.setdefault("meio", "dinheiro")
         if "projeto" not in v:
             v["projeto"] = con.execute("SELECT projeto FROM financeiro_conta WHERE id=?", (v["conta_id"],)).fetchone()[0]
+        _item_projeto(con, v["conta_id"], v, None, True)
         v["chave"] = "manual:" + secrets.token_hex(8)
         cols = list(v)
         did = con.execute(f"INSERT INTO despesa ({', '.join(cols)}, origem, criado_por) VALUES ({','.join('?' * len(cols))}, 'manual', ?)", (*v.values(), _ator(u))).lastrowid
@@ -641,6 +684,7 @@ def mudar(did: int, b: Despesa, u: dict = Depends(auth.exige("admin"))) -> dict:
         if antes["origem"] != "manual":            # do extrato: data, valor e contraparte são os do banco
             for k in ("data", "valor"):
                 v.pop(k, None)
+        _item_projeto(con, v.get("conta_id", antes["conta_id"]), v, antes, "categoria" in v or "justificativa" in v)
         if v:
             con.execute(f"UPDATE despesa SET {', '.join(k + '=?' for k in v)}, alterado_por=?, alterado_em=datetime('now') WHERE id=?", (*v.values(), _ator(u), did))
         _tarefa(con, did, v, b.preencher_tarefa, _ator(u))
