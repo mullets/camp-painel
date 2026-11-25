@@ -1878,6 +1878,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .conf-pf{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .conf-opcoes{display:grid;gap:6px}
 .conf-opcao{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;cursor:pointer}
+.pgu-desc{width:100%;box-sizing:border-box;margin:2px 0 8px}.pgu-antigos{margin:0 0 8px}
 .conf-opcao:has(input:checked){border-color:var(--blue);background:var(--blue-soft)}
 .conf-opcao b{display:block;font-weight:500}.conf-opcao small{display:block;color:var(--ink3);font-size:var(--fs-sm2)}
 .btn.perigo{background:var(--red);border-color:var(--red);color:var(--on-red)}   /* §18: no escuro o branco sobre o vermelho claro dava 2,9 */.btn.perigo:disabled{opacity:.5}
@@ -8236,7 +8237,7 @@ async function pjEscEscritorio(acao){const code=window.PROJETO_PJ,its=[...PJ_ESC
    - Organizar pelo nome: prévia (GET …/ordem-folhas/por-nome) e Aplicar grava pela rota de sempre (a mesma do arrastar: vai ao site).
    - Exportar…: as escolhidas, uma categoria (disciplina nos desenhos, série nas outras) ou o projeto inteiro; PDF sem perda (tarefa em
      segundo plano, link para baixar) ou .zip só com os TIFF.
-   - Guardar em…: tubo novo (o próximo volume, TB-<projeto>.<n>) ou um lugar que existe; quem já estava em outro lugar muda de lugar.
+   - Guardar em…: tubo novo (padrão TB001-01: continua o grupo do projeto ou abre um grupo novo) ou um lugar que existe; quem já estava em outro lugar muda de lugar.
    - Onde estão as folhas: cada recipiente com as suas folhas e as que faltam guardar ("Escolher as que faltam"). */
 function pjCurto(c){return String(c||'').split('-').pop()}
 function pjNomeFolha(f){f=String(f||'').trim();return !f?'':/^(folha|fl\.?|prancha)\b/i.test(f)?f:'Folha '+f}
@@ -8286,28 +8287,39 @@ function pexPainelHTML(code){return `<div class="panel" id="pj-exportar"><div cl
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-pj-exportar],[data-pj-esc-exportar],[data-po-exportar]');if(!b)return;e.preventDefault();
   if(b.hasAttribute('data-pj-esc-exportar'))return pjExportar([...PJ_ESC]);if(b.hasAttribute('data-po-exportar'))return pjExportar(poEscolhidas());pjExportar([])});
 /* ---- Guardar em… (tubos, caixas, mapotecas) e Onde estão as folhas ---- */
+/* CAMP-ESTANTE (Rafael, 25/11/2026: "TB001-01"): tubo novo continua o grupo do projeto (TB001-02) ou abre um grupo novo (TB002-01) */
+function pguTuboOpcoes(g){const o=g.tubo_opcoes||{},c=o.continuar,n=o.novo_grupo||{identificador:g.proximo_tubo};
+  return (c?`<label class="conf-opcao"><input type="radio" name="pgu-onde" value="continuar" checked><span><b>Novo tubo: <span class="code">${escHtml(c.identificador)}</span></b><small>continua o ${escHtml(c.grupo_nome)}, o grupo de tubos deste projeto</small></span></label>`:'')
+   +`<label class="conf-opcao"><input type="radio" name="pgu-onde" value="novo_grupo"${c?'':' checked'}><span><b>Novo grupo: <span class="code">${escHtml(n.identificador)}</span></b><small>${c?'outro conjunto de tubos (o próximo número livre)':'o primeiro tubo deste projeto; a etiqueta fica pronta para imprimir'}</small></span></label>`}
 async function pjGuardar(folhas){const code=window.PROJETO_PJ;if(!code||!folhas.length)return;
   let g,locs=[];try{[g,locs]=await Promise.all([API(`/api/projetos/${encodeURIComponent(code)}/guardados`),API('/api/localizacoes')])}catch(e){toast(e.message);return}
   const fundo=((window.PJ_D||{}).projeto||{}).fundo_codigo||code.slice(0,4),onde=new Map();(g.recipientes||[]).forEach(r=>r.folhas.forEach(f=>onde.set(f.codigo,r.identificador)));
   const L=locs.filter(l=>!l.fundo_codigo||l.fundo_codigo===fundo).sort((a,b)=>(a.tipo===b.tipo?0:a.tipo==='tubo'?-1:b.tipo==='tubo'?1:0)||LST.colator.compare(a.identificador,b.identificador));
   const ja=folhas.filter(c=>onde.has(c)),dist={};ja.forEach(c=>{const k=onde.get(c);dist[k]=(dist[k]||0)+1});
   const html=`<fieldset class="pex-grupo"><legend>Onde</legend>
-      <label class="conf-opcao"><input type="radio" name="pgu-onde" value="novo" checked><span><b>Tubo novo: <span class="code">${escHtml(g.proximo_tubo)}</span></b><small>o próximo volume deste projeto; a etiqueta fica pronta para imprimir</small><input id="pgu-desc" maxlength="120" autocomplete="off" placeholder="Descrição (opcional), ex.: estrutura 1 de 3"></span></label>
+      ${pguTuboOpcoes(g)}<input id="pgu-desc" class="pgu-desc" maxlength="120" autocomplete="off" placeholder="Descrição do tubo novo (opcional), ex.: estrutura 1 de 3" aria-label="Descrição do tubo novo">
       <label class="conf-opcao"><input type="radio" name="pgu-onde" value="existe"${L.length?'':' disabled'}><span><b>Um lugar que já existe</b><select id="pgu-loc" aria-label="Lugar">${L.map(l=>`<option value="${l.id}">${escHtml(l.tipo)} ${escHtml(l.identificador)} · ${escHtml(qtd(l.itens||0,'folha','folhas'))}</option>`).join('')}</select></span></label></fieldset>
     <p class="help">${ja.length?`${escHtml(qtd(ja.length,'destas folhas já está guardada e vai mudar','destas folhas já estão guardadas e vão mudar'))} de lugar (${Object.entries(dist).map(([k,n])=>`${escHtml(k)}: ${n}`).join(', ')}). `:''}Fica no histórico de cada folha. ${g.faltam.length?`Hoje faltam guardar ${escHtml(qtd(g.faltam.length,'folha','folhas'))} deste projeto.`:''}</p>`;
   const r=await confirmar({titulo:'Guardar em…',alvo:qtd(folhas.length,'folha escolhida','folhas escolhidas'),html,botao:'Guardar',botaoOcupado:'Guardando…',
-    acao:async()=>{const ov=document.getElementById('conf-ov'),novo=((ov.querySelector('input[name="pgu-onde"]:checked')||{}).value||'novo')==='novo';
-      return API(`/api/projetos/${encodeURIComponent(code)}/guardar-em`,{method:'POST',body:JSON.stringify({itens:folhas,novo_tubo:novo,localizacao_id:novo?null:+ov.querySelector('#pgu-loc').value,descricao:novo?ov.querySelector('#pgu-desc').value:null})})}});
+    acao:async()=>{const ov=document.getElementById('conf-ov'),v=((ov.querySelector('input[name="pgu-onde"]:checked')||{}).value||'continuar'),novo=v!=='existe';
+      return API(`/api/projetos/${encodeURIComponent(code)}/guardar-em`,{method:'POST',body:JSON.stringify({itens:folhas,novo_tubo:novo,tubo:novo?(v==='novo_grupo'?'novo_grupo':'continuar'):null,localizacao_id:novo?null:+ov.querySelector('#pgu-loc').value,descricao:novo?ov.querySelector('#pgu-desc').value:null})})}});
   if(!r||!r.resultado)return;const res=r.resultado;
   toast(res.mensagem,{acao:{rotulo:'Imprimir etiqueta',fn:()=>nav('etiquetas/local/'+res.localizacao_id)}});
   PJ_ESC.clear();PJ_ESC_ULT=null;pjEscMarcar();pjGuardadosDesenhar(res.guardados);carregarLocalProjeto(code)}
+document.addEventListener('click',async e=>{const b=e.target.closest&&e.target.closest('[data-tubos-renomear]');if(!b)return;e.preventDefault();
+  let sim;try{sim=await API('/api/estante/tubos-antigos/renomear',{method:'POST',body:JSON.stringify({aplicar:false})})}catch(err){toast(err.message);return}
+  if(!sim.total){toast(sim.mensagem);return}
+  const html=`<p class="help">Simulação: nada foi gravado. As folhas continuam nos mesmos tubos; muda só o nome. Reimprima as etiquetas depois.</p><ul class="list">${sim.tubos.map(t=>`<li><span class="code">${escHtml(t.de)}</span> → <span class="code">${escHtml(t.para)}</span> <small>${escHtml(t.projeto)} · ${escHtml(qtd(t.folhas,'folha','folhas'))}${t.reimprimir?' · etiqueta já impressa':''}</small></li>`).join('')}</ul>`;
+  const r=await confirmar({titulo:'Renomear tubos antigos',alvo:qtd(sim.total,'tubo','tubos'),html,botao:'Renomear',botaoOcupado:'Renomeando…',acao:()=>API('/api/estante/tubos-antigos/renomear',{method:'POST',body:JSON.stringify({aplicar:true})})});
+  if(r&&r.resultado){toast(r.resultado.mensagem);if(window.PROJETO_PJ)pjGuardados(window.PROJETO_PJ)}});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-pj-esc-guardar]');if(!b)return;e.preventDefault();pjGuardar([...PJ_ESC])});
 async function pjGuardados(code){const el=document.getElementById('pj-guardados');if(!el)return;try{pjGuardadosDesenhar(await API(`/api/projetos/${encodeURIComponent(code)}/guardados`))}catch(e){el.querySelector('.pb').textContent=e.message}}
 function pjGuardadosDesenhar(g){const el=document.getElementById('pj-guardados');if(!el||!g)return;const op=EU&&['operador','admin','master'].includes(EU.papel);
   const fl=fs=>fs.map(f=>`<li><span class="code">${escHtml(pjCurto(f.codigo))}</span>${f.folha?` ${escHtml(pjNomeFolha(f.folha))}`:''}</li>`).join('');
   const rec=(g.recipientes||[]).map(r=>`<li class="pgu-rec"><div class="pgu-cab"><span class="tag">${escHtml(r.tipo)}</span> <b>${escHtml(r.identificador)}</b> <span class="help">${escHtml(qtd(r.quantidade,'folha','folhas'))}${r.de_outros?` · também guarda ${escHtml(qtd(r.de_outros,'folha','folhas'))} de outros projetos`:''}${r.descricao?` · ${escHtml(r.descricao)}`:''}</span><span class="pgu-acoes"><a class="lnk" href="#estante/caixa/${r.id}">Conferir</a><a class="lnk" href="#etiquetas/local/${r.id}">Imprimir etiqueta</a></span></div>${r.quantidade>12?`<details><summary>Ver as ${fmtN(r.quantidade)} folhas</summary><ul class="pgu-folhas">${fl(r.folhas)}</ul></details>`:`<ul class="pgu-folhas">${fl(r.folhas)}</ul>`}</li>`).join('');
-  const falta=g.faltam||[];
-  el.innerHTML=`<div class="ph"><div class="ph-txt"><h2>Onde estão as folhas</h2><p class="ph-resumo">${escHtml(qtd(g.guardadas,'folha guardada','folhas guardadas'))} de ${fmtN(g.total)}${(g.recipientes||[]).length?` em ${escHtml(qtd(g.recipientes.length,'lugar','lugares'))}`:''}. Para dividir em vários tubos: Escolher folhas → Guardar em….</p></div>${falta.length?`<span class="tag a">faltam guardar ${fmtN(falta.length)}</span>`:g.total?'<span class="tag g">todas guardadas</span>':''}</div>
+  const falta=g.faltam||[],antigos=(g.recipientes||[]).filter(r=>/^TB-F\d{3}-P\d{4}\.\d+$/i.test(r.identificador)),adm=EU&&['admin','master'].includes(EU.papel);
+  const renom=antigos.length&&adm?`<p class="help pgu-antigos">${escHtml(qtd(antigos.length,'tubo ainda está','tubos ainda estão'))} no nome antigo. <button type="button" class="btn sm" data-tubos-renomear>Renomear tubos antigos para o novo padrão</button></p>`:'';
+  el.innerHTML=renom+`<div class="ph"><div class="ph-txt"><h2>Onde estão as folhas</h2><p class="ph-resumo">${escHtml(qtd(g.guardadas,'folha guardada','folhas guardadas'))} de ${fmtN(g.total)}${(g.recipientes||[]).length?` em ${escHtml(qtd(g.recipientes.length,'lugar','lugares'))}`:''}. Para dividir em vários tubos: Escolher folhas → Guardar em….</p></div>${falta.length?`<span class="tag a">faltam guardar ${fmtN(falta.length)}</span>`:g.total?'<span class="tag g">todas guardadas</span>':''}</div>
     <div class="pb">${rec?`<ul class="pgu-lista">${rec}</ul>`:'<p class="help">Nenhuma folha deste projeto está guardada ainda.</p>'}
     ${falta.length?`<div class="pgu-falta"><div class="pgu-cab"><b>Faltam guardar (${fmtN(falta.length)})</b>${op?'<button type="button" class="btn sm" data-pgu-escolher-faltam>Escolher as que faltam</button>':''}</div>${falta.length>12?`<details><summary>Ver as ${fmtN(falta.length)} folhas</summary><ul class="pgu-folhas">${fl(falta)}</ul></details>`:`<ul class="pgu-folhas">${fl(falta)}</ul>`}</div>`:''}</div>`;
   el.dataset.faltam=JSON.stringify(falta.map(f=>f.codigo))}
@@ -12658,12 +12670,12 @@ async function iniSemLugar(){let r;try{r=await API('/api/etiquetas/sem-lugar')}c
   el.innerHTML=`<button type="button" class="ini-link" onclick="nav('localizacao')">${fmtN(r.folhas)} ${r.folhas===1?'folha publicada sem lugar':'folhas publicadas sem lugar'}</button> · em ${fmtN(r.projetos)} ${r.projetos===1?'projeto':'projetos'}`}
 async function verSemLugar(f){const ps=await API('/api/localizacoes/sem-lugar?fundo='+encodeURIComponent(f));const n=ps.reduce((a,p)=>a+p.faltam,0);
   openDrawer(`Folhas sem lugar · ${f}`,`${n} folha${n===1?'':'s'} em ${ps.length} projeto${ps.length===1?'':'s'}`,`<p class="help">Abra uma caixa (ou crie uma em "Nova localização") e aloque o projeto nela. Clique no projeto para ver as folhas.</p><div class="tw"><table><thead><tr><th>Projeto</th><th class="num">Sem lugar</th></tr></thead><tbody>${ps.map(p=>`<tr data-nav="projeto/${escHtml(p.codigo)}"><td><span class="code">${escHtml(p.codigo)}</span> ${escHtml(tituloExibicao(p.titulo))}</td><td class="num">${escHtml(p.faltam)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Nenhuma.</td></tr>'}</tbody></table></div>`);const o=document.getElementById('d-open');if(o)o.style.display='none'}
-// H20: modelo de identificador por tipo, com o próximo número livre já preenchido (CX-001, GV-01, TB-001, MAP-01-G01, EST-A-03)
-const LOC_MODELO={caixa:['CX-',3],gaveta:['GV-',2],tubo:['TB-',3],mapoteca:['MAP-',2],estante:['EST-',2]};
+// H20: modelo de identificador por tipo, com o próximo número livre já preenchido (CX-001, GV-01, TB001-01, MAP-01-G01, EST-A-03)
+const LOC_MODELO={caixa:['CX-',3],gaveta:['GV-',2],tubo:['TB',3],mapoteca:['MAP-',2],estante:['EST-',2]};   // tubo: TB001-01 (Rafael, 25/11/2026)
 async function nlocSugerir(trocouTipo){const t=document.getElementById('nloc-tipo').value,i=document.getElementById('nloc-id'),[pre,n]=LOC_MODELO[t]||['',2];if(!i)return;
   let ls=window.LOCS;if(!ls){try{ls=window.LOCS=await API('/api/localizacoes')}catch(_){ls=[]}}
-  const usados=ls.map(l=>String(l.identificador||'').toUpperCase()).filter(x=>x.startsWith(pre)).map(x=>parseInt(x.slice(pre.length),10)).filter(x=>!isNaN(x)),prox=(usados.length?Math.max(...usados):0)+1;
-  const sug=pre+String(prox).padStart(n,'0')+(t==='mapoteca'?'-G01':'');i.placeholder=sug;if(!i.value||i.dataset.auto==='1'){i.value=sug;i.dataset.auto='1'}
+  const usados=ls.map(l=>String(l.identificador||'').toUpperCase()).filter(x=>t==='tubo'?/^TB\d{3,}-\d{2,}$/.test(x):x.startsWith(pre)).map(x=>parseInt(x.slice(pre.length),10)).filter(x=>!isNaN(x)),prox=(usados.length?Math.max(...usados):0)+1;
+  const sug=pre+String(prox).padStart(n,'0')+(t==='mapoteca'?'-G01':t==='tubo'?'-01':'');i.placeholder=sug;if(!i.value||i.dataset.auto==='1'){i.value=sug;i.dataset.auto='1'}
   document.getElementById('nloc-id-ajuda').textContent=`Sugestão para ${t}: ${sug} (o próximo livre). Use o mesmo que está escrito no recipiente.`}
 function abrirNovaLocalizacao(){['nloc-id','nloc-desc'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';delete el.dataset.auto}});const e=document.getElementById('nloc-err');if(e)e.textContent='';window.LOCS=null;openModal('m-loc');nlocSugerir()}
 async function criarLocalizacao(){const err=document.getElementById('nloc-err');err.textContent='';try{const r=await API('/api/localizacoes',{method:'POST',body:JSON.stringify({tipo:document.getElementById('nloc-tipo').value,identificador:document.getElementById('nloc-id').value,fundo_codigo:document.getElementById('nloc-fundo').value||null,descricao:document.getElementById('nloc-desc').value||null})});closeModal();toast(`${r.identificador} criada. Agora aloque as folhas nela.`);await carregarLocalizacoes();verLocalizacao(r.id)}catch(e){err.textContent=e.message}}
