@@ -84,7 +84,15 @@ _ALIAS_TIPO = {"elevação": UNIFICADO, "elevacao": UNIFICADO, "fachada": UNIFIC
                "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO,
                "isometrica": "Isométrica", "isométrico": "Isométrica", "isometrico": "Isométrica", "axonometria": "Isométrica", "axonométrica": "Isométrica",
                "diagrama": "Esquema", "esquemático": "Esquema", "esquematico": "Esquema",   # 19/10: tipos novos
-               "detalhe/estrutura": "Detalhe / Estrutura", "detalhe - estrutura": "Detalhe / Estrutura", "detalhe estrutural": "Detalhe / Estrutura"}   # 25/11/2026 (Rafael)
+               "detalhe/estrutura": "Detalhe / Estrutura", "detalhe - estrutura": "Detalhe / Estrutura", "detalhe estrutural": "Detalhe / Estrutura",   # 25/11/2026 (Rafael)
+               # 25/11/2026 (Rafael: "falta elétrica, hidráulica, paisagismo.."): tipos complementares (migração 263)
+               "eletrica": "Elétrica", "elétrico": "Elétrica", "eletrico": "Elétrica", "instalações elétricas": "Elétrica", "instalacoes eletricas": "Elétrica",
+               "instalação elétrica": "Elétrica", "instalacao eletrica": "Elétrica", "luz e força": "Elétrica", "luz e forca": "Elétrica", "força e luz": "Elétrica",
+               "hidraulica": "Hidráulica", "hidráulico": "Hidráulica", "hidraulico": "Hidráulica", "instalações hidráulicas": "Hidráulica", "instalacoes hidraulicas": "Hidráulica",
+               "hidrossanitário": "Hidráulica", "hidrossanitario": "Hidráulica", "hidro-sanitário": "Hidráulica", "instalações hidrossanitárias": "Hidráulica",
+               "paisagístico": "Paisagismo", "paisagistico": "Paisagismo", "projeto paisagístico": "Paisagismo", "jardim": "Paisagismo",
+               "fundacao": "Fundação", "fundações": "Fundação", "fundacoes": "Fundação", "planta de fundação": "Fundação", "planta de fundacao": "Fundação",
+               "locação de estacas": "Fundação", "locacao de estacas": "Fundação"}
 
 
 def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:

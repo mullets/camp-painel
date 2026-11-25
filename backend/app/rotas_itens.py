@@ -101,6 +101,10 @@ def dados_edicao(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict
         d["local"]["parceiros"] = parceiros.ler(i["parceiros"])        # 19/10: escritórios parceiros / projetos complementares
         d["local"].update({k: i[k] for k in dados_foto.CAMPOS})      # 21/10: ano da foto, estágio, fotógrafo
         d["disciplinas"] = list(parceiros.DISCIPLINAS)
+        try:                                                           # 25/11/2026: sugestão de tipo complementar (Elétrica, Hidráulica…), nunca aplicada
+            d["tipo_sugerido_disciplina"] = parceiros.tipo_sugerido(i["tipo_lido"], i["titulo"], i["titulo_lido"] if "titulo_lido" in i.keys() else None)
+        except (KeyError, IndexError):
+            d["tipo_sugerido_disciplina"] = None
         d["fundo_codigo"] = codigo.split("-")[0]
         from .rotas_revisao import imagem_site_pendente
         d["imagem_site_pendente"] = imagem_site_pendente(con, codigo)      # 19/10: girada/espelhada no painel, o site ainda tem a antiga

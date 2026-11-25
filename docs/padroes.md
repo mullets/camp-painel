@@ -206,4 +206,9 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   na lista do painel". O importador casa o nome inteiro antes de separar por " / " (que continua valendo para "Planta / Corte"). No
   agrupamento por disciplina conta como **Estrutura**. Para o site é só o texto do "Tipo de desenho" (nenhum contrato muda); o CAMP Vision
   não recebe a lista.
+- **Rafael, 25/11/2026: tipos Elétrica, Hidráulica, Paisagismo e Fundação** ("falta elétrica, hidráulica, paisagismo.."; fundação ele
+  já tinha pedido como separação). Entram na lista de tipos de documento (migração 263). No agrupamento por disciplina: Elétrica →
+  Instalações elétricas, Hidráulica → Instalações hidráulicas, Paisagismo → Paisagismo, Fundação → Fundações. O importador reconhece as
+  grafias comuns do tipo lido ("Instalações elétricas", "Hidrossanitário", "Planta de fundação"…). Na conferência, pelo tipo lido/título
+  (luz e força, SPDA, esgoto, águas pluviais, jardim, estacas…), o painel só SUGERE o tipo ("Usar sugestão"); nunca aplica sozinho.
 
