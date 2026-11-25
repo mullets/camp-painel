@@ -77,6 +77,8 @@ MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade expli
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
+MODOS_RAPIDOS |= {"ficha_escritorios_tipos"}   # CAMP-FICHA 25/11/2026: usar todos os escritórios sugeridos, nomes parecidos/unificar, escritório abreviado no cartão, tipos Elétrica/Hidráulica/Paisagismo/Fundação
+MODOS_RAPIDOS |= {"projeto_ordem_pdf_tubos"}   # CAMP-PROJETO/ESTANTE 25/11/2026: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria, tubos (guardar em, mover, faltam guardar)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
@@ -9492,7 +9494,7 @@ def filho(modo):
         ver("lista de tipos para escolher (inclui 'Detalhe / Estrutura')", "Detalhe / Estrutura" in (le.get("/api/tipos-documento").json().get("tipos") or []))
         r = op.post(TU, json={"itens": [D(1), D(2), D(3)], "tipos": ["Estrutura", "Detalhe"], "modo": "acrescentar"}).json()
         ver("simular acrescentar: antes → depois em cada folha, nada muda", [(m["codigo"], m["antes"], m["depois"]) for m in r.get("vai_mudar", [])] == [(D(1), "Planta", "Planta; Estrutura; Detalhe"), (D(2), "Corte", "Corte; Estrutura; Detalhe"), (D(3), "Estrutura", "Estrutura; Detalhe")] and tp(D(1)) == "Planta", r)
-        ver("tipo fora do vocabulário: 400", op.post(TU, json={"itens": [D(1)], "tipos": ["Elétrica"], "modo": "substituir"}).status_code == 400)
+        ver("tipo fora do vocabulário: 400", op.post(TU, json={"itens": [D(1)], "tipos": ["Tipo Inventado"], "modo": "substituir"}).status_code == 400)
         ver("leitura não aplica tipo em lote", le.post(TU, json={"itens": [D(1)], "tipos": ["Corte"], "modo": "substituir", "simular": False}).status_code == 403)
         n0 = c.execute("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo IN (?,?)", (D(1), D(2))).fetchone()[0]
         r = op.post(TU, json={"itens": [D(1), D(2)], "tipos": ["Estrutura"], "modo": "substituir", "simular": False}).json()
@@ -14207,6 +14209,245 @@ def filho(modo):
         ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
         k.close(); c.close()
         for l in res: print(l)
+    elif modo == "ficha_escritorios_tipos":
+        # CAMP-FICHA (25/11/2026). Rafael: "quero usar os 3, mas clico e só dá pra usar um" + o mesmo escritório com duas grafias do carimbo
+        # ("DAPA LIMA OTERO…" × "DAFRA- LIMA OTERO…"); "seria bom sabermos se já tem escritório parceiro embaixo, abreviado mesmo"; "falta
+        # elétrica, hidráulica, paisagismo..". Prova: nomes quase iguais (semelhança ≥ 0,8, sem palavras jurídicas), "Unificar nomes" (prévia
+        # não grava; aplicar troca em todas as folhas, histórico); tipos novos no vocabulário e agrupados na disciplina certa; importador e
+        # sugestão de tipo pelo tipo lido/título (só sugestão); guardas da tela (abreviação no cartão, "Sem escritório", "Usar todos").
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth, parceiros as pc, importador_lote as il
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        DAP, DAF = "DAPA LIMA OTERO ENGENHARIA LTDA. S/C.", "DAFRA- LIMA OTERO ENGENHARIA LTDA. S/C."
+        PAR, IMP = "Sociedade civil de engenharia José Roberto Parisi Ltd.", "IMPER INCORPORAÇÕES E ADMINISTRAÇÃO PREDIAL S/A"
+        ver("DAPA × DAFRA- LIMA OTERO: o mesmo escritório (semelhança ≥ 0,8)", pc.semelhanca(DAP, DAF) >= 0.8, pc.semelhanca(DAP, DAF))
+        ver("Parisi × IMPER: diferentes", pc.semelhanca(PAR, IMP) < 0.5)
+        ver("só as palavras jurídicas iguais não bastam ('X Engenharia Ltda' × 'Y Engenharia Ltda')", pc.semelhanca("Alfa Engenharia Ltda", "Beta Engenharia Ltda") < 0.8)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        P = "F001-P0001"
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (P, "F001", 1, "Residência"))
+        par = [[PAR, DAF], [DAF], [DAP], [IMP], []]
+        F = [f"{P}-1965-S01-D0000{n}" for n in range(1, 6)]
+        for n, (cod, L) in enumerate(zip(F, par), 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,parceiros,tipo_documento) VALUES (?,?,?,?,?,?,?,?)",
+                      (cod, P, "S01", n, f"Folha {n}", "campvision", _j.dumps([{"escritorio": e, "disciplina": "Estrutura"} for e in L], ensure_ascii=False) if L else None, "Estrutura"))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitor-1234")
+        g = op.get(f"/api/projetos/{P}/parceiros/semelhantes").json().get("grupos", [])
+        ver("Parceiros neste projeto: um grupo de nomes parecidos (DAFRA 2 folhas, DAPA 1), sugerido o mais usado", len(g) == 1
+            and [x["escritorio"] for x in g[0]["nomes"]] == [DAF, DAP] and g[0]["sugerido"] == DAF, g)
+        s1 = op.post(f"/api/projetos/{P}/parceiros/unificar", json={"de": [DAP], "para": DAF})
+        ver("Unificar (prévia, padrão): diz quantas mudam e não grava", s1.status_code == 200 and s1.json()["vai_mudar"] == [F[2]]
+            and DAP in (c.execute("SELECT parceiros FROM item WHERE codigo=?", (F[2],)).fetchone()[0] or ""), s1.text[:200])
+        ver("leitura não unifica", le.post(f"/api/projetos/{P}/parceiros/unificar", json={"de": [DAP], "para": DAF, "simular": False}).status_code == 403)
+        s2 = op.post(f"/api/projetos/{P}/parceiros/unificar", json={"de": [DAP], "para": DAF, "simular": False})
+        ver("Unificar (aplicar): a folha passa a ter DAFRA- LIMA OTERO, disciplina mantida; histórico com antes/depois",
+            s2.status_code == 200 and _j.loads(c.execute("SELECT parceiros FROM item WHERE codigo=?", (F[2],)).fetchone()[0]) == [{"escritorio": DAF, "disciplina": "Estrutura"}]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='item' AND codigo=? AND detalhe LIKE '%unificar%'", (F[2],)).fetchone()[0] == 1, s2.text[:200])
+        ver("depois de unificar, nenhum nome parecido", op.get(f"/api/projetos/{P}/parceiros/semelhantes").json()["grupos"] == [])
+        ver("unificar de novo não muda nada", op.post(f"/api/projetos/{P}/parceiros/unificar", json={"de": [DAP], "para": DAF, "simular": False}).json()["mudaram"] == [])
+        # tipos complementares
+        tipos = {r[0] for r in c.execute("SELECT nome FROM tipo_documento")}
+        ver("tipos novos no vocabulário: Elétrica, Hidráulica, Paisagismo, Fundação", {"Elétrica", "Hidráulica", "Paisagismo", "Fundação"} <= tipos, sorted(tipos))
+        ver("agrupamento: Elétrica → Instalações elétricas, Hidráulica → Instalações hidráulicas, Paisagismo, Fundação → Fundações",
+            [pc.disciplina_grupo(None, t)[0] for t in ("Elétrica", "Hidráulica", "Paisagismo", "Fundação")] == ["Instalações elétricas", "Instalações hidráulicas", "Paisagismo", "Fundações"])
+        tl = {t.lower(): t for t in tipos}
+        ver("importador: 'Instalações elétricas', 'Hidrossanitário', 'Planta de fundação', 'Paisagístico' viram os tipos do painel",
+            [il.tipo_do_painel(x, tl) for x in ("Instalações elétricas", "Hidrossanitário", "Planta de fundação", "Paisagístico")] == ["Elétrica", "Hidráulica", "Fundação", "Paisagismo"])
+        ver("sugestão de tipo pelo título (luz e força, esgoto, jardim, estacas); planta de arquitetura não sugere",
+            [pc.tipo_sugerido("Planta", t) for t in ("LUZ E FORÇA - TÉRREO", "ESGOTO E ÁGUAS PLUVIAIS", "PROJETO DE JARDIM", "LOCAÇÃO DAS ESTACAS", "PLANTA DO TÉRREO")]
+            == ["Elétrica", "Hidráulica", "Paisagismo", "Fundação", None])
+        c.execute("UPDATE item SET tipo_lido=NULL, titulo='INSTALAÇÕES DE LUZ E FORÇA' WHERE codigo=?", (F[4],)); c.commit()
+        ed = op.get(f"/api/itens/{F[4]}/edicao").json()
+        ver("a ficha da folha traz a sugestão (tipo_sugerido_disciplina = Elétrica) e nada muda sozinho", ed.get("tipo_sugerido_disciplina") == "Elétrica"
+            and c.execute("SELECT tipo_documento FROM item WHERE codigo=?", (F[4],)).fetchone()[0] == "Estrutura", ed.get("tipo_sugerido_disciplina"))
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("cartão: linha discreta com o escritório abreviado (escAbrev, title com o nome inteiro)", "function escAbrev(nome)" in html and "${escCartaoHTML(it)}" in html and 'class="cap-esc" title=' in html)
+        ver("filtro 'Sem escritório (N)' nos desenhos", "b('semesc','Sem escritório',c.semesc)" in html and "'semesc':''" in html)
+        ver("sugestões de escritório: ficam depois de 'Usar' e têm 'Usar todos'; nome parecido oferece 'Usar esse nome' / 'Manter os dois'",
+            "data-parc-sug-todos" in html and "bl.dataset.parcSugAtivo='1'" in html and "data-parc-quase-usar" in html and "data-parc-quase-manter" in html)
+        ver("conferência: 'Tipo pela disciplina' só como sugestão (Usar sugestão)", "tipo_sugerido_disciplina" in html)
+        for l in res: print(l)
+
+    elif modo == "projeto_ordem_pdf_tubos":
+        # CAMP-PROJETO / CAMP-ESTANTE (25/11/2026). Rafael: "organizar automaticamente as folhas pelo nome, poder arrastar para organizar elas e
+        # poder exportar um pdf feito em cima dos tifs em alta qualidade … ou escolho a categoria (desenho, fotos, estrutura) … ou um zip só com
+        # os tiffs" e "um lote de estrutura total não cabe num tubo só, então vai em vários.. preciso dizer quem tá em cada e quais faltam".
+        # QNAP falso em pasta temporária. Prova: ordem natural; prévia não grava e a gravação vai pela rota de sempre; PDF sem perda (pixels
+        # do PDF == pixels do TIFF, sem DCTDecode, tamanho em pixels igual); folha sem TIFF fica de fora (com motivo); caminho fora da raiz e
+        # lixeira nunca entram; .zip por categoria; tubo novo com o próximo volume, mover entre tubos, "faltam guardar", histórico por folha.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, tempfile, zipfile, io as _io, re as _re, zlib as _z
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth
+        from app.organizar_projeto import chave_nome, ordem_por_nome, proximo_tubo
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        # ---- 1) ordem natural pelo nome (função pura)
+        nomes = ["Folha 10", "Folha 2", "Folha 16B", "Folha 16A", "Folha 16", "Folha 5/6", 'Folha 36 "A', "C-3F", "G07", "D00004", "", "Folha 1"]
+        o = ordem_por_nome([{"codigo": f"X{k:02d}", "folha": n} for k, n in enumerate(nomes)])
+        got = [nomes[int(c[1:])] for c in o]
+        ver("ordem natural: 1 < 2 < 5/6 < 10 < 16 < 16A < 16B < 36\"A; letra+número depois; sem número no fim",
+            got == ["Folha 1", "Folha 2", "Folha 5/6", "Folha 10", "Folha 16", "Folha 16A", "Folha 16B", 'Folha 36 "A', "C-3F", "G07", "D00004", ""], got)
+        ver("cópias e retidas ficam no fim, na ordem em que estavam",
+            ordem_por_nome([{"codigo": "A", "folha": "9"}, {"codigo": "B", "folha": "1", "duplicata_de": "A"}, {"codigo": "C", "folha": "3"},
+                            {"codigo": "D", "folha": "2", "retida": 1}]) == ["C", "A", "B", "D"])
+        ver("'Folha F035-D00012' (código no lugar do nome) conta como sem número", chave_nome("Folha F035-D00012", "x")[0] == 2)
+        # ---- montagem: QNAP falso, projeto com desenhos de arquitetura, estrutura e fotos
+        base = _P(tempfile.mkdtemp(prefix="opt_", dir=os.environ.get("TMPDIR") or None))
+        os.environ["CAMP_EXPORTACOES_DIR"] = str(base / "exportacoes_pdf")
+        raiz = base / "ACERVOS_CAMP"; rel = "F001 - ARM/01 - Projetos/F001-P0001 - Residência/TIF"; pj = raiz / rel; pj.mkdir(parents=True)
+        (raiz / "@Recycle").mkdir(); Image.new("RGB", (40, 30)).save(raiz / "@Recycle" / "lixo.tif", "TIFF")
+        Image.new("RGB", (40, 30)).save(base / "fora.tif", "TIFF")
+        P = "F001-P0001"
+        # (série, folha, tipo, tif?)  D1..D8
+        spec = [("S01", "Folha 10", "Planta", "lzw"), ("S01", "Folha 2", "Planta", "raw"), ("S01", "Folha 16A", "Estrutura", "lzw"),
+                ("S01", "Folha 16", "Estrutura", None), ("S01", "Folha 3", "Estrutura", "lixo"), ("S03", "", "Fotografia", "lzw"),
+                ("S01", "C-3F", "Estrutura", "fora"), ("S01", "Folha 1", "Corte", "gray16")]
+        F = [f"{P}-1965-{s}-D{n:05d}" for n, (s, *_r) in enumerate(spec, 1)]
+        imgs = {}
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (P, "F001", 1, "Residência Teste"))
+        for n, ((s, folha, tipo, tif), cod) in enumerate(zip(spec, F), 1):
+            caminho = None
+            if tif in ("lzw", "raw", "gray16"):
+                if tif == "gray16":
+                    im = Image.new("I;16", (61 + n, 37 + n), 41000)
+                else:
+                    im = Image.new("RGB", (97 + n * 13, 71 + n * 7)); px = im.load()
+                    for xx in range(0, im.size[0], 3):
+                        for yy in range(0, im.size[1], 2): px[xx, yy] = ((xx * n) % 256, (yy * 7) % 256, (xx + yy) % 256)
+                im.save(pj / f"{cod}.tif", "TIFF", **({"compression": "tiff_lzw"} if tif == "lzw" else {}), dpi=(600, 600))
+                imgs[cod] = im; caminho = f"{rel}/{cod}.tif"
+            elif tif == "lixo":
+                caminho = "@Recycle/lixo.tif"
+            elif tif == "fora":
+                caminho = "../fora.tif"
+            c.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif,folha,tipo_documento)
+                         VALUES (?,?,?,?,?,?,?,?,?)""", (cod, P, s, n, f"{tipo} {n}", "campvision", caminho, folha, tipo))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitor-1234")
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        # ---- 2) proposta pelo nome: não grava; a gravação é a rota de sempre
+        r = op.get(f"/api/projetos/{P}/ordem-folhas/por-nome"); rj = r.json() if r.status_code == 200 else {}
+        esperado = [F[7], F[1], F[4], F[0], F[3], F[2], F[6], F[5]]
+        ver("Organizar pelo nome: Folha 1, 2, 3, 10, 16, 16A, C-3F e a foto sem número no fim", r.status_code == 200 and rj["ordem"] == esperado, rj.get("ordem"))
+        ver("a prévia diz quantas mudam de lugar e não grava nada", rj.get("mudam_de_lugar", 0) > 0 and um("SELECT COUNT(*) FROM item WHERE ordem_manual IS NOT NULL")[0] == 0, rj.get("mudam_de_lugar"))
+        ver("leitura não organiza", le.get(f"/api/projetos/{P}/ordem-folhas/por-nome").status_code == 403)
+        g = op.put(f"/api/projetos/{P}/ordem-folhas", json={"ordem": rj["ordem"]})
+        ver("aplicar = PUT /ordem-folhas de sempre (vai ao site como arrastar): ordem gravada", g.status_code == 200
+            and [x[0] for x in c.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY ordem_manual", (P,))] == esperado, g.text[:200])
+        ver("depois de aplicada, a proposta não muda mais nada", op.get(f"/api/projetos/{P}/ordem-folhas/por-nome").json()["mudam_de_lugar"] == 0)
+        # ---- 3) categorias
+        cat = op.get(f"/api/projetos/{P}/categorias").json()
+        cs = {x["chave"]: x for x in cat["categorias"]}
+        ver("categorias: Arquitetura e Estrutura (disciplina nos desenhos) e Fotografias (série)", set(cs) == {"disc:Arquitetura", "disc:Estrutura", "serie:S03"}
+            and cs["disc:Estrutura"]["folhas"] == [F[4], F[3], F[2], F[6]] and cs["serie:S03"]["rotulo"] == "Fotografias", list(cs))
+        ver("categoria conta quantas têm TIFF registrado", cs["disc:Arquitetura"]["com_tif"] == 3 and cs["disc:Estrutura"]["com_tif"] == 3, cs["disc:Arquitetura"])
+        # ---- 4) PDF sem perda
+        e = op.post(f"/api/projetos/{P}/exportar-pdf/estimar", json={"categoria": "disc:Estrutura"}).json()
+        ver("estimar: só o TIFF válido entra; sem TIFF, lixeira e fora da raiz ficam de fora com o motivo", e.get("folhas") == [F[2]]
+            and {x["codigo"] for x in e["puladas"]} == {F[3], F[4], F[6]} and e["bytes_estimados"] > 0, e)
+        x = op.post(f"/api/projetos/{P}/exportar-pdf", json={"folhas": [F[0], F[1], F[7], F[3]], "capa": True})
+        xj = x.json() if x.status_code == 200 else {}
+        ver("exportar (sem ?tarefa, igual ao que a tarefa roda): PDF com capa + 3 páginas, a sem TIFF listada", x.status_code == 200 and xj.get("ok")
+            and xj["paginas"] == 3 and [p_["codigo"] for p_ in xj["puladas"]] == [F[3]], x.text[:300])
+        pdf = op.get(xj.get("arquivo", "/x")) if xj else None
+        raw = pdf.content if pdf is not None and pdf.status_code == 200 else b""
+        ver("baixar o PDF (operador)", raw.startswith(b"%PDF-") and raw.rstrip().endswith(b"%%EOF") and "pdf" in pdf.headers.get("content-type", ""))
+        ver("nada recomprimido em JPEG (sem DCTDecode)", raw and b"/DCTDecode" not in raw)
+        def _imgs(b):
+            out = []
+            for m in _re.finditer(rb"<< /Type /XObject /Subtype /Image /Width (\d+) /Height (\d+) /ColorSpace /(\w+) /BitsPerComponent (\d+) /Filter /FlateDecode /Length (\d+) 0 R >>\nstream\n", b):
+                n_ = int(_re.search(rb"\n%d 0 obj\n(\d+)" % int(m.group(5)), b).group(1))
+                out.append((int(m.group(1)), int(m.group(2)), m.group(3).decode(), int(m.group(4)), _z.decompress(b[m.end():m.end() + n_])))
+            return out
+        ims = _imgs(raw) if raw else []
+        ver("cada página tem o tamanho em pixels do TIFF (nunca reduzido), na ordem da grade",
+            [(w, h) for w, h, *_ in ims] == [imgs[F[7]].size, imgs[F[1]].size, imgs[F[0]].size], [(w, h) for w, h, *_ in ims])
+        ver("pixels do PDF == pixels do TIFF (RGB, sem perda; LZW e sem compressão)", len(ims) == 3 and ims[2][4] == imgs[F[0]].tobytes() and ims[1][4] == imgs[F[1]].tobytes())
+        ver("cinza 16 bits fica em 16 bits (DeviceGray, BitsPerComponent 16)", len(ims) == 3 and ims[0][2] == "DeviceGray" and ims[0][3] == 16
+            and ims[0][4] == imgs[F[7]].tobytes("raw", "I;16B"))
+        ver("página no tamanho físico pelo DPI do TIFF (600 dpi)", raw and (b"/MediaBox [0 0 %.2f %.2f]" % (imgs[F[0]].size[0] * 72 / 600, imgs[F[0]].size[1] * 72 / 600)) in raw)
+        ver("o PDF fica em exportacoes_pdf/, registrado, com validade; histórico do projeto", um("SELECT paginas FROM exportacao_pdf")[0] == 3
+            and any(_P(os.environ["CAMP_EXPORTACOES_DIR"]).glob("*.pdf")) and um("SELECT COUNT(*) FROM evento WHERE tipo='pdf_exportado'")[0] == 1)
+        lst = op.get(f"/api/projetos/{P}/exportacoes").json()["exportacoes"]
+        ver("lista dos PDFs guardados", len(lst) == 1 and lst[0]["paginas"] == 3 and lst[0]["puladas"] == 1, lst)
+        ver("leitura não exporta nem baixa", le.post(f"/api/projetos/{P}/exportar-pdf", json={"todas": True}).status_code == 403
+            and le.get(xj.get("arquivo", "/x")).status_code == 403)
+        ver("folha de outro projeto: 400, nada exportado", op.post(f"/api/projetos/{P}/exportar-pdf", json={"folhas": ["F009-P0009-1900-S01-D00001"]}).status_code == 400)
+        y = op.post(f"/api/projetos/{P}/exportar-pdf", json={"folhas": [F[3], F[4]]})
+        ver("só folhas sem TIFF: não cria PDF vazio", y.status_code == 200 and y.json().get("ok") is False and um("SELECT COUNT(*) FROM exportacao_pdf")[0] == 1, y.text[:200])
+        c.execute("UPDATE exportacao_pdf SET expira_em='2000-01-01 00:00:00'"); c.commit()
+        ver("PDF vencido: some da lista, o arquivo é apagado e o link dá 404", op.get(f"/api/projetos/{P}/exportacoes").json()["exportacoes"] == []
+            and not any(_P(os.environ["CAMP_EXPORTACOES_DIR"]).glob("*.pdf")) and op.get(xj.get("arquivo", "/x")).status_code == 404)
+        t = op.post(f"/api/projetos/{P}/exportar-pdf?tarefa=1", json={"todas": True, "capa": False})
+        tid = t.json().get("tarefa_id") if t.status_code in (200, 202) else None
+        import time as _t
+        est = None
+        for _k in range(100):
+            est = op.get(f"/api/tarefas/{tid}").json() if tid else {}
+            if est.get("estado") != "rodando": break
+            _t.sleep(0.1)
+        ver("?tarefa=1: roda em segundo plano e termina com o PDF (projeto inteiro: os 5 TIFF válidos)", t.status_code == 202 and est.get("estado") == "ok"
+            and um("SELECT paginas FROM exportacao_pdf WHERE apagado_em IS NULL")[0] == 5, (t.status_code, est))
+        # ---- 5) .zip por categoria
+        z = op.get(f"/api/projetos/{P}/originais.zip?formato=tif&categoria=disc:Arquitetura")
+        nz = sorted(zipfile.ZipFile(_io.BytesIO(z.content)).namelist()) if z.status_code == 200 else []
+        ver(".zip só com os TIFF de uma categoria (Arquitetura)", nz == sorted(f"{P}/{c_}.tif" for c_ in (F[0], F[1], F[7])) and "Arquitetura" in z.headers.get("content-disposition", ""), nz)
+        z2 = op.get(f"/api/projetos/{P}/originais.zip?formato=tif&todas=1")
+        nz2 = zipfile.ZipFile(_io.BytesIO(z2.content)).namelist() if z2.status_code == 200 else []
+        ver(".zip do projeto inteiro: os 5 TIFF válidos; lixeira e fora da raiz nunca entram", len(nz2) == 5 and not any("lixo" in n or "fora" in n for n in nz2)
+            and set(z2.headers.get("x-camp-fora", "").split(",")) == {F[3], F[4], F[6]}, (nz2, z2.headers.get("x-camp-fora")))
+        # ---- 6) tubos: dividir um lote de estrutura em vários, quem está em cada, quais faltam
+        G = op.get(f"/api/projetos/{P}/guardados").json()
+        ver("antes: nenhuma guardada, faltam as 8, próximo tubo TB-F001-P0001.1", G["guardadas"] == 0 and len(G["faltam"]) == 8 and G["proximo_tubo"] == f"TB-{P}.1", G.get("proximo_tubo"))
+        a = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[2], F[3]], "novo_tubo": True})
+        b = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[4], F[6]], "novo_tubo": True})
+        aj, bj = a.json(), b.json()
+        ver("Guardar em… tubo novo: TB-F001-P0001.1 e depois .2 (tipo tubo, no fundo do projeto)", aj.get("identificador") == f"TB-{P}.1" and bj.get("identificador") == f"TB-{P}.2"
+            and um("SELECT tipo, fundo_codigo FROM localizacao_fisica WHERE identificador=?", f"TB-{P}.2") == ("tubo", "F001"), (aj.get("identificador"), bj.get("identificador")))
+        G = bj["guardados"]
+        ver("onde estão: cada tubo com as suas folhas; faltam guardar as outras 4", [(r_["identificador"], [f["codigo"] for f in r_["folhas"]]) for r_ in G["recipientes"]]
+            == [(f"TB-{P}.1", [F[3], F[2]]), (f"TB-{P}.2", [F[4], F[6]])] and [f["codigo"] for f in G["faltam"]] == [F[7], F[1], F[0], F[5]] and "Faltam guardar 4" in bj["mensagem"],
+            (G["recipientes"], G["faltam"]))
+        lid1 = aj["localizacao_id"]
+        m = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[6], F[0]], "localizacao_id": lid1})
+        mj = m.json()
+        ver("mover entre tubos: a que estava no .2 muda para o .1; a nova entra; a mensagem diz as duas coisas", m.status_code == 200 and mj["movidas"] == 1 and mj["guardadas"] == 1
+            and um("SELECT localizacao_id FROM item_localizacao WHERE item_codigo=?", F[6])[0] == lid1 and "mudou de lugar" in mj["mensagem"], mj.get("mensagem"))
+        h = um("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='guardada' ORDER BY id DESC LIMIT 1", F[6])
+        ver("histórico da folha: de TB-….2 para TB-….1", h and _j.loads(h[0])["de"] == f"TB-{P}.2" and _j.loads(h[0])["para"] == f"TB-{P}.1", h)
+        ver("guardar de novo no mesmo lugar não repete histórico", op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[0]], "localizacao_id": lid1}).json()["ja_estavam"] == 1
+            and um("SELECT COUNT(*) FROM evento WHERE entidade='item' AND codigo=? AND tipo='guardada'", F[0])[0] == 1)
+        ver("a etiqueta do tubo resolve para o TUBO (leitor do modo estante), não para o projeto",
+            op.get(f"/api/resolver-codigo?c=TB-{P}.1").json().get("tipo") == "caixa")
+        ver("folha de outro projeto: 400, nada guardado", op.post(f"/api/projetos/{P}/guardar-em", json={"itens": ["F009-P0009-1900-S01-D00001"], "novo_tubo": True}).status_code == 400
+            and proximo_tubo(c, P) == f"TB-{P}.3")
+        ver("leitura vê onde estão, mas não guarda", le.get(f"/api/projetos/{P}/guardados").status_code == 200
+            and le.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[0]], "novo_tubo": True}).status_code == 403)
+        for l in res: print(l)
+
     elif modo == "entrega_original_cobranca":
         # CAMP-ENTREGA (25/11/2026). Rafael: "Dentro de um projeto, no painel preciso conseguir baixar o arquivo em TIFF em alguma aba, ou o seu
         # original em alta. Além disso, caso alguém solicite acesso a algum, fazer uma resposta para download com link temporário e uma
@@ -25626,6 +25867,24 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega por e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Ficha: escritórios sugeridos (usar todos, nomes parecidos, unificar), escritório no cartão e tipos complementares")
+rc, out = rodar("ficha_escritorios_tipos", f"{tmp}/ficha_escritorios_tipos.db")
+if rc != 0: ok(False, f"teste ficha_escritorios_tipos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Escritórios e tipos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Escritórios e tipos: todas as verificações rodaram")
+
+print("Projeto: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria e onde estão as folhas (tubos)")
+rc, out = rodar("projeto_ordem_pdf_tubos", f"{tmp}/projeto_ordem_pdf_tubos.db")
+if rc != 0: ok(False, f"teste projeto_ordem_pdf_tubos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem, PDF e tubos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 34, "Ordem, PDF e tubos: todas as verificações rodaram")
 
 print("Arquivos originais no projeto e envio com cobrança ou não, sempre com justificativa")
 rc, out = rodar("entrega_original_cobranca", f"{tmp}/entrega_original_cobranca.db")

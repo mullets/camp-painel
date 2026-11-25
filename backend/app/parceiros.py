@@ -551,3 +551,125 @@ def autoria_parceiro(projeto: str, d: AutoriaParceiro, u: dict = Depends(auth.ex
         raise
     finally:
         con.close()
+
+
+# CAMP-FICHA (25/11/2026). Rafael viu o mesmo escritório com duas grafias (leitura do carimbo): "DAPA LIMA OTERO ENGENHARIA LTDA. S/C." e
+# "DAFRA- LIMA OTERO ENGENHARIA LTDA. S/C.". Nomes QUASE iguais: palavras sem as jurídicas/genéricas, cada uma casando com outra igual ou
+# com até 2 letras de diferença (mesma inicial, 4+ letras); semelhança = casadas / maior número de palavras >= 0,8. Nunca unifica sozinho:
+# a tela oferece "Unificar nomes" (prévia; histórico em cada folha).
+_GENERICAS = {"sociedade", "civil", "de", "da", "do", "das", "dos", "e", "engenharia", "escritorio", "tecnico", "projetos", "projeto", "ltda", "ltd",
+              "sc", "sa", "me", "epp", "eireli", "cia", "companhia", "arquitetura", "consultoria", "construtora", "construcoes", "comercio", "servicos"}
+
+
+def _palavras(nome) -> list[str]:
+    return [w for w in re.sub(r"[^a-z0-9 ]+", " ", _sa(nome).replace("s/c", " ").replace("s/a", " ")).split() if w not in _GENERICAS]
+
+
+def _lev(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    ant = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(ant[j] + 1, cur[j - 1] + 1, ant[j - 1] + (ca != cb)))
+        ant = cur
+    return ant[-1]
+
+
+def _casa(a: str, b: str) -> bool:
+    return a == b or (len(a) >= 4 and len(b) >= 4 and a[0] == b[0] and _lev(a, b) <= 2)
+
+
+def semelhanca(a, b) -> float:
+    A, B = _palavras(a), _palavras(b)
+    if not A or not B:
+        return 0.0
+    livres, n = list(B), 0
+    for w in A:
+        k = next((i for i, x in enumerate(livres) if _casa(w, x)), None)
+        if k is not None:
+            n += 1
+            livres.pop(k)
+    return n / max(len(A), len(B))
+
+
+def quase_iguais(nomes: list[dict]) -> list[list[dict]]:
+    """[[{escritorio, folhas}, ...], ...]: grupos de nomes diferentes (chave_firma diferente) que parecem o mesmo escritório."""
+    grupos: list[list[dict]] = []
+    for x in nomes:
+        g = next((g for g in grupos if any(chave_firma(y["escritorio"]) != chave_firma(x["escritorio"]) and semelhanca(y["escritorio"], x["escritorio"]) >= 0.8
+                                           for y in g)), None)
+        if g is not None:
+            g.append(x)
+        else:
+            grupos.append([x])
+    return [sorted(g, key=lambda y: -y.get("folhas", 0)) for g in grupos if len({chave_firma(y["escritorio"]) for y in g}) > 1]
+
+
+@router.get("/projetos/{projeto}/parceiros/semelhantes")
+def semelhantes(projeto: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    con = connect()
+    try:
+        nomes = resumo_projeto(con, projeto)
+    finally:
+        con.close()
+    return {"grupos": [{"nomes": g, "sugerido": g[0]["escritorio"]} for g in quase_iguais(nomes)]}
+
+
+class Unificar(BaseModel):
+    de: list[str]
+    para: str
+    simular: bool = True
+
+
+@router.post("/projetos/{projeto}/parceiros/unificar")
+def unificar(projeto: str, d: Unificar, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Troca as grafias `de` pelo nome `para` em todas as folhas do projeto (a disciplina de cada uma fica). simular=true (padrão) só conta."""
+    para = _limpo(d.para)
+    if not para:
+        raise HTTPException(400, "Diga o nome que fica")
+    chaves = {chave_firma(x) for x in d.de if _limpo(x)} - {chave_firma(para)}
+    if not chaves:
+        raise HTTPException(400, "Escolha os nomes que vão ser trocados")
+    con = connect()
+    site, mudam = False, []
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for r in con.execute("SELECT codigo, parceiros, tainacan_item_id FROM item WHERE projeto_codigo=? AND parceiros IS NOT NULL", (projeto,)).fetchall():
+            antes = ler(r["parceiros"])
+            if not any(chave_firma(p["escritorio"]) in chaves for p in antes):
+                continue
+            depois: list[dict] = []
+            for p in antes:
+                q = {**p, "escritorio": para} if chave_firma(p["escritorio"]) in chaves else p
+                if not any(chave_firma(x["escritorio"]) == chave_firma(q["escritorio"]) and x["disciplina"].casefold() == q["disciplina"].casefold() for x in depois):
+                    depois.append(q)
+            mudam.append(r["codigo"])
+            if d.simular:
+                continue
+            con.execute("UPDATE item SET parceiros=?, atualizado_em=datetime('now') WHERE codigo=?", (para_coluna(depois), r["codigo"]))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'editado',?,?)",
+                        (r["codigo"], u["email"], json.dumps({"antes": {"parceiros": antes}, "depois": {"parceiros": depois}, "unificar": True,
+                                                              "para": para}, ensure_ascii=False)))
+            site = site or bool(r["tainacan_item_id"])
+        if not d.simular and site:
+            from . import disciplina_site
+            site = disciplina_site.marcar(con, projeto)
+        con.commit()
+    finally:
+        con.close()
+    if not d.simular and site:
+        from . import disciplina_site
+        tarefas.add_task(disciplina_site.enviar_depois, projeto, u["email"])
+    return {"ok": True, "simulado": d.simular, "para": para, ("vai_mudar" if d.simular else "mudaram"): mudam, "site": bool(site) and not d.simular}
+
+
+# CAMP-FICHA (25/11/2026). Rafael: "falta elétrica, hidráulica, paisagismo.." — tipos complementares (migração 263). Pela disciplina que a
+# folha indica (tipo lido do CAMP Vision, depois o título), o tipo de documento a SUGERIR na conferência. Nunca é aplicado sozinho.
+TIPO_POR_DISCIPLINA = {"Instalações elétricas": "Elétrica", "Instalações hidráulicas": "Hidráulica", "Paisagismo": "Paisagismo", "Fundações": "Fundação"}
+
+
+def tipo_sugerido(tipo_lido=None, *titulos) -> str | None:
+    d = disciplina_da_folha(tipo_lido, *titulos)
+    return TIPO_POR_DISCIPLINA.get(d) if d else None
