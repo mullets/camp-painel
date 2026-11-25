@@ -77,6 +77,7 @@ MODOS_RAPIDOS |= {"home_trabalho"}   # CAMP-HOME-UX 22/11/2026: prioridade expli
 MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do site (a publicar · em preparo) e melhorias de hoje (linha própria)
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
+MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
@@ -14006,6 +14007,166 @@ def filho(modo):
         ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
         k.close(); c.close()
         for l in res: print(l)
+    elif modo == "entrega_original_cobranca":
+        # CAMP-ENTREGA (25/11/2026). Rafael: "Dentro de um projeto, no painel preciso conseguir baixar o arquivo em TIFF em alguma aba, ou o seu
+        # original em alta. Além disso, caso alguém solicite acesso a algum, fazer uma resposta para download com link temporário e uma
+        # cobrança, além de justificar o porquê da cobrança ou ausência dela." QNAP falso em pasta temporária; Sender e site FALSOS.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, tempfile, zipfile, io as _io
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth, entrega, cobrancas
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        base = _P(tempfile.mkdtemp(prefix="orig_", dir=os.environ.get("TMPDIR") or None))
+        os.environ["CAMP_ENTREGAS_DIR"] = str(base / "entregas")
+        raiz = base / "ACERVOS_CAMP"; rel = "F001 - ARM/01 - Projetos/F001-P0001 - Residência/TIF"; pj = raiz / rel; pj.mkdir(parents=True)
+        (raiz / "@Recycle").mkdir(); Image.new("RGB", (40, 30)).save(raiz / "@Recycle" / "lixo.tif", "TIFF")
+        Image.new("RGB", (40, 30)).save(base / "fora.tif", "TIFF")
+        P = "F001-P0001"; F = [f"{P}-1965-S01-D0000{n}" for n in range(1, 6)]
+        Image.new("RGB", (400, 300), (10, 20, 30)).save(pj / f"{F[0]}.tif", "TIFF")
+        Image.new("RGB", (400, 300), (90, 20, 30)).save(pj / f"{F[1]}.tif", "TIFF")
+        Image.new("RGB", (400, 300), (90, 90, 30)).save(pj / f"{F[1]}.jpg", "JPEG")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('painel.url','https://painel.exemplo')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('sender.token','tok-falso-123')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('sender.campanha_entrega','TR09abc')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('entrega.canal','sender')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('wp.app_password','abcd efgh ijkl')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('entrega.preco_comercial_folha','150')")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (P, "F001", 1, "Residência"))
+        tifs = {F[0]: f"{rel}/{F[0]}.tif", F[1]: f"{rel}/{F[1]}.tif", F[2]: None, F[3]: "@Recycle/lixo.tif", F[4]: "../fora.tif"}
+        for n, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif,arquivo_jpg) VALUES (?,?,?,?,?,?,?,?)",
+                      (cod, P, "S01", n, f"Planta {n}", "campvision", tifs[cod], f"{rel}/{F[1]}.jpg" if cod == F[1] else None))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op, le, pub = cli("adm@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitor-1234"), TestClient(app, raise_server_exceptions=False)
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        # ---- 1) arquivos originais na página do projeto
+        L = op.get(f"/api/projetos/{P}/originais")
+        lj = L.json() if L.status_code == 200 else {}
+        ver("lista as folhas com o que o painel sabe (TIFF / JPG), sem caminho do QNAP", L.status_code == 200 and [f["codigo"] for f in lj["folhas"]] == F
+            and [f["tif"] for f in lj["folhas"]] == [True, True, False, True, True] and lj["folhas"][1]["jpg"] and "ACERVOS" not in L.text, L.text[:300])
+        ver("papel leitura não vê nem baixa original", le.get(f"/api/projetos/{P}/originais").status_code == 403
+            and le.get(f"/api/projetos/{P}/originais/{F[0]}?formato=tif").status_code == 403)
+        r = op.get(f"/api/projetos/{P}/originais/{F[0]}?formato=tif")
+        ver("Baixar TIFF: o arquivo do QNAP, byte a byte", r.status_code == 200 and r.content == (pj / f"{F[0]}.tif").read_bytes() and "tiff" in r.headers.get("content-type", ""), r.status_code)
+        r = op.get(f"/api/projetos/{P}/originais/{F[1]}?formato=jpg_original")
+        ver("Baixar JPG original: o JPG do QNAP", r.status_code == 200 and r.content == (pj / f"{F[1]}.jpg").read_bytes(), r.status_code)
+        r = op.get(f"/api/projetos/{P}/originais/{F[0]}?formato=jpg_original")
+        ver("JPG original de folha que só tem TIFF: 404 dizendo que só tem TIFF (nada é gerado)", r.status_code == 404 and "só tem TIFF" in r.text, r.text[:120])
+        ver("folha sem TIFF registrado: 404", op.get(f"/api/projetos/{P}/originais/{F[2]}?formato=tif").status_code == 404)
+        ver("arquivo na lixeira do QNAP (@Recycle): 404", op.get(f"/api/projetos/{P}/originais/{F[3]}?formato=tif").status_code == 404)
+        ver("caminho que sai da raiz (../): 404", op.get(f"/api/projetos/{P}/originais/{F[4]}?formato=tif").status_code == 404)
+        ver("folha de outro projeto ou formato inválido: 404/400", op.get(f"/api/projetos/F001-P0002/originais/{F[0]}?formato=tif").status_code == 404
+            and op.get(f"/api/projetos/{P}/originais/{F[0]}?formato=pdf").status_code == 400)
+        r = op.get(f"/api/projetos/{P}/originais.zip?formato=tif&folhas={','.join(F)}")
+        try:
+            nomes = sorted(zipfile.ZipFile(_io.BytesIO(r.content)).namelist()) if r.status_code == 200 else []
+        except zipfile.BadZipFile:
+            nomes = ["(zip inválido)"]
+        ver("Baixar selecionadas (.zip): só as que existem, dentro da pasta do projeto", nomes == [f"{P}/{F[0]}.tif", f"{P}/{F[1]}.tif"], nomes)
+        evs = [_j.loads(x[0]) for x in c.execute("SELECT detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='original_baixado' ORDER BY id", (P,))]
+        ver("cada download fica no histórico do projeto (quem, o quê), o .zip com as que ficaram de fora", len(evs) == 3 and evs[0].get("folha") == F[0]
+            and evs[2].get("zip") and evs[2].get("quantidade") == 2 and set(evs[2].get("fora") or []) == {F[2], F[3], F[4]}
+            and um("SELECT ator FROM evento WHERE tipo='original_baixado' ORDER BY id LIMIT 1")[0] == "op@camp.arq.br", evs)
+        # ---- 2) pedido registrado no painel a partir do projeto
+        r = op.post(f"/api/projetos/{P}/originais/pedido", json={"nome": "Carla Lima", "email": "carla@editora.exemplo", "finalidade": "publicacao",
+                                                                 "folhas": [F[0], F[1], "F009-P0001-X"], "formato": "tif", "detalhe": "Livro sobre casas modernas"})
+        SID = (r.json() or {}).get("id") if r.status_code == 200 else None
+        ver("Enviar link de download a alguém: cria o pedido com as folhas escolhidas (só as do projeto)", SID and sorted(x[0] for x in c.execute(
+            "SELECT codigo FROM solicitacao_item WHERE solicitacao_id=?", (SID,))) == [F[0], F[1]] and um("SELECT origem, situacao FROM solicitacao WHERE id=?", SID) == ("email", "em_preparacao"), r.text[:200])
+        ver("pedido sem e-mail válido ou sem folhas: 400", op.post(f"/api/projetos/{P}/originais/pedido", json={"nome": "X Y", "email": "x", "folhas": [F[0]]}).status_code == 400
+            and op.post(f"/api/projetos/{P}/originais/pedido", json={"nome": "X Y", "email": "x@y.org", "folhas": []}).status_code == 400)
+        # ---- 3) envio: cobrança ou não, sempre com justificativa
+        ENV = []
+        entrega._enviar_sender = lambda con, para, nome, variaveis, chave_campanha="sender.campanha_entrega": (ENV.append({"para": para, "v": variaveis}), "email-1")[1]
+        SITE = []
+        class _R:
+            def __init__(s_, code, d): s_.status_code, s_._d = code, d
+            def json(s_): return s_._d
+        class _H:
+            def post(s_, path, json=None):
+                SITE.append((path, json)); n = 900 + len(SITE)
+                return _R(200, {"registro": {"id": n, "link": f"https://mp.exemplo/pagar/{n}", "external_reference": f"CAMP-COB-{n}", "situacao": "aberta", "mp": {"statement_descriptor": "CAMP SERVICO"}}})
+        class _WP: h = _H()
+        cobrancas._wp = lambda: _WP()
+        pv = op.get(f"/api/solicitacoes/{SID}/envio").json()
+        cb = pv.get("cobranca") or {}
+        ver("prévia do envio traz a seção Cobrança: motivos, preço por folha, valor sugerido; operador não cria cobrança", set(cb.get("motivos_sem", {})) == {"pesquisa", "parceira", "doador", "imprensa", "outro"}
+            and "comercial" in cb.get("motivos_com", {}) and cb.get("valor_sugerido") == 300.0 and cb.get("pode_cobrar") is False and "R$ 150,00 por folha" in cb["motivos_com"]["comercial"], str(cb)[:300])
+        ver("sem escolher cobrança: 400 e nada sai", op.post(f"/api/solicitacoes/{SID}/enviar", json={}).status_code == 400 and not ENV
+            and um("SELECT situacao FROM solicitacao WHERE id=?", SID)[0] != "entregue" and not um("SELECT 1 FROM entrega_link WHERE solicitacao_id=?", SID))
+        ver("'Outro motivo' sem texto: 400", op.post(f"/api/solicitacoes/{SID}/enviar", json={"cobranca": {"modo": "sem", "motivo": "outro"}}).status_code == 400 and not ENV)
+        ver("operador não cria cobrança: 403", op.post(f"/api/solicitacoes/{SID}/enviar", json={"cobranca": {"modo": "com", "motivo": "comercial"}}).status_code == 403 and not SITE)
+        ver("o teste para mim não exige cobrança", op.post(f"/api/solicitacoes/{SID}/enviar", json={"teste": True}).status_code == 200 and len(ENV) == 1)
+        r = adm.post(f"/api/solicitacoes/{SID}/enviar", json={"cobranca": {"modo": "com", "motivo": "comercial", "texto": "livro à venda, tiragem 2.000", "liberar_apos_pagamento": True}})
+        rj = r.json() if r.status_code == 200 else {}
+        cid = um("SELECT cobranca_id FROM solicitacao WHERE id=?", SID)
+        cob = um("SELECT valor, finalidade, solicitacao_id, vinculo_codigo, link FROM cobranca_avulsa WHERE id=?", cid[0]) if cid and cid[0] else None
+        ver("com cobrança (admin): cria a cobrança no Mercado Pago pelo site, ligada ao pedido e ao projeto, valor = folhas × preço", r.status_code == 200 and cob
+            and cob[0] == 300.0 and cob[1] == "servico" and cob[2] == SID and cob[3] == P and cob[4].startswith("https://mp.exemplo/pagar/")
+            and SITE and SITE[-1][1]["valor"] == 300.0 and SITE[-1][1]["email"] == "carla@editora.exemplo", f"{r.status_code} {r.text[:200]} {cob}")
+        v = ENV[-1]["v"] if ENV else {}
+        ver("e-mail: link de download, valor, motivo, justificativa, link de pagamento e 'liberado depois do pagamento' (no {{mensagem}} do TR09)",
+            "Cobrança: R$ 300,00" in v.get("mensagem", "") and "livro à venda, tiragem 2.000" in v.get("mensagem", "") and "Uso comercial" in v.get("mensagem", "")
+            and "https://mp.exemplo/pagar/" in v.get("mensagem", "") and "depois da confirmação do pagamento" in v.get("mensagem", "")
+            and v.get("link_pagamento", "").startswith("https://mp.exemplo/") and "/entrega/" in v.get("link", ""), str(v)[:400])
+        tok = v.get("link", "").rsplit("/", 1)[-1]
+        pg = pub.get(f"/entrega/{tok}")
+        ver("página do link: 'Aguardando pagamento' com o botão de pagar; nada listado", pg.status_code == 200 and "Aguardando pagamento" in pg.text
+            and "https://mp.exemplo/pagar/" in pg.text and "Baixar tudo" not in pg.text and "Li e aceito" not in pg.text, pg.text[:300])
+        z = pub.get(f"/entrega/{tok}/tudo.zip", follow_redirects=False); a1 = pub.get(f"/entrega/{tok}/1", follow_redirects=False)
+        ac = pub.post(f"/entrega/{tok}/aceite", data={"nome": "Carla Lima", "aceito": "1"}, follow_redirects=False)
+        ver("antes do pagamento: .zip, arquivo e aceite voltam para a página (303), sem baixar nada", z.status_code == 303 and a1.status_code == 303 and ac.status_code == 303
+            and not um("SELECT aceite_em FROM entrega_link WHERE solicitacao_id=? AND teste=0", SID)[0] and um("SELECT downloads FROM entrega_link WHERE solicitacao_id=? AND teste=0", SID)[0] == 0)
+        lk = op.get(f"/api/solicitacoes/{SID}/envio").json().get("links", [])
+        ver("na tela: o link aparece como 'aguardando pagamento'", any(x["situacao"] == "aguardando pagamento" and not x["teste"] for x in lk), lk)
+        c.execute("UPDATE cobranca_avulsa SET situacao='paga' WHERE id=?", (cid[0],)); c.commit()
+        pg = pub.get(f"/entrega/{tok}")
+        ver("pago: abre o termo, com o uso comercial autorizado (não 'declaro uso não comercial')", pg.status_code == 200 and "Li e aceito" in pg.text
+            and "uso comercial está autorizado" in pg.text and "Declaro que o uso será" not in pg.text, pg.text[-500:])
+        pub.post(f"/entrega/{tok}/aceite", data={"nome": "Carla Lima", "aceito": "1"})
+        z = pub.get(f"/entrega/{tok}/tudo.zip")
+        ver("pago e aceito: o .zip sai", z.status_code == 200 and len(zipfile.ZipFile(_io.BytesIO(z.content)).namelist()) == 2, z.status_code)
+        ver("pedido guarda com cobrança, motivo, justificativa e valor; histórico também", um("SELECT cobranca_modo, cobranca_motivo, valor FROM solicitacao WHERE id=?", SID) == ("com", "comercial", 300.0)
+            and "livro à venda" in um("SELECT cobranca_justificativa FROM solicitacao WHERE id=?", SID)[0]
+            and "livro à venda" in (um("SELECT detalhe FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='entregue_por_email'", str(SID)) or [""])[0])
+        # ---- sem cobrança
+        S2 = op.post(f"/api/projetos/{P}/originais/pedido", json={"nome": "João Pesquisador", "email": "joao@usp.exemplo", "finalidade": "pesquisa", "folhas": [F[0]]}).json()["id"]
+        r = op.post(f"/api/solicitacoes/{S2}/enviar", json={"cobranca": {"modo": "sem", "motivo": "pesquisa", "texto": "dissertação de mestrado na FAU-USP"}})
+        v = ENV[-1]["v"]
+        tok2 = v.get("link", "").rsplit("/", 1)[-1]
+        ver("sem cobrança (operador): e-mail diz 'Sem cobrança:' com o motivo e a justificativa; nenhuma cobrança criada", r.status_code == 200
+            and "Sem cobrança: Uso acadêmico ou de pesquisa, não comercial (item 1 do termo de uso). dissertação de mestrado na FAU-USP." in v.get("mensagem", "")
+            and not um("SELECT cobranca_id FROM solicitacao WHERE id=?", S2)[0], f"{r.status_code} {v.get('mensagem')}")
+        pg = pub.get(f"/entrega/{tok2}")
+        ver("sem cobrança: o link abre direto no termo de uso (não comercial)", pg.status_code == 200 and "Declaro que o uso será" in pg.text and "Aguardando pagamento" not in pg.text)
+        # ---- exportação e link encerrado
+        e = adm.get("/api/solicitacoes/cobrancas.csv")
+        ver("Cobrança e justificativa (CSV, admin): os dois pedidos, com e sem cobrança, motivo, justificativa, valor e referência; sem e-mail",
+            e.status_code == 200 and "com cobrança" in e.text and "sem cobrança" in e.text and "300,00" in e.text and "dissertação de mestrado" in e.text
+            and "CAMP-COB-" in e.text and "Paga" in e.text and "@" not in e.text, e.text[:300])
+        ver("operador não exporta (dados de pagamento): 403", op.get("/api/solicitacoes/cobrancas.csv").status_code == 403)
+        op.post(f"/api/solicitacoes/{S2}/cancelar-link")
+        pg = pub.get(f"/entrega/{tok2}"); a1 = pub.get(f"/entrega/{tok2}/1")
+        ver("link cancelado: página limpa 'Este link foi cancelado' (também no arquivo direto)", pg.status_code == 410 and "foi cancelado" in pg.text and a1.status_code == 410 and "foi cancelado" in a1.text)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: aba Arquivos originais (não para leitura), .zip, Enviar link de download a alguém, seção Cobrança e exportação",
+            "['originais','Arquivos originais']" in html and "Baixar selecionadas (.zip)" in html and "Enviar link de download a alguém" in html
+            and "function cobrancaEnvioHTML(pv)" in html and "cobranca:cob" in html and "/api/solicitacoes/cobrancas.csv" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "entrega_por_email":
         # 01/11/2026 (Rafael: "quando recebemos uma solicitação de envio de material em alta, poder aprovar pelo sistema e já enviar o que
         # ele pediu pelo próprio sistema" / "podemos usar interligação com o sender.net"): aprovar → link de download com prazo → e-mail
@@ -14072,14 +14233,14 @@ def filho(modo):
         resposta = {"v": Resp(500, {"success": False, "message": "erro interno tok-secreto-123"})}
         def falso_post(url, **kw): chamadas.append((url, kw)); return resposta["v"]
         entrega.httpx.post = falso_post
-        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa."})
+        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa.", "cobranca": {"modo": "sem", "motivo": "pesquisa"}})
         ver("Sender recusa: 502 com a mensagem do Sender, sem o token", r.status_code == 502 and "Sender.net" in r.text and "tok-secreto" not in r.text, r.text[:200])
         ver("Sender recusa: pedido continua não entregue", um("SELECT situacao FROM solicitacao WHERE id=?", S1)[0] != "entregue")
         ver("Sender recusa: o link criado fica cancelado", um("SELECT COUNT(*) FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == 0)
         # 3) Sender aceita: entregue, com o resumo; o token não fica no banco
         resposta["v"] = Resp(200, {"success": True, "message": "Email sent", "data": {"emailId": "e-77"}})
         chamadas.clear()
-        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa."})
+        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa.", "cobranca": {"modo": "sem", "motivo": "pesquisa"}})
         ver("Sender aceita: 200", r.status_code == 200 and r.json().get("canal") == "sender", r.text[:200])
         url, kw = chamadas[-1] if chamadas else ("", {})
         ver("Sender: rota do e-mail transacional e token Bearer", url.endswith("/message/aBc123/send") and kw.get("headers", {}).get("Authorization") == "Bearer tok-secreto-123", url)
@@ -14088,7 +14249,7 @@ def filho(modo):
         ver("o link do e-mail abre a página do termo (não baixa direto)", (corpo.get("variables") or {}).get("link") == link and link, str(corpo.get("variables"))[:200])
         ver("e-mail avisa: uso não comercial e R$ 150,00 por folha no comercial", corpo["variables"].get("preco_comercial") == "150,00")
         ver("Sender: para quem pediu, com as variáveis do layout", corpo.get("to", {}).get("email") == "maria@exemplo.org" and link.startswith("https://painel.exemplo/entrega/")
-            and corpo["variables"].get("nome") == "Maria" and corpo["variables"].get("mensagem") == "Uso só para a pesquisa." and F1 in corpo["variables"].get("lista", ""), str(corpo)[:300])
+            and corpo["variables"].get("nome") == "Maria" and corpo["variables"].get("mensagem", "").startswith("Uso só para a pesquisa.\n\nSem cobrança: ") and F1 in corpo["variables"].get("lista", ""), str(corpo)[:300])
         sit = um("SELECT situacao, entrega FROM solicitacao WHERE id=?", S1)
         ver("pedido vira entregue com o resumo do envio", sit and sit[0] == "entregue" and "Sender.net" in (sit[1] or "") and "maria@exemplo.org" in (sit[1] or ""), str(sit))
         ver("itens entregues marcados; os que ficaram de fora não", um("SELECT entregue FROM solicitacao_item WHERE solicitacao_id=? AND codigo=?", S1, F1)[0] == 1
@@ -14101,7 +14262,7 @@ def filho(modo):
         t0 = pub.get(f"/entrega/{token}")
         ver("link abre o termo: não comercial, R$ 150,00 por folha, Lei 9.610/1998, sem botão de baixar", t0.status_code == 200 and "Termo de uso" in t0.text
             and "não comercial" in t0.text and "R$ 150,00 por folha" in t0.text and "9.610/1998" in t0.text and "tudo.zip" not in t0.text and f"/entrega/{token}/1" not in t0.text)
-        ver("sem aceite: arquivo 403 e .zip volta para o termo", pub.get(f"/entrega/{token}/1").status_code == 403
+        ver("sem aceite: arquivo e .zip voltam para o termo (303)", pub.get(f"/entrega/{token}/1", follow_redirects=False).status_code == 303
             and pub.get(f"/entrega/{token}/tudo.zip", follow_redirects=False).status_code == 303)
         sem = pub.post(f"/entrega/{token}/aceite", data={"nome": "Maria Souza"}, follow_redirects=False)
         ver("aceite sem marcar 'Li e aceito': não libera", sem.status_code == 400 and "Li e aceito" in sem.text and not um("SELECT aceite_em FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0])
@@ -14178,7 +14339,7 @@ def filho(modo):
         c.execute("UPDATE configuracao SET valor='senha-app' WHERE chave='wp.app_password'"); c.commit()
         S3 = novo_pedido("ana@exemplo.org", "Ana Lima")
         c.execute("INSERT INTO pedido_site (site_id,tipo,codigo,criado_no_site,payload,situacao,destino,destino_id) VALUES (502,'alta-resolucao',?,datetime('now'),'{}','importado','solicitacao',?)", (F1, S3)); c.commit()
-        r = op.post(f"/api/solicitacoes/{S3}/enviar", json={"canal": "site"})
+        r = op.post(f"/api/solicitacoes/{S3}/enviar", json={"canal": "site", "cobranca": {"modo": "sem", "motivo": "pesquisa"}})
         kw = site[-1] if site else {}
         ver("canal site: e-mail sai pelo site com o link e o id do pedido do site", r.status_code == 200 and kw.get("para") == "ana@exemplo.org"
             and "https://painel.exemplo/entrega/" in kw.get("texto", "") and kw.get("pedido_site_id") == 502 and "#" in kw.get("assunto", ""), str(kw)[:200])
@@ -14270,7 +14431,7 @@ def filho(modo):
             def json(s_): return s_._js
         def falso_post(url, **kw): chamadas.append((url, kw)); return Resp(200, {"success": True, "data": {"emailId": "e-1"}})
         entrega.httpx.post = falso_post
-        r = entrega.aprovar_e_enviar(c, sid_site, {"email": "op@camp.arq.br"})
+        r = entrega.aprovar_e_enviar(c, sid_site, {"email": "op@camp.arq.br"}, cobranca={"modo": "sem", "motivo": "pesquisa"})
         url, kw = chamadas[-1] if chamadas else ("", {})
         corpo = kw.get("json") or {}
         exp = um("SELECT expira_em FROM entrega_link WHERE solicitacao_id=? ORDER BY id DESC", sid_site)[0]
@@ -23314,7 +23475,7 @@ def filho(modo):
         def _recusa(*a, **k): raise _en.EnvioErro("O Sender.net recusou o envio (401): token inválido")
         _en.enviar = _recusa
         try:
-            _en.aprovar_e_enviar(c, sid, {"email": "adm@camp.arq.br"}); _st = None
+            _en.aprovar_e_enviar(c, sid, {"email": "adm@camp.arq.br"}, cobranca={"modo": "sem", "motivo": "pesquisa"}); _st = None
         except _HE as e_:
             _st = e_.status_code
         fl = c.execute("SELECT erro, revogado_em FROM entrega_link WHERE solicitacao_id=? ORDER BY id DESC LIMIT 1", (sid,)).fetchone()
@@ -25265,6 +25426,15 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega por e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Arquivos originais no projeto e envio com cobrança ou não, sempre com justificativa")
+rc, out = rodar("entrega_original_cobranca", f"{tmp}/entrega_original_cobranca.db")
+if rc != 0: ok(False, f"teste entrega_original_cobranca não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Originais e cobrança: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 30, "Originais e cobrança: todas as verificações rodaram")
 
 print("Sender.net: e-mails transacionais TR04–TR09, validade por extenso, configuração enviada ao site")
 rc, out = rodar("sender_transacional", f"{tmp}/sender_transacional.db")
