@@ -865,3 +865,20 @@ avisar tudo." Modelo: a proposta do SALIC.
   estão aqui: …" com **Ver o que será completado** → **Completar** (só o vazio; nada da equipe é trocado). Etapa sem data: "duração: 3 meses ·
   começa quando a captação for liberada"; com **Execução começa em** (Editar dados) as datas aparecem ("pela duração (3 meses), a partir do início
   da execução"). Trecho ilegível na cópia: "Trecho ilegível na cópia da proposta: confira o texto na proposta do SALIC." Nunca inventar data.
+
+**Escritórios parceiros e disciplinas** (CAMP-FICHA, 25/11/2026; Rafael: "ver se outras folhas desse projeto têm algum escritório e já
+sugerir" e "selecionar várias e colocar o escritório que fez, e que ficasse a separação do tipo elétrica, engenharia, fundação, desenhos").
+Na ficha da folha sem parceiros: **Nas outras folhas deste projeto** ("· esta folha parece de estrutura"), cada linha "Escritório ·
+Disciplina · N folhas" (selo **mesma disciplina**) com **Usar**; o primeiro em cinza no nome vazio ("<kbd>Tab</kbd> no nome aceita o
+primeiro"). Embaixo do Cliente: "Parece o escritório de estrutura, não o cliente (já está como escritório parceiro em N folhas deste
+projeto)." com **Mover para Escritórios parceiros**; toast "Movido para Escritórios parceiros. Grava com "Está certo" ou "Salvar
+correção"."; Cliente vazio com o das outras folhas: "das outras folhas (N folhas) · <kbd>Tab</kbd> aceita". Na página do projeto
+(desenhos): grupos por **disciplina** — **Arquitetura** (os desenhos do próprio arquiteto, sem escritório parceiro nem tipo de projeto
+complementar) e as disciplinas da lista (Estrutura, Fundações, Instalações elétricas…), cada um com o número e o escritório; resumo
+"Arquitetura 23 · Estrutura 18"; botão **Agrupar por disciplina**. Escolha: **Escolher folhas** / **Sair da escolha**, "Clique nas folhas
+para escolher (Shift+clique: um intervalo)", "N folhas escolhidas", **Escolher todas as visíveis**, **Limpar**, **Definir escritório
+parceiro…** (janela **Definir escritório parceiro**: **Escritório**, **Disciplina**, "Vai adicionar a N folhas (M já têm). Fica no
+histórico de cada folha.", **Aplicar**), **Tirar escritório…** (janela **Tirar escritório parceiro**: "Em qualquer disciplina", "Vai tirar
+de N folhas (M não têm)", **Tirar**) e **Definir tipo…** (janela **Definir tipo**: **Substituir** / **Acrescentar** / **Tirar**, os tipos,
+"Vai mudar N folhas" com antes → depois, **Aplicar**). Disciplina é agrupamento: as séries S01–S08/S99 não mudam. Dizer "escritório
+parceiro" e "disciplina" (nunca "consultoria" no lugar de disciplina, nem "categoria").

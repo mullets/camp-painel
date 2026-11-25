@@ -315,6 +315,16 @@ class WP:
             raise RuntimeError(f"O site recusou a ordem das folhas: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def gravar_disciplinas_folhas(self, projeto_id: int, folhas: dict) -> dict | None:
+        """Contrato 1.38 (opcional): disciplina de cada folha de desenho, para a página do projeto separar por disciplina
+        (ver disciplina_site.py). `folhas` = {"<id da folha>": {"disciplina", "escritorio"?} | "__limpar__"}. None = site antigo (404)."""
+        r = self.h.post("/wp-json/camp/v1/painel/disciplinas-folhas", json={"projeto": int(projeto_id), "folhas": folhas})
+        if r.status_code == 404 and "rest_no_route" in r.text:
+            return None
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou a separação por disciplina: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def pagina_por_slug(self, slug: str) -> list[dict]:
         """21/10: páginas do WordPress com este slug (publicadas, rascunho ou privadas). Usado para achar a página do arquiteto."""
         r = self._get("/wp-json/wp/v2/pages", slug=slug, status="publish,draft,private,pending", context="edit", per_page=20)

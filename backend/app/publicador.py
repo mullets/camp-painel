@@ -1297,6 +1297,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 out["item_id"] = iid; out["imagem"] = "já estava no site"
                 from . import ordem_site as _os
                 _os.na_criacao_da_folha(con, wp, i, iid, out)     # contrato 1.8: só se a folha tem posição escolhida no painel
+                from . import disciplina_site as _ds
+                _ds.na_criacao_da_folha(con, wp, codigo, iid, out)  # contrato 1.38: a disciplina da folha de desenho
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_item_reaproveitado',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
                 con.commit(); con.close()
                 return out
@@ -1357,6 +1359,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         # 06/11 (contrato 1.8): a posição escolhida no painel (ordem das folhas do projeto). Sem posição, nada vai (o site segue a regra de sempre).
         from . import ordem_site as _os
         _os.na_criacao_da_folha(con, wp, i, iid, out)
+        from . import disciplina_site as _ds                  # 25/11 (contrato 1.38, opcional): a disciplina da folha de desenho vai junto
+        _ds.na_criacao_da_folha(con, wp, codigo, iid, out)
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado

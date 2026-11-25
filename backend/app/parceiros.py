@@ -14,7 +14,7 @@ principalmente consultoria / projetos complementares (engenharia, instalações,
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import auth
@@ -200,12 +200,123 @@ def disciplina_da_folha(tipo_lido=None, *titulos) -> str | None:
 def chave_firma(nome) -> str:
     """Nome sem acento, pontuação e o tipo de sociedade: "DAPA LIMA OTERO ENGENHARIA LTDA. S/C." e "DAPA Lima Otero Engenharia" batem."""
     t = re.sub(r"[^a-z0-9 ]+", " ", _sa(nome).replace("s/c", " ").replace("s/a", " "))
-    t = re.sub(r"\b(ltda|s c|s a|sa|sc|me|epp|eireli|cia)\b", " ", t)
+    t = re.sub(r"\b(ltda|ltd|s c|s a|sa|sc|me|epp|eireli|cia)\b", " ", t)
     return " ".join(t.split())
 
 
 def parece_firma(nome) -> bool:
     return bool(_RE_FIRMA.search(_sa(nome)))
+
+
+# CAMP-FICHA (25/11/2026). Rafael, na página do projeto: "selecionar várias e colocar o escritório que fez, e que ficasse a separação do
+# tipo elétrica, engenharia, fundação, desenhos etc., tanto aqui quanto no site". A disciplina de cada folha, para AGRUPAR (as séries
+# S01–S08 continuam como estão; é um agrupamento a mais, dentro dos desenhos): a do escritório parceiro da folha; senão a que o tipo indica
+# (Estrutura, "Detalhe / Estrutura", instalações…); senão "Arquitetura" (os desenhos do próprio arquiteto).
+ARQUITETURA = "Arquitetura"
+SERIES_DESENHO = ("S01", "S08")      # Desenhos e pranchas, Redesenhos: onde o agrupamento por disciplina vale (painel e site)
+
+
+def disciplina_grupo(parceiros=None, tipo_documento=None, tipos_documento=None, tipo_lido=None) -> tuple[str, str | None]:
+    """(disciplina, escritório | None) para agrupar a folha. Só valores de DISCIPLINAS (ou o texto de "Outra" que a equipe escreveu no
+    parceiro); sem nada, "Arquitetura"."""
+    lista = parceiros if isinstance(parceiros, list) else ler(parceiros)
+    for p in lista:
+        if p.get("disciplina"):
+            return p["disciplina"], p.get("escritorio") or None
+    d = disciplina_da_folha(tipos_documento or tipo_documento) or disciplina_da_folha(tipo_lido)
+    return (d or ARQUITETURA), None
+
+
+def ordem_disciplina(nome: str) -> tuple:
+    """Arquitetura primeiro; depois a ordem da lista do painel; as outras (texto livre) por nome."""
+    if nome == ARQUITETURA:
+        return (0, 0, "")
+    try:
+        return (1, DISCIPLINAS.index(nome), "")
+    except ValueError:
+        return (2, 0, nome.casefold())
+
+
+class LoteParceiros(BaseModel):
+    itens: list[str]
+    escritorio: str
+    disciplina: str = ""
+    outra: str | None = None
+    acao: str = "adicionar"      # adicionar | tirar
+    simular: bool = True
+
+
+@router.post("/projetos/{projeto}/parceiros/lote")
+def parceiros_em_lote(projeto: str, d: LoteParceiros, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Escritório parceiro em várias folhas do projeto de uma vez (as escolhidas na grade).
+    - adicionar: o escritório + disciplina entra em cada folha (as que já têm ficam como estão);
+    - tirar: sai de cada folha (o mesmo escritório, com ou sem LTDA/maiúsculas; com disciplina, só nessa disciplina).
+    simular=true (padrão) só diz o que vai mudar ("vai adicionar a N folhas (M já têm)"). Aplicar: cada folha mudada ganha um 'editado'
+    no histórico com antes/depois (e "lote"); repetir não muda nada. Folhas já no site: a separação por disciplina vai ao site depois."""
+    if d.acao not in ("adicionar", "tirar"):
+        raise HTTPException(400, "Ação inválida: use adicionar ou tirar")
+    esc = _limpo(d.escritorio)
+    if not esc:
+        raise HTTPException(400, "Diga o escritório parceiro")
+    novo = None
+    if d.acao == "adicionar":
+        novo = normalizar([{"escritorio": esc, "disciplina": d.disciplina, "outra": d.outra}])[0]
+    disc_tirar = None
+    if d.acao == "tirar" and _limpo(d.disciplina):
+        fixas = {x.casefold(): x for x in DISCIPLINAS}
+        disc_tirar = (fixas.get(_limpo(d.disciplina).casefold()) or _limpo(d.disciplina))
+        if disc_tirar == "Outra":
+            disc_tirar = _limpo(d.outra) or None
+    alvo = list(dict.fromkeys(x for x in (d.itens or []) if x))
+    if not alvo:
+        raise HTTPException(400, "Nenhuma folha escolhida")
+    if len(alvo) > 2000:
+        raise HTTPException(400, "No máximo 2000 folhas de uma vez")
+    chave = chave_firma(esc)
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        q = ",".join("?" * len(alvo))
+        linhas = {r["codigo"]: r for r in con.execute(
+            f"SELECT codigo, parceiros, tainacan_item_id FROM item WHERE projeto_codigo=? AND codigo IN ({q})", (projeto, *alvo))}
+        mudam, ja, fora = [], [], []
+        site = False
+        for cod in alvo:
+            r = linhas.get(cod)
+            if not r:
+                fora.append({"codigo": cod, "motivo": "não é deste projeto"}); continue
+            antes = ler(r["parceiros"])
+            if d.acao == "adicionar":
+                tem = any(chave_firma(p["escritorio"]) == chave and p["disciplina"].casefold() == novo["disciplina"].casefold() for p in antes)
+                depois = antes if tem else juntar(antes, [novo])
+            else:
+                depois = [p for p in antes if not (chave_firma(p["escritorio"]) == chave and (not disc_tirar or p["disciplina"].casefold() == disc_tirar.casefold()))]
+            if depois == antes:
+                ja.append(cod); continue
+            mudam.append(cod)
+            if d.simular:
+                continue
+            con.execute("UPDATE item SET parceiros=?, atualizado_em=datetime('now') WHERE codigo=?", (para_coluna(depois), cod))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'editado',?,?)",
+                        (cod, u["email"], json.dumps({"antes": {"parceiros": antes}, "depois": {"parceiros": depois},
+                                                      "lote": d.acao, "escritorio": esc}, ensure_ascii=False)))
+            site = site or bool(r["tainacan_item_id"])
+        if not d.simular and site:
+            from . import disciplina_site
+            site = disciplina_site.marcar(con, projeto)
+        con.commit()
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    if not d.simular and site:
+        from . import disciplina_site
+        tarefas.add_task(disciplina_site.enviar_depois, projeto, u["email"])
+    chave_res = "vai_mudar" if d.simular else "mudaram"
+    return {"ok": True, "simulado": d.simular, "acao": d.acao, "escritorio": esc,
+            "disciplina": (novo or {}).get("disciplina") or disc_tirar, chave_res: mudam, "ja_estavam": ja, "fora": fora,
+            "site": bool(site) and not d.simular}
 
 
 @router.get("/itens/{codigo}/parceiros/projeto")

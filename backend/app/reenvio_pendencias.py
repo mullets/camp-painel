@@ -32,7 +32,7 @@ from .db import connect
 
 FIXOS = {("fundo", "pendente_criar_no_site"), ("fundo", "pendente_renomear_no_site"), ("fundo", "pendente_descricao_no_site"),
          ("projeto", "pendente_criar_no_site"), ("projeto", "pendente_metadados_no_site"), ("projeto", "pendente_capa_no_site"),
-         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site"), ("projeto", "pendente_ordem_folhas_no_site"),
+         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site"), ("projeto", "pendente_ordem_folhas_no_site"), ("projeto", "pendente_disciplinas_no_site"),
          ("fundo", "pendente_sem_legendas_no_site")}
 PREFIXO_METADADO = "pendente_metadado_"
 NOMES_ENTIDADE = {"fundo": "fundo", "projeto": "projeto", "agente": "arquiteto"}
@@ -369,6 +369,15 @@ def _projeto_ordem(codigo: str, ator: str) -> str:
     return "ordem das folhas"
 
 
+def _projeto_disciplinas(codigo: str, ator: str) -> str:
+    from . import disciplina_site
+    r = disciplina_site.enviar(codigo, ator)
+    _erro(r)
+    if r.get("nada"):
+        raise NadaAEnviar("nenhuma folha de desenho do projeto está no site; a disciplina vai junto com cada folha")
+    return "separação por disciplina"
+
+
 def meta_hub_agente(aid: int) -> dict:
     """O que vai à página do arquiteto agora: o preenchido (biografia, fontes, datas, retrato) e "__limpar__" só para o que foi
     APAGADO no painel depois do último envio confirmado (evento site_hub_arquiteto). Retrato já subido não sobe de novo."""
@@ -440,7 +449,7 @@ def reenviar(p: dict, ator: str) -> str:
     fn = {("fundo", "pendente_criar_no_site"): _fundo_criar, ("fundo", "pendente_renomear_no_site"): _fundo_renomear,
           ("fundo", "pendente_descricao_no_site"): _fundo_descricao, ("fundo", "pendente_sem_legendas_no_site"): _fundo_sem_legendas, ("projeto", "pendente_criar_no_site"): _projeto_criar,
           ("projeto", "pendente_metadados_no_site"): _projeto_metadados, ("projeto", "pendente_capa_no_site"): _projeto_capa,
-          ("projeto", "pendente_ordem_folhas_no_site"): _projeto_ordem,
+          ("projeto", "pendente_ordem_folhas_no_site"): _projeto_ordem, ("projeto", "pendente_disciplinas_no_site"): _projeto_disciplinas,
           ("agente", "pendente_hub_no_site"): _agente_hub, ("agente", "pendente_renomear_no_site"): _agente_renomear}[(e, campo)]
     return fn(c, ator)
 

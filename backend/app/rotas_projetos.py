@@ -579,6 +579,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "ordem_manual": local.get("ordem_manual"),
                 "_arquivo_origem": local.get("_arquivo_origem"),
                 "copiada_de": local.get("copiada_de"),
+                "parceiros": local.get("parceiros"), "tipo_lido": local.get("tipo_lido"),   # 25/11: a disciplina para agrupar (e os parceiros, CAMP-127) também na folha que está no site
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -614,11 +615,13 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         raiz_prontos = _qnap_prontos_raiz()
     except Exception:  # noqa: BLE001
         raiz_prontos = None
-    from .parceiros import ler as _ler_parc
+    from .parceiros import ler as _ler_parc, disciplina_grupo as _disc_grupo
     from .folhas_repetidas import ROTULO_FORMATO, rank_formato
     for d in itens:
         if "parceiros" in d:                            # CAMP-127: os parceiros de cada folha (lista), para a ação em lote "Confirmar: X, parceiro"
             d["parceiros"] = _ler_parc(d.get("parceiros"))
+        # 25/11 (campos novos, opcionais): a disciplina para agrupar os desenhos (escritório parceiro → tipo → Arquitetura) e o escritório
+        d["disciplina"], d["disciplina_escritorio"] = _disc_grupo(d.get("parceiros") or [], d.get("tipo_documento"), d.get("tipos_documento"), d.get("tipo_lido"))
         if isinstance(d.get("pendencias"), str):
             try:
                 d["pendencias"] = json.loads(d["pendencias"])
