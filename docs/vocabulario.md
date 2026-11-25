@@ -867,3 +867,20 @@ avisar tudo." Modelo: a proposta do SALIC.
   da execução"). Trecho ilegível na cópia: "Trecho ilegível na cópia da proposta: confira o texto na proposta do SALIC." Nunca inventar data.
 
 **Arquivos originais e cobrança no envio** (CAMP-ENTREGA, 25/11/2026): aba **Arquivos originais** na página do projeto (operador ou mais; leitura não vê). Por folha: **Baixar TIFF**, **Baixar JPG original** (ou "sem TIFF registrado"); **Escolher todas**, **Formato** (TIFF · JPG original), **Baixar selecionadas (.zip)** e **Enviar link de download a alguém** (abre **Enviar link de download**: **Nome de quem pediu**, **E-mail**, **Instituição (opcional)**, **Finalidade**, **Formato**, **O que a pessoa disse (opcional)**; botões **Registrar e abrir o envio** e **Voltar**). Bloco **Últimos downloads**; no Histórico: "baixou arquivo original" e "registrou o pedido no painel". No envio do pedido, a seção **Cobrança**: **Sem cobrança** ou **Com cobrança (Mercado Pago)** (só admin; "Só admin cria cobrança."), **Por que não cobrar** (Uso acadêmico ou de pesquisa, não comercial (item 1 do termo de uso) · Instituição parceira da CAMP · Doador do acervo ou família do arquiteto · Imprensa: divulgação do acervo da CAMP · Outro motivo), **Por que cobrar** (Uso comercial (R$ X por folha, item 2 do termo de uso) · Outro motivo), **Valor (R$)**, **Liberar o download só depois do pagamento**, **Justificativa** (obrigatória em "Outro motivo"). Sem escolha: "Escolha se o envio tem cobrança ou não, e diga por quê." No e-mail: "Sem cobrança: …" ou "Cobrança: R$ … (…). Pague pelo Mercado Pago neste link: … O download é liberado depois da confirmação do pagamento (pode levar alguns minutos)." Na página do link: **Aguardando pagamento** com **Pagar R$ … pelo Mercado Pago**. Situação do link: **aguardando pagamento**. Exportação: **Cobrança e justificativa (CSV)** (admin). Dizer "justificativa" e "cobrança" (nunca "isenção" ou "fatura" na tela).
+
+**Escritórios parceiros e disciplinas** (CAMP-FICHA, 25/11/2026; Rafael: "ver se outras folhas desse projeto têm algum escritório e já
+sugerir" e "selecionar várias e colocar o escritório que fez, e que ficasse a separação do tipo elétrica, engenharia, fundação, desenhos").
+Na ficha da folha sem parceiros: **Nas outras folhas deste projeto** ("· esta folha parece de estrutura"), cada linha "Escritório ·
+Disciplina · N folhas" (selo **mesma disciplina**) com **Usar**; o primeiro em cinza no nome vazio ("<kbd>Tab</kbd> no nome aceita o
+primeiro"). Embaixo do Cliente: "Parece o escritório de estrutura, não o cliente (já está como escritório parceiro em N folhas deste
+projeto)." com **Mover para Escritórios parceiros**; toast "Movido para Escritórios parceiros. Grava com "Está certo" ou "Salvar
+correção"."; Cliente vazio com o das outras folhas: "das outras folhas (N folhas) · <kbd>Tab</kbd> aceita". Na página do projeto
+(desenhos): grupos por **disciplina** — **Arquitetura** (os desenhos do próprio arquiteto, sem escritório parceiro nem tipo de projeto
+complementar) e as disciplinas da lista (Estrutura, Fundações, Instalações elétricas…), cada um com o número e o escritório; resumo
+"Arquitetura 23 · Estrutura 18"; botão **Agrupar por disciplina**. Escolha: **Escolher folhas** / **Sair da escolha**, "Clique nas folhas
+para escolher (Shift+clique: um intervalo)", "N folhas escolhidas", **Escolher todas as visíveis**, **Limpar**, **Definir escritório
+parceiro…** (janela **Definir escritório parceiro**: **Escritório**, **Disciplina**, "Vai adicionar a N folhas (M já têm). Fica no
+histórico de cada folha.", **Aplicar**), **Tirar escritório…** (janela **Tirar escritório parceiro**: "Em qualquer disciplina", "Vai tirar
+de N folhas (M não têm)", **Tirar**) e **Definir tipo…** (janela **Definir tipo**: **Substituir** / **Acrescentar** / **Tirar**, os tipos,
+"Vai mudar N folhas" com antes → depois, **Aplicar**). Disciplina é agrupamento: as séries S01–S08/S99 não mudam. Dizer "escritório
+parceiro" e "disciplina" (nunca "consultoria" no lugar de disciplina, nem "categoria").

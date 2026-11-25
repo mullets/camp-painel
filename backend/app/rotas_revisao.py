@@ -1028,7 +1028,9 @@ def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
         from .tipos_documento import juntar
         tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
         lista = []
-        for parte in re.split(r"\s*;\s*|\s+/\s+", " ".join(agora.split())):
+        inteiro = tipos.get(" ".join(agora.split()).lower())
+        partes = [inteiro] if inteiro else re.split(r"\s*;\s*|\s+/\s+", " ".join(agora.split()))   # 25/11/2026: "Detalhe / Estrutura" é um tipo só
+        for parte in partes:
             p_ = parte.strip().lower()
             if not p_:
                 continue

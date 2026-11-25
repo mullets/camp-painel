@@ -79,6 +79,9 @@ MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
+MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
+MODOS_RAPIDOS |= {"tipo_detalhe_estrutura"}   # CAMP-FICHA 25/11/2026: tipo "Detalhe / Estrutura" na lista (decisão do Rafael; migração 261)
+MODOS_RAPIDOS |= {"parceiros_do_projeto"}   # CAMP-FICHA 25/11/2026: sugerir escritórios das outras folhas do projeto; cliente lido que parece escritório (navegador: tests/navegador_sugerir_escritorios.js)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_livro"}   # CAMP-FIN 24/11/2026: o livro da conta (relatório de liberações + Extrato, com sinal) decide entrada/saída; VINDI −1.707,34; −472,24 exato; liberações não são receita nova (linha própria)
@@ -9403,6 +9406,203 @@ def filho(modo):
         ver("a lista de Problemas traz a origem de cada um (leitura vê)", {x_["origem"] for x_ in lst} == {"campvision", "site", "operador"}, str({x_["origem"] for x_ in lst}))
         k.close()
         for l in res: print(l)
+    elif modo == "parceiros_lote_disciplina":
+        # CAMP-FICHA (25/11/2026). Rafael, na página do projeto (F035-P0001, "Parceiros neste projeto: Sociedade civil de engenharia José
+        # Roberto Parisi Ltd. · Estrutura (11 folhas)"): "gostaria de selecionar várias e colocar o escritório que fez, e que ficasse a
+        # separação do tipo elétrica, engenharia, fundação, desenhos etc. tanto aqui quanto no site". Prova: POST /api/projetos/{p}/parceiros/lote
+        # simula por padrão (vai adicionar a N, M já têm), aplica com histórico, é idempotente, "tirar" desfaz; a disciplina de cada folha
+        # (parceiro → tipo → Arquitetura) vem nos itens do projeto; e o site recebe {projeto, folhas:{id:{disciplina, escritorio}}} (contrato 1.38),
+        # só as folhas de desenho que estão no site; site antigo (404) deixa a pendência.
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth, parceiros as pc, disciplina_site as ds
+        import app.publicador as pub
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F035','Fundo')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F035',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F035-P0001','F035',1,'Edifício Vitoria Reggia',1960,7000)")
+        P = "F035-P0001"; D = lambda n, s="S01": f"{P}-1960-{s}-D{n:05d}"
+        PARISI = "Sociedade civil de engenharia José Roberto Parisi Ltd."
+        tipos = {1: "Planta", 2: "Corte", 3: "Estrutura", 4: "Detalhe / Estrutura", 5: "Planta", 6: "Planta"}
+        for n, t in tipos.items():
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,origem,tainacan_item_id,status_site) VALUES (?,?,?,?,?,?,'campvision',?,?)",
+                      (D(n), P, "S01", n, f"Folha {n}", t if t != "Detalhe / Estrutura" else None, 8000 + n if n <= 5 else None, "no_ar" if n <= 5 else "nao_publicado"))
+        c.execute("UPDATE item SET tipo_lido='Detalhe / Estrutura' WHERE codigo=?", (D(4),))
+        c.execute("UPDATE item SET parceiros=? WHERE codigo=?", (_j.dumps([{"escritorio": "Eletro Projetos", "disciplina": "Instalações elétricas"}]), D(6)))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,tainacan_item_id,status_site) VALUES (?,?,'S03',101,'Foto','campvision',8100,'no_ar')", (D(1, "S03"), P))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s_}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        chamadas, site = [], {"rota": True}
+        class WPD:
+            def __init__(self, *a, **k): pass
+            def gravar_disciplinas_folhas(self, projeto_id, folhas):
+                if not site["rota"]:
+                    return None
+                chamadas.append((projeto_id, _j.loads(_j.dumps(folhas))))
+                return {"ok": True, "gravados": [int(k) for k, v in folhas.items() if v != "__limpar__"], "limpos": [], "erros": []}
+        pub.WP = WPD
+        lst = lambda cod: _j.loads(c.execute("SELECT parceiros FROM item WHERE codigo=?", (cod,)).fetchone()[0] or "[]")
+        URL = f"/api/projetos/{P}/parceiros/lote"
+        alvo = [D(3), D(4), D(5), "F099-P0001-1960-S01-D00001"]
+        c.execute("UPDATE item SET parceiros=? WHERE codigo=?", (_j.dumps([{"escritorio": "SOCIEDADE CIVIL DE ENGENHARIA JOSÉ ROBERTO PARISI LTD", "disciplina": "Estrutura"}]), D(5))); c.commit()
+        ver("leitura não pode aplicar em lote", le.post(URL, json={"itens": alvo, "escritorio": PARISI, "disciplina": "Estrutura", "simular": False}).status_code == 403)
+        r = op.post(URL, json={"itens": alvo, "escritorio": PARISI, "disciplina": "Estrutura"}); j = r.json()
+        ver("simular (padrão): vai adicionar a 2 folhas, 1 já tem (mesmo escritório escrito de outro jeito), 1 é de outro projeto; nada muda",
+            r.status_code == 200 and j.get("simulado") is True and j.get("vai_mudar") == [D(3), D(4)] and j.get("ja_estavam") == [D(5)] and len(j.get("fora") or []) == 1 and lst(D(3)) == [], j)
+        r = op.post(URL, json={"itens": alvo, "escritorio": PARISI, "disciplina": "Estrutura", "simular": False}); j = r.json()
+        ver("aplicar: grava nas 2 folhas, com histórico (antes/depois, lote)", r.status_code == 200 and j.get("mudaram") == [D(3), D(4)] and lst(D(3)) == [{"escritorio": PARISI, "disciplina": "Estrutura"}]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE codigo IN (?,?) AND tipo='editado' AND detalhe LIKE '%\"lote\": \"adicionar\"%'", (D(3), D(4))).fetchone()[0] == 2, j)
+        r2 = op.post(URL, json={"itens": alvo, "escritorio": PARISI, "disciplina": "Estrutura", "simular": False}).json()
+        ver("repetir não muda nada (idempotente)", r2.get("mudaram") == [] and len(r2.get("ja_estavam")) == 3, r2)
+        ver("disciplina sem estar na lista: 400", op.post(URL, json={"itens": alvo, "escritorio": PARISI, "disciplina": "Elétrica fina", "simular": False}).status_code == 400)
+        _rp = op.get(f"/api/projetos/{P}/detalhe"); it = {x["codigo"]: x for x in (_rp.json().get("itens") or [])} if _rp.status_code == 200 else {}
+        if not it: print("DEBUG", _rp.status_code, _rp.text[:400])
+        ver("itens do projeto: disciplina para agrupar (parceiro → tipo → Arquitetura) e o escritório",
+            (it.get(D(1), {}).get("disciplina"), it.get(D(3), {}).get("disciplina"), it.get(D(3), {}).get("disciplina_escritorio"), it.get(D(6), {}).get("disciplina"), it.get(D(2), {}).get("disciplina_escritorio"))
+            == ("Arquitetura", "Estrutura", PARISI, "Instalações elétricas", None), {k: (v.get("disciplina"), v.get("disciplina_escritorio")) for k, v in it.items()})
+        ver("disciplina pelo tipo, sem parceiro: 'Detalhe / Estrutura' lido e o tipo Estrutura", pc.disciplina_grupo(None, None, None, "Detalhe / Estrutura") == ("Estrutura", None) and pc.disciplina_grupo(None, "Estrutura") == ("Estrutura", None))
+        ver("ordem dos grupos: Arquitetura, depois a lista do painel, depois texto livre", sorted(["Paisagismo de cobertura", "Instalações elétricas", "Arquitetura", "Estrutura"], key=pc.ordem_disciplina) == ["Arquitetura", "Estrutura", "Instalações elétricas", "Paisagismo de cobertura"])
+        chamadas.clear()
+        o = ds.enviar(P, "teste")
+        ver("site (contrato 1.38): UMA chamada com o dossiê e só as folhas de desenho que estão no site (a foto S03 e a D6 fora do site não vão)",
+            o.get("ok") and len(chamadas) == 1 and chamadas[0][0] == 7000 and sorted(chamadas[0][1]) == ["8001", "8002", "8003", "8004", "8005"], chamadas)
+        f = chamadas[0][1] if chamadas else {}
+        ver("cada folha: disciplina e, quando há, o escritório (sem escritório: só a disciplina)", f.get("8003") == {"disciplina": "Estrutura", "escritorio": PARISI} and f.get("8001") == {"disciplina": "Arquitetura"} and f.get("8004", {}).get("disciplina") == "Estrutura", f)
+        site["rota"] = False
+        ds.marcar(c, P); c.commit()
+        o2 = ds.enviar(P, "teste")
+        pend = c.execute("SELECT valor_painel FROM divergencia_site WHERE entidade='projeto' AND codigo=? AND campo='pendente_disciplinas_no_site' AND resolvida=0", (P,)).fetchone()
+        ver("site antigo (404): nada quebra, fica a pendência com 'atualize o site'", o2.get("erro") and pend and "atualize o site" in (pend[0] or ""), (o2, pend and pend[0]))
+        site["rota"] = True
+        from app import reenvio_pendencias as rp
+        ver("a pendência entra na rodada de reenvio", ("projeto", "pendente_disciplinas_no_site") in rp.FIXOS)
+        r = op.post(URL, json={"itens": [D(3), D(4), D(5)], "escritorio": "sociedade civil de engenharia josé roberto parisi", "acao": "tirar", "simular": False}).json()
+        ver("tirar (mesmo escritório, com ou sem LTDA/maiúsculas): sai das 3 folhas, com histórico", r.get("mudaram") == [D(3), D(4), D(5)] and lst(D(3)) == [] and lst(D(5)) == [], r)
+        ver("tirar de novo: nada muda", op.post(URL, json={"itens": [D(3)], "escritorio": PARISI, "acao": "tirar", "simular": False}).json().get("mudaram") == [])
+        # ---------- tipo em lote (Rafael: "selecionar de várias o que é: estrutura, detalhe etc.") ----------
+        TU = f"/api/projetos/{P}/tipos/lote"
+        tp = lambda cod: (lambda r: r[1] or r[0])(c.execute("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", (cod,)).fetchone())
+        ver("lista de tipos para escolher (inclui 'Detalhe / Estrutura')", "Detalhe / Estrutura" in (le.get("/api/tipos-documento").json().get("tipos") or []))
+        r = op.post(TU, json={"itens": [D(1), D(2), D(3)], "tipos": ["Estrutura", "Detalhe"], "modo": "acrescentar"}).json()
+        ver("simular acrescentar: antes → depois em cada folha, nada muda", [(m["codigo"], m["antes"], m["depois"]) for m in r.get("vai_mudar", [])] == [(D(1), "Planta", "Planta; Estrutura; Detalhe"), (D(2), "Corte", "Corte; Estrutura; Detalhe"), (D(3), "Estrutura", "Estrutura; Detalhe")] and tp(D(1)) == "Planta", r)
+        ver("tipo fora do vocabulário: 400", op.post(TU, json={"itens": [D(1)], "tipos": ["Elétrica"], "modo": "substituir"}).status_code == 400)
+        ver("leitura não aplica tipo em lote", le.post(TU, json={"itens": [D(1)], "tipos": ["Corte"], "modo": "substituir", "simular": False}).status_code == 403)
+        n0 = c.execute("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo IN (?,?)", (D(1), D(2))).fetchone()[0]
+        r = op.post(TU, json={"itens": [D(1), D(2)], "tipos": ["Estrutura"], "modo": "substituir", "simular": False}).json()
+        ver("aplicar substituir: grava pelo PATCH de sempre (histórico 'editado' em cada folha)", len(r.get("mudaram", [])) == 2 and tp(D(1)) == "Estrutura" and tp(D(2)) == "Estrutura"
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo IN (?,?)", (D(1), D(2))).fetchone()[0] == n0 + 2, r)
+        r = op.post(TU, json={"itens": [D(1), D(3)], "tipos": ["Detalhe"], "modo": "acrescentar", "simular": False}).json()
+        ver("acrescentar: entra junto do que a folha tem", tp(D(1)) == "Estrutura; Detalhe" and tp(D(3)) == "Estrutura; Detalhe", (tp(D(1)), tp(D(3))))
+        r = op.post(TU, json={"itens": [D(1), D(3)], "tipos": ["Detalhe"], "modo": "tirar", "simular": False}).json()
+        ver("tirar: sai, o resto fica", tp(D(1)) == "Estrutura" and tp(D(3)) == "Estrutura", (tp(D(1)), tp(D(3))))
+        ver("repetir: nada muda", op.post(TU, json={"itens": [D(1)], "tipos": ["Estrutura"], "modo": "substituir", "simular": False}).json().get("mudaram") == [])
+        ver("contrato 1.38 documentado no CONTRATO_UNICO", "**1.38" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8") and "disciplinas-folhas" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8"))
+        for l in res: print(l)
+
+    elif modo == "tipo_detalhe_estrutura":
+        # CAMP-FICHA (25/11/2026). Decisão do Rafael: o tipo "Detalhe / Estrutura" (lido pelo CAMP Vision; a ficha dizia "não existe na lista
+        # do painel") entra na lista de tipos. Prova: a migração 261 acrescenta (idempotente), a ficha recebe o tipo na lista (a tela casa o
+        # lido e oferece "Usar sugestão"), o importador casa o nome inteiro antes de separar por " / ", e a disciplina dele é Estrutura.
+        init_db(); aplicar_migracoes(); aplicar_migracoes()
+        from app.importador_lote import tipo_do_painel
+        from app import parceiros as pc, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        nomes = [r[0] for r in c.execute("SELECT nome FROM tipo_documento")]
+        ver("migração 261: 'Detalhe / Estrutura' na lista de tipos, uma vez só (rodou duas vezes)", nomes.count("Detalhe / Estrutura") == 1, nomes)
+        T = {n.lower(): n for n in nomes}
+        ver("importador: o lido 'Detalhe / Estrutura' vira o tipo inteiro (antes: Detalhe ≠ Estrutura → sem tipo)", tipo_do_painel("Detalhe / Estrutura", T) == "Detalhe / Estrutura")
+        ver("importador: 'Planta / Corte' continua sem tipo (tipos diferentes; uma pessoa escolhe)", tipo_do_painel("Planta / Corte", T) is None)
+        ver("importador: variações 'detalhe/estrutura' e 'Detalhe estrutural' também", tipo_do_painel("detalhe/estrutura", T) == "Detalhe / Estrutura" and tipo_do_painel("Detalhe estrutural", T) == "Detalhe / Estrutura")
+        ver("disciplina do tipo: Estrutura", pc.disciplina_da_folha("Detalhe / Estrutura") == "Estrutura")
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Edifício',1972)")
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_lido,origem,revisao) VALUES ('F099-P0001-1972-S01-D00001','F099-P0001','S01',1,'Detalhe da escada','Detalhe / Estrutura','campvision','pendente')")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        ed = x.get("/api/itens/F099-P0001-1972-S01-D00001/edicao").json()
+        ver("a ficha recebe o tipo na lista (a tela deixa de dizer 'não existe na lista do painel')", "Detalhe / Estrutura" in (ed.get("tipos_documento") or []), ed.get("tipos_documento"))
+        r = x.patch("/api/itens/F099-P0001-1972-S01-D00001", json={"tipo_documento": "Detalhe / Estrutura"})
+        ver("'Usar sugestão' grava o tipo", r.status_code == 200 and c.execute("SELECT tipo_documento FROM item WHERE codigo='F099-P0001-1972-S01-D00001'").fetchone()[0] == "Detalhe / Estrutura", f"{r.status_code} {r.text[:200]}")
+        ver("decisão registrada em docs/padroes.md", "Rafael, 25/11/2026: tipo Detalhe / Estrutura" in (RAIZ / "docs" / "padroes.md").read_text(encoding="utf-8"))
+        for l in res: print(l)
+
+    elif modo == "parceiros_do_projeto":
+        # CAMP-FICHA (25/11/2026). Rafael, na conferência de uma folha de estrutura ("DETALHE DA ESCADA E LANCE PILARES…", tipo lido
+        # "Detalhe / Estrutura") cujo carimbo só tinha o escritório de cálculo, lido como Cliente ("DAPA LIMA OTERO ENGENHARIA LTDA. S/C."):
+        # "ver se outras folhas desse projeto têm algum escritório e já sugerir". Prova: GET /api/itens/{c}/parceiros/projeto devolve os
+        # escritórios das OUTRAS folhas (mais folhas primeiro, a disciplina da folha antes), sem os que a folha já tem; o cliente das outras
+        # folhas (o que não parece escritório); e o aviso "cliente lido parece o escritório de estrutura". Só lê: nada muda no banco.
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth, parceiros as pc
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1),('F099',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Edifício',1972),('F099-P0002','F099',2,'Outro',1970)")
+        D = lambda n, p="F099-P0001": f"{p}-1972-S01-D{n:05d}"
+        DAPA = [{"escritorio": "DAPA Lima Otero Engenharia", "disciplina": "Estrutura"}]
+        linhas = [  # (n, título, tipo_lido, cliente_folha, parceiros)
+            (1, "PLANTA DO TÉRREO", "Planta", "Sr. Antonio Rodrigues", None),
+            (2, "FORMAS DO 1º PAVIMENTO", "Estrutura", "Sr. Antonio Rodrigues", DAPA),
+            (3, "ARMAÇÃO DAS VIGAS", "Estrutura", None, DAPA),
+            (4, "INSTALAÇÕES ELÉTRICAS", "Instalações", "Sr. Antonio Rodrigues", [{"escritorio": "Eletro Projetos", "disciplina": "Instalações elétricas"}]),
+            (5, "INSTALAÇÕES ELÉTRICAS 2", "Instalações", "ELETRO PROJETOS LTDA", [{"escritorio": "Eletro Projetos", "disciplina": "Instalações elétricas"}]),
+            (6, "INSTALAÇÕES ELÉTRICAS 3", "Instalações", None, [{"escritorio": "Eletro Projetos", "disciplina": "Instalações elétricas"}]),
+            (7, "DETALHE DA ESCADA E LANCE PILARES DO 2º AO 1º SUB-SOLO (DA FUNDAÇÃO À 1ª LAJE)", "Detalhe / Estrutura", "DAPA LIMA OTERO ENGENHARIA LTDA. S/C.", None),
+        ]
+        for n, t, tl, cl, pa in linhas:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_lido,cliente_folha,parceiros,origem,revisao) VALUES (?,?,?,?,?,?,?,?,'campvision','pendente')",
+                      (D(n), "F099-P0001", "S01", n, t, tl, cl, _j.dumps(pa) if pa else None))
+        # outro projeto com outro escritório: não pode aparecer
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,parceiros,origem) VALUES (?,?,?,?,?,?,'importado')",
+                  (D(1, "F099-P0002").replace("1972", "1970"), "F099-P0002", "S01", 1, "X", _j.dumps([{"escritorio": "Escritório de Fora", "disciplina": "Estrutura"}])))
+        c.commit()
+        antes = c.execute("SELECT group_concat(codigo||coalesce(parceiros,'')||coalesce(cliente_folha,''),'|') FROM item").fetchone()[0]
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-leitura-1234"})
+        r = x.get(f"/api/itens/{D(7)}/parceiros/projeto"); j = r.json() if r.status_code == 200 else {}
+        E = j.get("escritorios") or []
+        ver("rota responde (leitura pode ver)", r.status_code == 200, f"{r.status_code} {r.text[:200]}")
+        ver("a folha indica a disciplina Estrutura (tipo lido 'Detalhe / Estrutura')", j.get("disciplina") == "Estrutura", j.get("disciplina"))
+        ver("escritórios das outras folhas do projeto, com quantas folhas", [(e["escritorio"], e["disciplina"], e["folhas"]) for e in E] == [("DAPA Lima Otero Engenharia", "Estrutura", 2), ("Eletro Projetos", "Instalações elétricas", 3)], E)
+        ver("a mesma disciplina vem primeiro, mesmo com menos folhas (combina=true)", bool(E) and E[0].get("combina") is True and E[-1].get("combina") is False, E)
+        ver("escritório de outro projeto não aparece", all(e["escritorio"] != "Escritório de Fora" for e in E), E)
+        ce = j.get("cliente_e_escritorio") or {}
+        ver("o Cliente lido parece o escritório de estrutura (LTDA, ENGENHARIA, S/C + folha de estrutura), já usado em 2 folhas com a grafia de lá", ce.get("nome") == "DAPA LIMA OTERO ENGENHARIA LTDA. S/C." and ce.get("disciplina") == "Estrutura" and ce.get("ja_escritorio_folhas") == 2 and ce.get("escritorio") == "DAPA Lima Otero Engenharia", ce)
+        ver("cliente das outras folhas (o que não parece escritório: 'ELETRO PROJETOS LTDA' fica de fora)", (j.get("cliente") or {}).get("nome") == "Sr. Antonio Rodrigues" and j["cliente"].get("folhas") == 3, j.get("cliente"))
+        r2 = x.get(f"/api/itens/{D(2)}/parceiros/projeto").json()
+        ver("a folha que já tem o escritório não recebe ele de novo", all(e["escritorio"] != "DAPA Lima Otero Engenharia" for e in r2.get("escritorios", [])) and not r2.get("cliente_e_escritorio"), r2)
+        r5 = x.get(f"/api/itens/{D(5)}/parceiros/projeto").json()
+        ver("cliente lido = escritório já usado em outras folhas (sem LTDA, maiúsculas): diz em quantas e usa a grafia de lá", (r5.get("cliente_e_escritorio") or {}).get("ja_escritorio_folhas") == 2 and r5["cliente_e_escritorio"].get("escritorio") == "Eletro Projetos" and r5["cliente_e_escritorio"]["disciplina"] == "Instalações elétricas", r5.get("cliente_e_escritorio"))
+        ver("chave do nome: 'DAPA LIMA OTERO ENGENHARIA LTDA. S/C.' = 'DAPA Lima Otero Engenharia'", pc.chave_firma("DAPA LIMA OTERO ENGENHARIA LTDA. S/C.") == pc.chave_firma("DAPA Lima Otero Engenharia"), pc.chave_firma("DAPA LIMA OTERO ENGENHARIA LTDA. S/C."))
+        r1 = x.get(f"/api/itens/{D(1)}/parceiros/projeto").json()
+        ver("planta de arquitetura: sem disciplina e sem aviso de cliente", r1.get("disciplina") is None and not r1.get("cliente_e_escritorio"), r1)
+        ver("folha que não existe: 404", x.get("/api/itens/F099-P0001-1972-S01-D99999/parceiros/projeto").status_code == 404)
+        ver("só lê: nada mudou no banco", c.execute("SELECT group_concat(codigo||coalesce(parceiros,'')||coalesce(cliente_folha,''),'|') FROM item").fetchone()[0] == antes)
+        ver("disciplinas inferidas só da lista do painel", all(d in pc.DISCIPLINAS for d, _ in pc._DISC_PALAVRAS))
+        for t, esp in (("Fundações - estacas", "Fundações"), ("PROJETO HIDRÁULICO", "Instalações hidráulicas"), ("AR CONDICIONADO CENTRAL", "Ar-condicionado/climatização"), ("JARDIM INTERNO", "Paisagismo"), ("PLANTA BAIXA", None)):
+            ver(f"disciplina de '{t}' → {esp}", pc.disciplina_da_folha(None, t) == esp, pc.disciplina_da_folha(None, t))
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: sugestões das outras folhas com Usar e Tab aceita", "async function parcSugProjeto(codigo,id)" in html and "data-parc-sug-usar" in html and "matches('.parc-esc.sugerido')" in html)
+        ver("tela: aviso do cliente com Mover para Escritórios parceiros (só no clique)", "data-cli-mover" in html and "Mover para Escritórios parceiros" in html)
+        for l in res: print(l)
+
     elif modo == "parceiros":
         # 19/10: escritórios parceiros / projetos complementares na folha (calculista, instalações, paisagismo…)
         init_db(); aplicar_migracoes()
@@ -25820,6 +26020,33 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · Sincronizar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 5, "Financeiro · Sincronizar: todas as verificações rodaram")
+
+print("Ficha · escritório em várias folhas e separação por disciplina (painel e site)")
+rc, out = rodar("parceiros_lote_disciplina", f"{tmp}/parceiros_lote_disciplina.db")
+if rc != 0: ok(False, f"teste parceiros_lote_disciplina não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha · lote/disciplina: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 23, "Ficha · lote/disciplina: todas as verificações rodaram")
+
+print("Ficha · tipo Detalhe / Estrutura na lista (decisão do Rafael)")
+rc, out = rodar("tipo_detalhe_estrutura", f"{tmp}/tipo_detalhe_estrutura.db")
+if rc != 0: ok(False, f"teste tipo_detalhe_estrutura não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha · Detalhe / Estrutura: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 8, "Ficha · Detalhe / Estrutura: todas as verificações rodaram")
+
+print("Ficha · escritórios parceiros das outras folhas do projeto e cliente que parece escritório")
+rc, out = rodar("parceiros_do_projeto", f"{tmp}/parceiros_do_projeto.db")
+if rc != 0: ok(False, f"teste parceiros_do_projeto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha · parceiros do projeto: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Ficha · parceiros do projeto: todas as verificações rodaram")
 
 print("Financeiro · saída do Mercado Pago sem direção (Pix a empresa, Pix enviado, cartão) não é receita")
 rc, out = rodar("financeiro_mp_saida_sem_direcao", f"{tmp}/financeiro_mp_saida_sem_direcao.db")

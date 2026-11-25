@@ -198,3 +198,12 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   sem comprovante há N dias, doadores, orçamento de conta de projeto) no Destaques e na Home do admin (prioridade baixa). Projeção de 3 meses
   rotulada como estimativa. Busca natural ("frete outubro", "doações acima de 500", "sem nota"). Leitura automática do comprovante só com um
   leitor configurado e `financeiro.leitura_comprovante` = 1 (desligada; o painel não tem cliente de IA hoje).
+
+## Tipos de documento
+
+- **Rafael, 25/11/2026: tipo Detalhe / Estrutura.** Entra na lista de tipos de documento do painel (migração 261), como está escrito,
+  com a barra e os espaços. É o tipo que o CAMP Vision lê nas folhas de projeto complementar de estrutura; antes a ficha dizia "não existe
+  na lista do painel". O importador casa o nome inteiro antes de separar por " / " (que continua valendo para "Planta / Corte"). No
+  agrupamento por disciplina conta como **Estrutura**. Para o site é só o texto do "Tipo de desenho" (nenhum contrato muda); o CAMP Vision
+  não recebe a lista.
+

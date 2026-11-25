@@ -284,7 +284,84 @@ def editar_item(codigo: str, d: EdicaoItem, tarefas: BackgroundTasks, u: dict = 
     from .alteracoes_site import CAMPOS as _CAMPOS_SITE, enviar_folhas_agora
     if i["tainacan_item_id"] and i["status_site"] in ("no_ar", "rascunho") and (any(k in novos for k in _CAMPOS_SITE) or "tipos_documento" in novos):
         tarefas.add_task(enviar_folhas_agora, [codigo], u["email"])     # 21/10: a correção vai sozinha ao site, logo depois de salvar
+    if i["tainacan_item_id"] and any(k in novos for k in ("parceiros", "tipo_documento", "tipos_documento")):
+        from .disciplina_site import depois_de_editar_folha     # 25/11 (contrato 1.38): a separação por disciplina no site acompanha
+        tarefas.add_task(depois_de_editar_folha, codigo, u["email"])
     if wid and (titulo_site is not None or descricao_site is not None or md_envio):
         site = atualizar_folha_no_site(codigo, wid, cid, titulo_site, descricao_site, md_envio, u["email"])
     campos = list(novos) + [f"site:{k}" for k in site_antes]
     return {"ok": True, "campos": campos, "site": site}
+
+
+# CAMP-FICHA (25/11/2026). Rafael, na barra de folhas escolhidas: "será legal também poder selecionar de várias o que é: estrutura, detalhe
+# etc.". Tipo em várias folhas de uma vez, pelo MESMO caminho de editar uma folha (PATCH /api/itens/{c}): o mesmo histórico ('editado' com
+# antes/depois), a mesma conferência no vocabulário e o mesmo envio ao site da folha que já está lá (correção marcada e enviada como sempre).
+class TiposLote(BaseModel):
+    itens: list[str]
+    tipos: list[str] = []
+    modo: str = "substituir"      # substituir | acrescentar | tirar
+    simular: bool = True
+
+
+@router.get("/tipos-documento")
+def lista_tipos_documento(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """A lista de tipos de documento do painel (vocabulário), para escolher em lote."""
+    con = connect()
+    try:
+        return {"tipos": [r[0] for r in con.execute("SELECT nome FROM tipo_documento ORDER BY nome")]}
+    finally:
+        con.close()
+
+
+@router.post("/projetos/{projeto}/tipos/lote")
+def tipos_em_lote(projeto: str, d: TiposLote, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """substituir: a folha passa a ter exatamente esses tipos; acrescentar: entram junto dos que ela tem; tirar: saem. simular=true (padrão)
+    devolve o que muda (antes → depois). Aplicar grava folha por folha pelo PATCH de sempre (histórico e site como editar uma a uma)."""
+    from .tipos_documento import separar, juntar
+    if d.modo not in ("substituir", "acrescentar", "tirar"):
+        raise HTTPException(400, "Modo inválido: use substituir, acrescentar ou tirar")
+    alvo = list(dict.fromkeys(x for x in (d.itens or []) if x))
+    if not alvo:
+        raise HTTPException(400, "Nenhuma folha escolhida")
+    if len(alvo) > 2000:
+        raise HTTPException(400, "No máximo 2000 folhas de uma vez")
+    con = connect()
+    try:
+        vocab = {r[0].lower(): r[0] for r in con.execute("SELECT nome FROM tipo_documento")}
+        tipos = []
+        for t in separar(d.tipos):
+            if t.lower() not in vocab:
+                raise HTTPException(400, f"Tipo de documento '{t}' não existe no vocabulário")
+            tipos.append(vocab[t.lower()])
+        if not tipos and d.modo != "substituir":
+            raise HTTPException(400, "Escolha pelo menos um tipo")
+        q = ",".join("?" * len(alvo))
+        linhas = {r["codigo"]: r for r in con.execute(
+            f"SELECT codigo, tipo_documento, tipos_documento FROM item WHERE projeto_codigo=? AND codigo IN ({q})", (projeto, *alvo))}
+    finally:
+        con.close()
+    mudam, ja, fora = [], [], []
+    for cod in alvo:
+        r = linhas.get(cod)
+        if not r:
+            fora.append({"codigo": cod, "motivo": "não é deste projeto"}); continue
+        atual = separar(r["tipos_documento"] or r["tipo_documento"])
+        if d.modo == "substituir":
+            novo = list(tipos)
+        elif d.modo == "acrescentar":
+            novo = atual + [t for t in tipos if t.lower() not in {a.lower() for a in atual}]
+        else:
+            novo = [a for a in atual if a.lower() not in {t.lower() for t in tipos}]
+        if (juntar(novo) or None) == (juntar(atual) or None):
+            ja.append(cod); continue
+        mudam.append({"codigo": cod, "antes": juntar(atual), "depois": juntar(novo)})
+    if d.simular:
+        return {"ok": True, "simulado": True, "modo": d.modo, "tipos": tipos, "vai_mudar": mudam, "ja_estavam": ja, "fora": fora}
+    feitas, erros = [], []
+    for m in mudam:
+        try:
+            editar_item(m["codigo"], EdicaoItem(tipo_documento=m["depois"] or ""), tarefas, u)
+            feitas.append(m)
+        except HTTPException as e:
+            erros.append({"codigo": m["codigo"], "motivo": str(e.detail)[:200]})
+    return {"ok": not erros, "simulado": False, "modo": d.modo, "tipos": tipos, "mudaram": feitas, "ja_estavam": ja, "fora": fora, "erros": erros}
