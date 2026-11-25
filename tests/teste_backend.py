@@ -78,6 +78,7 @@ MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do 
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"ficha_escritorios_tipos"}   # CAMP-FICHA 25/11/2026: usar todos os escritórios sugeridos, nomes parecidos/unificar, escritório abreviado no cartão, tipos Elétrica/Hidráulica/Paisagismo/Fundação
+MODOS_RAPIDOS |= {"estante_tubos_tb001"}   # CAMP-ESTANTE 25/11/2026: tubos no padrão TB001-01 (continuar o grupo, grupo novo, leitor, nomes antigos, renomear simulando)
 MODOS_RAPIDOS |= {"projeto_ordem_pdf_tubos"}   # CAMP-PROJETO/ESTANTE 25/11/2026: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria, tubos (guardar em, mover, faltam guardar)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
@@ -14279,6 +14280,86 @@ def filho(modo):
         ver("conferência: 'Tipo pela disciplina' só como sugestão (Usar sugestão)", "tipo_sugerido_disciplina" in html)
         for l in res: print(l)
 
+    elif modo == "estante_tubos_tb001":
+        # CAMP-ESTANTE (25/11/2026). Rafael respondeu o nome dos tubos com "TB001-01": TB + grupo de tubos (3 dígitos, sequência geral) + "-" +
+        # parte (2 dígitos). Prova: primeiro tubo TB001-01; mais tubos do mesmo projeto continuam o grupo (TB001-02); outro projeto (ou "novo
+        # grupo") abre TB002-01; o diálogo recebe as duas opções; o leitor de etiqueta resolve TB001-01 para o tubo; o nome antigo
+        # (TB-F001-P0001.1) continua resolvendo; "Renomear tubos antigos" simula sem gravar e aplica (admin), as folhas ficam no mesmo tubo;
+        # guardar o projeto num identificador TB003-01 digitado cria um TUBO; o padrão é configurável.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        from app import auth, tubos
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (f"F001-P000{n}", "F001", n, f"Projeto {n}"))
+            for k in range(1, 5):
+                c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, folha, origem) VALUES (?,?,?,?,?,?,'importado')",
+                          (f"F001-P000{n}-1965-S01-D{k:05d}", f"F001-P000{n}", "S01", k, f"Folha {k}", str(k)))
+        c.commit()
+        ver("migração: padrão TB{grupo:03d}-{parte:02d} na configuração", c.execute("SELECT valor FROM configuracao WHERE chave='estante.padrao_tubo'").fetchone()[0] == "TB{grupo:03d}-{parte:02d}")
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-bem-longa-123", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-bem-longa-123"), cli("op@camp.arq.br", "senha-operador-123")
+        P1, P2 = "F001-P0001", "F001-P0002"
+        f = lambda n, k: f"F001-P000{n}-1965-S01-D{k:05d}"
+        g = op.get(f"/api/projetos/{P1}/guardados").json()
+        o = g.get("tubo_opcoes") or {}
+        ver("sem tubo nenhum: só 'Novo grupo: TB001-01' (nada a continuar)", o.get("continuar") is None and (o.get("novo_grupo") or {}).get("identificador") == "TB001-01"
+            and g.get("proximo_tubo") == "TB001-01", o)
+        a = op.post(f"/api/projetos/{P1}/guardar-em", json={"itens": [f(1, 1), f(1, 2)], "novo_tubo": True}).json()
+        b = op.post(f"/api/projetos/{P1}/guardar-em", json={"itens": [f(1, 3)], "novo_tubo": True, "tubo": "continuar"}).json()
+        ver("o mesmo lote em vários tubos continua o grupo: TB001-01, TB001-02", a.get("identificador") == "TB001-01" and b.get("identificador") == "TB001-02",
+            (a.get("identificador"), b.get("identificador")))
+        o = b["guardados"]["tubo_opcoes"]
+        ver("o diálogo oferece 'Novo tubo: TB001-03 (continua o TB001)' e 'Novo grupo: TB002-01'",
+            (o.get("continuar") or {}).get("identificador") == "TB001-03" and o["continuar"].get("grupo_nome") == "TB001" and o["novo_grupo"]["identificador"] == "TB002-01", o)
+        c2 = op.post(f"/api/projetos/{P2}/guardar-em", json={"itens": [f(2, 1)], "novo_tubo": True}).json()
+        ver("outro projeto abre o grupo seguinte: TB002-01", c2.get("identificador") == "TB002-01", c2.get("identificador"))
+        d = op.post(f"/api/projetos/{P1}/guardar-em", json={"itens": [f(1, 4)], "novo_tubo": True, "tubo": "novo_grupo"}).json()
+        ver("'Novo grupo' no mesmo projeto: TB003-01; depois, continuar segue o grupo mais recente (TB003-02)", d.get("identificador") == "TB003-01"
+            and tubos.proximo(c, P1) == "TB003-02", (d.get("identificador"), tubos.proximo(c, P1)))
+        ver("opção de tubo inválida: 400", op.post(f"/api/projetos/{P1}/guardar-em", json={"itens": [f(1, 4)], "novo_tubo": True, "tubo": "qualquer"}).status_code == 400)
+        r = op.get("/api/resolver-codigo?c=*tb001-02*").json()
+        ver("leitor de etiqueta: TB001-02 (com asteriscos do Code 39, minúsculo) abre o TUBO", r.get("tipo") == "caixa" and r.get("codigo") == "TB001-02"
+            and (r.get("localizacao") or {}).get("tipo") == "tubo", r)
+        ver("nome Code 39 válido (só A-Z, 0-9 e hífen)", all(ch.isalnum() or ch == "-" for ch in "TB001-02"))
+        # tubo no nome antigo (criado pelo #219) continua resolvendo; renomear simula e aplica
+        lid_old = c.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador) VALUES ('F001','tubo','TB-F001-P0003.1')").lastrowid
+        lid_old2 = c.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador) VALUES ('F001','tubo','TB-F001-P0003.2')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (f(3, 1), lid_old))
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (f(3, 2), lid_old2)); c.commit()
+        ver("nome antigo TB-F001-P0003.1 continua resolvendo para o tubo", op.get("/api/resolver-codigo?c=TB-F001-P0003.1").json().get("tipo") == "caixa")
+        ver("tubos antigos listados", [t["identificador"] for t in op.get("/api/estante/tubos-antigos").json()["tubos"]] == ["TB-F001-P0003.1", "TB-F001-P0003.2"])
+        ver("renomear: operador não pode (403)", op.post("/api/estante/tubos-antigos/renomear", json={"aplicar": True}).status_code == 403)
+        s1 = adm.post("/api/estante/tubos-antigos/renomear", json={}).json()
+        ver("renomear simula por padrão: TB-F001-P0003.1 → TB004-01, .2 → TB004-02, nada gravado", s1.get("simulacao") is True
+            and [(t["de"], t["para"]) for t in s1["tubos"]] == [("TB-F001-P0003.1", "TB004-01"), ("TB-F001-P0003.2", "TB004-02")]
+            and c.execute("SELECT identificador FROM localizacao_fisica WHERE id=?", (lid_old,)).fetchone()[0] == "TB-F001-P0003.1", s1)
+        s2 = adm.post("/api/estante/tubos-antigos/renomear", json={"aplicar": True}).json()
+        ver("aplicar renomeia; as folhas continuam no mesmo tubo; fica no histórico do lugar",
+            s2.get("simulacao") is False and c.execute("SELECT identificador FROM localizacao_fisica WHERE id=?", (lid_old,)).fetchone()[0] == "TB004-01"
+            and c.execute("SELECT localizacao_id FROM item_localizacao WHERE item_codigo=?", (f(3, 1),)).fetchone()[0] == lid_old
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='localizacao' AND codigo=? AND tipo='renomeada'", (str(lid_old),)).fetchone()[0] == 1, s2)
+        ver("depois de renomear: nenhum antigo; repetir não muda nada", adm.post("/api/estante/tubos-antigos/renomear", json={"aplicar": True}).json()["total"] == 0)
+        ver("o projeto dos tubos renomeados continua o grupo dele (TB004-03)", tubos.proximo(c, "F001-P0003") == "TB004-03")
+        # identificador digitado no padrão (Etiquetar e guardar) cria um TUBO, não uma caixa
+        e = op.post("/api/etiquetas/guardar", json={"projeto_codigo": P2, "identificador": "TB009-01"})
+        ver("guardar o projeto em TB009-01 digitado cria um tubo", e.status_code == 200
+            and c.execute("SELECT tipo FROM localizacao_fisica WHERE identificador='TB009-01'").fetchone()[0] == "tubo", e.text[:200])
+        # padrão configurável
+        c.execute("UPDATE configuracao SET valor='TUBO-{grupo:04d}/{parte:02d}' WHERE chave='estante.padrao_tubo'"); c.commit()
+        ver("padrão configurável: TUBO-0001/01 quando a configuração muda", tubos.opcoes(c, "F001-P0003")["novo_grupo"]["identificador"] == "TUBO-0001/01")
+        c.execute("UPDATE configuracao SET valor='lixo' WHERE chave='estante.padrao_tubo'"); c.commit()
+        ver("padrão inválido na configuração: volta ao TB001-01", tubos.padrao(c) == "TB{grupo:03d}-{parte:02d}")
+        for l in res: print(l)
+
     elif modo == "projeto_ordem_pdf_tubos":
         # CAMP-PROJETO / CAMP-ESTANTE (25/11/2026). Rafael: "organizar automaticamente as folhas pelo nome, poder arrastar para organizar elas e
         # poder exportar um pdf feito em cima dos tifs em alta qualidade … ou escolho a categoria (desenho, fotos, estrutura) … ou um zip só com
@@ -14421,15 +14502,15 @@ def filho(modo):
             and set(z2.headers.get("x-camp-fora", "").split(",")) == {F[3], F[4], F[6]}, (nz2, z2.headers.get("x-camp-fora")))
         # ---- 6) tubos: dividir um lote de estrutura em vários, quem está em cada, quais faltam
         G = op.get(f"/api/projetos/{P}/guardados").json()
-        ver("antes: nenhuma guardada, faltam as 8, próximo tubo TB-F001-P0001.1", G["guardadas"] == 0 and len(G["faltam"]) == 8 and G["proximo_tubo"] == f"TB-{P}.1", G.get("proximo_tubo"))
+        ver("antes: nenhuma guardada, faltam as 8, próximo tubo TB001-01", G["guardadas"] == 0 and len(G["faltam"]) == 8 and G["proximo_tubo"] == "TB001-01", G.get("proximo_tubo"))
         a = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[2], F[3]], "novo_tubo": True})
         b = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[4], F[6]], "novo_tubo": True})
         aj, bj = a.json(), b.json()
-        ver("Guardar em… tubo novo: TB-F001-P0001.1 e depois .2 (tipo tubo, no fundo do projeto)", aj.get("identificador") == f"TB-{P}.1" and bj.get("identificador") == f"TB-{P}.2"
-            and um("SELECT tipo, fundo_codigo FROM localizacao_fisica WHERE identificador=?", f"TB-{P}.2") == ("tubo", "F001"), (aj.get("identificador"), bj.get("identificador")))
+        ver("Guardar em… tubo novo: TB001-01 e depois TB001-02 (continua o grupo; tipo tubo, no fundo do projeto)", aj.get("identificador") == "TB001-01" and bj.get("identificador") == "TB001-02"
+            and um("SELECT tipo, fundo_codigo FROM localizacao_fisica WHERE identificador=?", "TB001-02") == ("tubo", "F001"), (aj.get("identificador"), bj.get("identificador")))
         G = bj["guardados"]
         ver("onde estão: cada tubo com as suas folhas; faltam guardar as outras 4", [(r_["identificador"], [f["codigo"] for f in r_["folhas"]]) for r_ in G["recipientes"]]
-            == [(f"TB-{P}.1", [F[3], F[2]]), (f"TB-{P}.2", [F[4], F[6]])] and [f["codigo"] for f in G["faltam"]] == [F[7], F[1], F[0], F[5]] and "Faltam guardar 4" in bj["mensagem"],
+            == [("TB001-01", [F[3], F[2]]), ("TB001-02", [F[4], F[6]])] and [f["codigo"] for f in G["faltam"]] == [F[7], F[1], F[0], F[5]] and "Faltam guardar 4" in bj["mensagem"],
             (G["recipientes"], G["faltam"]))
         lid1 = aj["localizacao_id"]
         m = op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[6], F[0]], "localizacao_id": lid1})
@@ -14437,13 +14518,13 @@ def filho(modo):
         ver("mover entre tubos: a que estava no .2 muda para o .1; a nova entra; a mensagem diz as duas coisas", m.status_code == 200 and mj["movidas"] == 1 and mj["guardadas"] == 1
             and um("SELECT localizacao_id FROM item_localizacao WHERE item_codigo=?", F[6])[0] == lid1 and "mudou de lugar" in mj["mensagem"], mj.get("mensagem"))
         h = um("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='guardada' ORDER BY id DESC LIMIT 1", F[6])
-        ver("histórico da folha: de TB-….2 para TB-….1", h and _j.loads(h[0])["de"] == f"TB-{P}.2" and _j.loads(h[0])["para"] == f"TB-{P}.1", h)
+        ver("histórico da folha: de TB001-02 para TB001-01", h and _j.loads(h[0])["de"] == "TB001-02" and _j.loads(h[0])["para"] == "TB001-01", h)
         ver("guardar de novo no mesmo lugar não repete histórico", op.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[0]], "localizacao_id": lid1}).json()["ja_estavam"] == 1
             and um("SELECT COUNT(*) FROM evento WHERE entidade='item' AND codigo=? AND tipo='guardada'", F[0])[0] == 1)
         ver("a etiqueta do tubo resolve para o TUBO (leitor do modo estante), não para o projeto",
-            op.get(f"/api/resolver-codigo?c=TB-{P}.1").json().get("tipo") == "caixa")
+            op.get("/api/resolver-codigo?c=TB001-01").json().get("tipo") == "caixa")
         ver("folha de outro projeto: 400, nada guardado", op.post(f"/api/projetos/{P}/guardar-em", json={"itens": ["F009-P0009-1900-S01-D00001"], "novo_tubo": True}).status_code == 400
-            and proximo_tubo(c, P) == f"TB-{P}.3")
+            and proximo_tubo(c, P) == "TB001-03")
         ver("leitura vê onde estão, mas não guarda", le.get(f"/api/projetos/{P}/guardados").status_code == 200
             and le.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[0]], "novo_tubo": True}).status_code == 403)
         for l in res: print(l)
@@ -25876,6 +25957,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Escritórios e tipos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Escritórios e tipos: todas as verificações rodaram")
+
+print("Estante: tubos no padrão TB001-01 (continuar o grupo, grupo novo, leitor, nomes antigos, renomear simulando)")
+rc, out = rodar("estante_tubos_tb001", f"{tmp}/estante_tubos_tb001.db")
+if rc != 0: ok(False, f"teste estante_tubos_tb001 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Tubos TB001-01: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 19, "Tubos TB001-01: todas as verificações rodaram")
 
 print("Projeto: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria e onde estão as folhas (tubos)")
 rc, out = rodar("projeto_ordem_pdf_tubos", f"{tmp}/projeto_ordem_pdf_tubos.db")

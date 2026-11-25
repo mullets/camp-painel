@@ -212,3 +212,10 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   grafias comuns do tipo lido ("Instalações elétricas", "Hidrossanitário", "Planta de fundação"…). Na conferência, pelo tipo lido/título
   (luz e força, SPDA, esgoto, águas pluviais, jardim, estacas…), o painel só SUGERE o tipo ("Usar sugestão"); nunca aplica sozinho.
 
+
+## Nome dos tubos
+
+- **Rafael, 25/11/2026: tubos TB001-01.** TB + número do grupo de tubos (3 dígitos, sequência geral da CAMP) + "-" + a parte (2 dígitos).
+  O mesmo lote em vários tubos continua o grupo (TB001-01, TB001-02…); outro projeto abre o grupo seguinte (TB002-01). O padrão fica em
+  `estante.padrao_tubo` (`TB{grupo:03d}-{parte:02d}`, migração 264). Os tubos criados antes no padrão TB-<projeto>.<n> só mudam de nome
+  por "Renomear tubos antigos para o novo padrão" (simula antes; admin); as folhas não mudam de tubo e a etiqueta precisa ser reimpressa.

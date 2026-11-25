@@ -15,7 +15,8 @@ Rotas (prefixo /api/projetos):
 - GET  /{p}/exportacoes               os PDFs ainda guardados; GET /{p}/exportacoes/{id}/arquivo baixa (apaga os vencidos ao listar).
 - GET  /{p}/guardados                 onde estão as folhas: cada recipiente (tubo, caixa, mapoteca…) com as folhas DESTE projeto, e as que
                                        faltam guardar.
-- POST /{p}/guardar-em                guarda as escolhidas num lugar que existe ou num tubo novo (TB-<projeto>.<n>, o próximo volume).
+- POST /{p}/guardar-em                guarda as escolhidas num lugar que existe ou num tubo novo (padrão TB001-01: continua o grupo do
+                                      projeto ou abre um grupo novo; app/tubos.py).
                                        Folha que já estava em outro lugar MUDA de lugar (é o pedido: dividir um lote em vários tubos), e a
                                        mudança fica no histórico de cada folha.
 Papel: operador ou mais (o mesmo de baixar original e de guardar).
@@ -35,7 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, tubos
 from .db import connect, settings
 
 router = APIRouter(prefix="/api/projetos", tags=["organizar"])
@@ -416,19 +417,17 @@ def guardados_do_projeto(con, projeto: str) -> dict:
     recip.sort(key=lambda l: (TIPOS_LOCAL.index(l["tipo"]) if l["tipo"] in TIPOS_LOCAL else 9, _nat(l["identificador"])))
     faltam = [{"codigo": f["codigo"], "folha": f["folha"] or ""} for f in folhas if not f["localizacao_id"]]
     return {"projeto": projeto, "total": len(folhas), "guardadas": len(folhas) - len(faltam), "recipientes": recip, "faltam": faltam,
-            "proximo_tubo": proximo_tubo(con, projeto)}
+            "proximo_tubo": proximo_tubo(con, projeto), "tubo_opcoes": tubos.opcoes(con, projeto)}
 
 
 def _nat(t: str) -> tuple:
     return tuple((0, int(x)) if x.isdigit() else (1, x) for x in re.findall(r"\d+|\D+", str(t or "")))
 
 
-def proximo_tubo(con, projeto: str) -> str:
-    """TB-<projeto>.<n>: o próximo volume livre (TB-F035-P0001.1, .2…). O prefixo TB- faz o leitor de etiqueta achar o TUBO (não o projeto)."""
-    base = f"TB-{projeto}."
-    usados = [int(r[0][len(base):]) for r in con.execute("SELECT identificador FROM localizacao_fisica WHERE upper(identificador) LIKE ?", (base + "%",))
-              if r[0][len(base):].isdigit()]
-    return f"{base}{(max(usados) + 1) if usados else 1}"
+def proximo_tubo(con, projeto: str, modo: str = "") -> str:
+    """Rafael, 25/11/2026: tubos no padrão TB001-01 (`estante.padrao_tubo`). Sem modo: continua o grupo do projeto se ele já tem tubo
+    (TB001-02), senão abre o próximo grupo (TB002-01). modo "novo_grupo" força um grupo novo. Antes era TB-<projeto>.<n>."""
+    return tubos.proximo(con, projeto, modo)
 
 
 @router.get("/{codigo}/guardados")
@@ -445,6 +444,7 @@ class GuardarEm(BaseModel):
     itens: list[str]
     localizacao_id: int | None = None
     novo_tubo: bool = False
+    tubo: str | None = None          # "continuar" (padrão quando o projeto já tem grupo) | "novo_grupo"
     descricao: str | None = None
 
 
@@ -463,7 +463,9 @@ def guardar_em(codigo: str, d: GuardarEm, u: dict = Depends(auth.exige("operador
             raise HTTPException(400, f"{'Estas folhas não são' if len(fora) > 1 else 'Esta folha não é'} deste projeto: {', '.join(fora[:5])}. Nada foi guardado.")
         criada = False
         if d.novo_tubo:
-            ident = proximo_tubo(con, p["codigo"])
+            if d.tubo not in (None, "", "continuar", "novo_grupo"):
+                raise HTTPException(400, "Escolha continuar o grupo ou um grupo novo")
+            ident = proximo_tubo(con, p["codigo"], d.tubo or "")
             desc = (d.descricao or "").strip()[:120] or None
             lid = con.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador, descricao) VALUES (?,?,?,?)",
                               (p["fundo_codigo"], "tubo", ident, desc)).lastrowid

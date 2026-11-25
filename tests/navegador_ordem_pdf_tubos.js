@@ -2,7 +2,7 @@
 // em alta qualidade … ou um zip só com os tiffs" e "um lote de estrutura total não cabe num tubo só, então vai em vários.. preciso dizer quem
 // tá em cada e quais faltam".
 // Prova, a 1440 e 390 px, na página do projeto F026-P0001: "Organizar pelo nome" mostra a prévia e grava (Folha 1, 2, 3, 10, 16, 16A);
-// "Escolher folhas" → "Guardar em…" tubo novo (TB-F026-P0001.1, .2), mover entre tubos, bloco "Onde estão as folhas" com cada tubo e as
+// "Escolher folhas" → "Guardar em…" tubo novo (TB001-01, TB001-02), mover entre tubos, bloco "Onde estão as folhas" com cada tubo e as
 // que faltam; "Escolher as que faltam"; "Exportar…" PDF de uma categoria (tarefa em segundo plano → "Baixar o PDF", arquivo PDF de verdade) e
 // .zip só com os TIFF; aba Arquivos originais com "Exportar em lote" e o PDF guardado. Sem rolagem lateral; nenhum erro de JS.
 // Uso (servidor PRÓPRIO, portas 9110–9139; banco: tests/semear_banco_teste.py + tests/semente_ordem_pdf.py <qnap>; CAMP_EXPORTACOES_DIR):
@@ -51,24 +51,29 @@ const escolher = async (pg, cods) => {
       // 2) Guardar em… tubos
       await escolher(pg, [cod('16'), cod('16A')]);
       await pg.click('#pj-selbar [data-pj-esc-guardar]'); await pg.waitForSelector('#conf-ov input[name="pgu-onde"]');
-      chk((await pg.textContent('#conf-ov')).includes('TB-F026-P0001.1'), 'Guardar em…: oferece o tubo novo TB-F026-P0001.1');
+      chk((await pg.textContent('#conf-ov')).includes('TB001-01'), 'Guardar em…: oferece o novo grupo TB001-01');
       await pg.fill('#pgu-desc', 'estrutura 1 de 2');
       await pg.screenshot({ path: `${PRINTS}/guardar-em-${w}.png` });
       await confirmarDialogo(pg); await pg.waitForTimeout(500);
       let bloco = await pg.textContent('#pj-guardados');
-      chk(/TB-F026-P0001\.1/.test(bloco) && /faltam guardar 4/i.test(bloco), 'Onde estão as folhas: TB-F026-P0001.1 e "faltam guardar 4"');
+      chk(/TB001-01/.test(bloco) && /faltam guardar 4/i.test(bloco), 'Onde estão as folhas: TB001-01 e "faltam guardar 4"');
       await escolher(pg, [cod('10'), cod('3')]);
-      await pg.click('#pj-selbar [data-pj-esc-guardar]'); await pg.waitForSelector('#conf-ov input[name="pgu-onde"]'); await confirmarDialogo(pg); await pg.waitForTimeout(500);
+      await pg.click('#pj-selbar [data-pj-esc-guardar]'); await pg.waitForSelector('#conf-ov input[name="pgu-onde"]');
+      const dlg = await pg.textContent('#conf-ov');   // CAMP-ESTANTE: tubos TB001-01 (Rafael, 25/11/2026)
+      chk(/Novo tubo:\s*TB001-02/.test(dlg) && /continua o TB001/.test(dlg) && /Novo grupo:\s*TB002-01/.test(dlg)
+          && await pg.isChecked('#conf-ov input[name="pgu-onde"][value="continuar"]'), 'Guardar em… com tubo no projeto: "Novo tubo: TB001-02 (continua o TB001)" marcado e "Novo grupo: TB002-01"');
+      await pg.screenshot({ path: `${PRINTS}/guardar-em-tb001-${w}.png` });
+      await confirmarDialogo(pg); await pg.waitForTimeout(500);
       await escolher(pg, [cod('3')]);
       await pg.click('#pj-selbar [data-pj-esc-guardar]'); await pg.waitForSelector('#conf-ov input[name="pgu-onde"]');
       await pg.check('#conf-ov input[name="pgu-onde"][value="existe"]');
       const opt = await pg.$$eval('#pgu-loc option', O => O.map(o => ({ v: o.value, t: o.textContent })));
-      const tubo1 = opt.find(o => o.t.includes('TB-F026-P0001.1'));
+      const tubo1 = opt.find(o => o.t.includes('TB001-01'));
       await pg.selectOption('#pgu-loc', tubo1 ? tubo1.v : opt[0].v);
       chk((await pg.textContent('#conf-ov')).includes('vai mudar'), 'mover: o diálogo avisa que a folha já guardada vai mudar de lugar');
       await confirmarDialogo(pg); await pg.waitForTimeout(500);
       const recs = await pg.$$eval('#pj-guardados .pgu-rec', R => R.map(r => r.querySelector('b').textContent + ':' + r.querySelectorAll('.pgu-folhas li').length));
-      chk(JSON.stringify(recs) === JSON.stringify(['TB-F026-P0001.1:3', 'TB-F026-P0001.2:1']), `cada tubo com as suas folhas (${recs.join(', ')})`);
+      chk(JSON.stringify(recs) === JSON.stringify(['TB001-01:3', 'TB001-02:1']), `cada tubo com as suas folhas (${recs.join(', ')})`);
       bloco = await pg.textContent('#pj-guardados');
       chk(/Faltam guardar \(2\)/.test(bloco), 'faltam guardar 2, listadas');
       await pg.click('#pj-guardados [data-pgu-escolher-faltam]'); await pg.waitForTimeout(300);

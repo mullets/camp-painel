@@ -15,7 +15,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, tubos
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["estante"])
@@ -316,7 +316,7 @@ def guardar(d: Guardar, u: dict = Depends(auth.exige("operador"))) -> dict:
         if loc:
             lid, tipo = loc["id"], loc["tipo"]
         else:
-            tipo = next((t for pre, t in PREFIXO_TIPO if ident.startswith(pre)), "caixa")
+            tipo = "tubo" if tubos.e_tubo(con, ident) else next((t for pre, t in PREFIXO_TIPO if ident.startswith(pre)), "caixa")
             lid = con.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador) VALUES (?,?,?)", (p["fundo_codigo"], tipo, ident)).lastrowid
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('localizacao',?,'criada',?,?)",
                         (str(lid), u["email"], json.dumps({"identificador": ident, "fundo": p["fundo_codigo"]}, ensure_ascii=False)))
@@ -355,3 +355,33 @@ def publicadas_sem_lugar(u: dict = Depends(auth.exige("leitura"))) -> dict:
     finally:
         con.close()
     return {"folhas": r[0], "projetos": r[1]}
+
+
+# ---------------- CAMP-ESTANTE · tubos no padrão TB001-01 ----------------
+# - GET  /api/estante/tubos-antigos             tubos ainda no padrão anterior (TB-F035-P0001.1)
+# - POST /api/estante/tubos-antigos/renomear     {aplicar: false} simula (padrão); {aplicar: true} renomeia (admin). As folhas não mudam de tubo.
+class Renomear(BaseModel):
+    aplicar: bool = False
+
+
+@router.get("/estante/tubos-antigos")
+def tubos_antigos(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    con = connect()
+    try:
+        return {"padrao": tubos.padrao(con), "tubos": tubos.tubos_antigos(con)}
+    finally:
+        con.close()
+
+
+@router.post("/estante/tubos-antigos/renomear")
+def renomear_tubos_antigos(d: Renomear, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        r = tubos.renomear_antigos(con, bool(d.aplicar), u["email"])
+    finally:
+        con.close()
+    n = r["total"]
+    r["mensagem"] = ("Nenhum tubo no padrão antigo." if not n else
+                     (f"Simulação: {n} tubo{'s' if n != 1 else ''} mudaria{'m' if n != 1 else ''} de nome. Nada foi gravado." if r["simulacao"] else
+                      f"{n} tubo{'s' if n != 1 else ''} renomeado{'s' if n != 1 else ''}. Reimprima as etiquetas."))
+    return r
