@@ -42,6 +42,8 @@ app.include_router(rotas_auth)
 app.include_router(rotas_admin)
 app.include_router(rotas_site)
 app.include_router(rotas_fundos)
+from .originais import router as rotas_originais   # CAMP-ENTREGA: arquivos originais (TIFF/JPG) do projeto; antes das rotas genéricas de projeto
+app.include_router(rotas_originais)
 app.include_router(rotas_projetos)
 app.include_router(rotas_itens)
 app.include_router(rotas_importacao)

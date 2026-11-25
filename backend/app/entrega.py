@@ -83,6 +83,147 @@ def termo(con) -> str:
     return (_cfg(con, "entrega.termo") or TERMO_PADRAO).replace("{preco}", preco_comercial(con))
 
 
+# ---------------------------------------------------------------- cobrança e justificativa (CAMP-ENTREGA, 25/11/2026)
+# Rafael: "fazer uma resposta para download com link temporário e uma cobrança, além de justificar o porquê da cobrança ou ausência dela".
+# Toda entrega (menos o teste) diz se tem cobrança e POR QUÊ. O motivo sai de uma lista curta; "outro" exige o texto. A justificativa vai
+# no e-mail, no histórico do pedido e na exportação (prestação de contas). Amigo da CAMP não está na lista: o painel não tem esse benefício.
+MOTIVOS_SEM = {
+    "pesquisa": "Uso acadêmico ou de pesquisa, não comercial (item 1 do termo de uso)",
+    "parceira": "Instituição parceira da CAMP",
+    "doador": "Doador do acervo ou família do arquiteto",
+    "imprensa": "Imprensa: divulgação do acervo da CAMP",
+    "outro": "Outro motivo",
+}
+MOTIVOS_COM = {
+    "comercial": "Uso comercial (R$ {preco} por folha, item 2 do termo de uso)",
+    "outro": "Outro motivo",
+}
+
+
+def preco_num(con) -> float:
+    try:
+        return max(0.0, float(_cfg(con, "entrega.preco_comercial_folha", "150").replace(",", ".")))
+    except ValueError:
+        return 150.0
+
+
+def _brl(v: float) -> str:
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def rotulo_motivo(con, modo: str, motivo: str) -> str:
+    tab = MOTIVOS_COM if modo == "com" else MOTIVOS_SEM
+    return tab.get(motivo, "").replace("{preco}", preco_comercial(con))
+
+
+def validar_cobranca(con, c: dict | None, n_folhas: int) -> dict:
+    """{modo, motivo, rotulo, texto, justificativa, valor, liberar}. Sem escolha ou sem justificativa: 400 (nada é enviado)."""
+    c = c or {}
+    modo = str(c.get("modo") or "").strip()
+    if modo not in ("com", "sem"):
+        raise HTTPException(400, "Escolha se o envio tem cobrança ou não, e diga por quê.")
+    tab = MOTIVOS_COM if modo == "com" else MOTIVOS_SEM
+    motivo = str(c.get("motivo") or "").strip()
+    if motivo not in tab:
+        raise HTTPException(400, "Escolha o motivo " + ("da cobrança." if modo == "com" else "de não cobrar."))
+    texto = " ".join(str(c.get("texto") or "").split())[:500]
+    if motivo == "outro" and len(texto) < 5:
+        raise HTTPException(400, "Escreva a justificativa (motivo \"Outro motivo\").")
+    rot = rotulo_motivo(con, modo, motivo)
+    just = texto if motivo == "outro" else (f"{rot}. {texto}" if texto else rot)
+    valor, liberar = None, False
+    if modo == "com":
+        try:
+            valor = round(float(c.get("valor") if c.get("valor") not in (None, "") else n_folhas * preco_num(con)), 2)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Valor da cobrança inválido.")
+        if valor < 1 or valor > 1_000_000:
+            raise HTTPException(400, "Valor da cobrança entre R$ 1,00 e R$ 1.000.000,00.")
+        liberar = bool(c.get("liberar_apos_pagamento", True))
+    return {"modo": modo, "motivo": motivo, "rotulo": rot, "texto": texto, "justificativa": just.rstrip("."), "valor": valor, "liberar": liberar}
+
+
+def texto_cobranca(d: dict, link_pagamento: str = "") -> str:
+    """O parágrafo do e-mail (sóbrio): sem cobrança e por quê; ou o valor, o motivo, o link de pagamento e quando o download libera."""
+    if d["modo"] == "sem":
+        return f"Sem cobrança: {d['justificativa']}."
+    t = f"Cobrança: R$ {_brl(d['valor'])} ({d['justificativa']})."
+    if link_pagamento:
+        t += f" Pague pelo Mercado Pago neste link: {link_pagamento}"
+    if d["liberar"]:
+        t += " O download é liberado depois da confirmação do pagamento (pode levar alguns minutos)."
+    return t
+
+
+def cobranca_opcoes(con, sid: int, ator: dict, n_folhas: int) -> dict:
+    """O que a tela de envio mostra na seção Cobrança."""
+    from . import cobrancas
+    s = _solicitacao(con, sid)
+    k = s.keys()
+    ult = None
+    if "cobranca_id" in k and s["cobranca_id"]:
+        r = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (s["cobranca_id"],)).fetchone()
+        if r:
+            ult = {"id": r["id"], "valor": r["valor"], "situacao": cobrancas.situacao_efetiva(r), "link": r["link"] or "",
+                   "external_reference": r["external_reference"] or ""}
+    return {"motivos_sem": MOTIVOS_SEM, "motivos_com": {k_: rotulo_motivo(con, "com", k_) for k_ in MOTIVOS_COM},
+            "preco_folha": preco_num(con), "preco": preco_comercial(con), "folhas": n_folhas, "valor_sugerido": round(n_folhas * preco_num(con), 2),
+            "pode_cobrar": (ator or {}).get("papel") in ("admin", "master"), "site_ok": cobrancas._tem_site(con),
+            "modo": (s["cobranca_modo"] if "cobranca_modo" in k else None), "motivo": (s["cobranca_motivo"] if "cobranca_motivo" in k else None),
+            "justificativa": (s["cobranca_justificativa"] if "cobranca_justificativa" in k else None), "cobranca": ult}
+
+
+def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: dict) -> tuple[int, str]:
+    """Cria (ou refaz, se o pedido já tem uma sem pagamento) a cobrança do Mercado Pago pelo módulo de cobranças avulsas.
+    (id, link). Sem link: HTTPException 502 e nada é enviado."""
+    from . import cobrancas
+    projetos = sorted({c[:10] for c in codigos if re.match(r"^F\d{3}-P\d{4}", c)})
+    vin = projetos[0] if len(projetos) == 1 and con.execute("SELECT 1 FROM projeto WHERE codigo=?", (projetos[0],)).fetchone() else None
+    desc = f"Uso de imagens do acervo · pedido #{s['id']} ({n_folhas} folha{'s' if n_folhas != 1 else ''}{', ' + vin if vin else ''}) · {d['justificativa']}"[:600]
+    cid = s["cobranca_id"] if "cobranca_id" in s.keys() else None
+    r = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() if cid else None
+    if r and r["situacao"] in ("sem_link", "aberta") and abs((r["valor"] or 0) - d["valor"]) < 0.005 and r["link"]:
+        return r["id"], r["link"]
+    if not r or r["situacao"] not in ("sem_link",):
+        cur = con.execute("""INSERT INTO cobranca_avulsa (nome, email, valor, finalidade, descricao, vinculo_tipo, vinculo_codigo, situacao,
+                             statement_descriptor, criado_por, criado_por_nome, solicitacao_id) VALUES (?,?,?,?,?,?,?,'sem_link',?,?,?,?)""",
+                          (s["solicitante"] or "", (s["email"] or "").lower(), d["valor"], "servico", desc, "projeto" if vin else None, vin,
+                           cobrancas.FINALIDADES["servico"][1], ator.get("id"), ator.get("nome") or ator.get("email"), s["id"]))
+        cid = cur.lastrowid
+        con.execute("UPDATE cobranca_avulsa SET ref_painel=? WHERE id=?", (f"painel-cob-{cid}", cid))
+        cobrancas._evento(con, cid, "criado", ator.get("email") or "", {"valor": d["valor"], "finalidade": "servico", "vinculo": vin, "pedido": s["id"]})
+    else:
+        cid = r["id"]
+        con.execute("UPDATE cobranca_avulsa SET valor=?, descricao=? WHERE id=?", (d["valor"], desc, cid))
+    con.commit()
+    if not cobrancas._tem_site(con):
+        raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações: sem ela o painel não cria a cobrança no Mercado Pago. Nada foi enviado.")
+    erro = cobrancas._pedir_link(con, cobrancas._um(con, cid), ator.get("email") or "")
+    con.commit()
+    link = (con.execute("SELECT link FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() or [""])[0] or ""
+    if erro or not link:
+        raise HTTPException(502, f"A cobrança não foi criada no Mercado Pago: {erro or 'o site não devolveu o link'}. Nada foi enviado e o pedido não mudou.")
+    return cid, link
+
+
+def pago(con, r) -> bool:
+    """O link travado até o pagamento já pode baixar? (a cobrança ligada está paga; a confirmação vem da sincronização das cobranças)."""
+    from . import cobrancas
+    k = r.keys()
+    if not ("liberar_apos_pagamento" in k and r["liberar_apos_pagamento"] and r["cobranca_id"]):
+        return True
+    c = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (r["cobranca_id"],)).fetchone()
+    return bool(c) and cobrancas.situacao_efetiva(c) == "paga"
+
+
+def cobranca_do_link(con, r) -> dict | None:
+    k = r.keys()
+    if not ("cobranca_id" in k and r["cobranca_id"]):
+        return None
+    c = con.execute("SELECT valor, link, situacao, vence FROM cobranca_avulsa WHERE id=?", (r["cobranca_id"],)).fetchone()
+    return {"valor": _brl(c["valor"] or 0), "link": c["link"] or "", "situacao": c["situacao"]} if c else None
+
+
 def aceitar(con, token: str, nome: str, ip: str) -> None:
     """Registra o aceite do termo (prova: quando, nome digitado, IP e o texto exato). Só a primeira vez conta."""
     r, motivo = achar(con, token)
@@ -330,7 +471,8 @@ def link_base(con) -> str:
     return _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/")
 
 
-def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str) -> dict:
+def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str, cobranca: str = "",
+           uso_comercial: bool = False, link_pagamento: str = "", justificativa: str = "") -> dict:
     """`link` (o principal, 01/11 Rafael: "o ideal é o link de download ser um zip de todo aquele projeto") baixa tudo num .zip;
     `link_pagina` abre a página com os arquivos um a um."""
     link = link_pagina                      # 02/11: o link abre o termo de uso; aceito, a página libera o .zip e os arquivos
@@ -343,10 +485,13 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
     corpo = (f"Olá, {primeiro},\n\n"
              "Seu pedido de material em alta resolução ao acervo da CAMP foi aprovado.\n\n"
              + (f"{mensagem}\n\n" if mensagem else "")
+             + (f"{cobranca}\n\n" if cobranca else "")
              + f"Abra este link temporário (vale até {validade}), aceite o termo de uso e baixe tudo num só arquivo .zip"
              f"{' (' + _fmt_tamanho(total) + ')' if total else ''}:\n{link}\n\n"
-             f"O material é cedido só para uso não comercial. Uso comercial depende de autorização da CAMP e custa R$ {preco_comercial(con)} por folha.\n\n"
-             f"O que está no pacote ({len(arquivos)} arquivo(s)):\n{lista}\n\n"
+             + ("O uso comercial deste material fica autorizado para a finalidade informada no pedido, com o pagamento da cobrança acima.\n\n"
+                if uso_comercial else
+                f"O material é cedido só para uso não comercial. Uso comercial depende de autorização da CAMP e custa R$ {preco_comercial(con)} por folha.\n\n")
+             + f"O que está no pacote ({len(arquivos)} arquivo(s)):\n{lista}\n\n"
              "Ao usar este material, cite a fonte: Acervo CAMP – Casa da Arquitetura Moderna Paulista.\n"
              "Se tiver qualquer dúvida, é só responder este e-mail.\n\n"
              "Equipe CAMP\n")
@@ -356,7 +501,10 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
                  "preco_comercial": preco_comercial(con),
                  "validade": validade, "validade_curta": _data_br(expira_em), "pedido": str(s["id"]),
                  "material": material(arquivos), "protocolo": protocolo(con, s),
-                 "quantidade": str(len(arquivos)), "lista": lista, "mensagem": mensagem or ""}
+                 "quantidade": str(len(arquivos)), "lista": lista,
+                 # CAMP-ENTREGA: o TR09 já mostra {{mensagem}}; a cobrança e a justificativa vão nele (e também à parte, para um layout novo)
+                 "mensagem": "\n\n".join(x for x in (mensagem or "", cobranca or "") if x),
+                 "cobranca": cobranca or "", "link_pagamento": link_pagamento or "", "justificativa": justificativa or ""}
     return {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
 
 
@@ -437,7 +585,8 @@ def previa(con, sid: int, mensagem: str = "") -> dict:
             **c}
 
 
-def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str | None = None, teste: bool = False) -> dict:
+def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str | None = None, teste: bool = False,
+                     cobranca: dict | None = None) -> dict:
     """Cria o link, prepara os arquivos, manda o e-mail e, só se o envio foi aceito, marca o pedido como entregue.
     `teste`: manda para quem aprovou (link de 1 dia) e não muda o pedido."""
     s = _solicitacao(con, sid)
@@ -456,11 +605,21 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     m = montar(con, sid)
     if not m["arquivos"]:
         raise HTTPException(409, "Nenhum arquivo deste pedido foi achado no QNAP. Veja o que ficou de fora no pacote.")
+    # CAMP-ENTREGA: com ou sem cobrança, sempre com a justificativa (o teste para quem aprova não cobra nem justifica)
+    cob, cob_id, link_pag = None, None, ""
+    if not teste:
+        cob = validar_cobranca(con, cobranca, len(m["arquivos"]))
+        if cob["modo"] == "com":
+            if ator.get("papel") not in ("admin", "master"):
+                raise HTTPException(403, "Só admin cria cobrança (dados de pagamento). Peça a um admin para enviar este pedido com cobrança.")
+            cob_id, link_pag = _criar_cobranca(con, s, cob, len(m["arquivos"]), [a["codigo"] for a in m["arquivos"]], ator)
     token = secrets.token_urlsafe(32)
     dias = 1 if teste else validade_dias(con)
     expira = calcular_expira_em(dias)
-    lid = con.execute("INSERT INTO entrega_link (solicitacao_id, token_hash, arquivos, para, canal, teste, criado_por, expira_em) VALUES (?,?,?,?,?,?,?,?)",
-                      (sid, _hash(token), "[]", para, canal, int(teste), ator.get("email"), expira)).lastrowid
+    lid = con.execute("""INSERT INTO entrega_link (solicitacao_id, token_hash, arquivos, para, canal, teste, criado_por, expira_em,
+                         cobranca_id, liberar_apos_pagamento, uso_comercial) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                      (sid, _hash(token), "[]", para, canal, int(teste), ator.get("email"), expira, cob_id,
+                       int(bool(cob and cob["modo"] == "com" and cob["liberar"])), int(bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial")))).lastrowid
     con.commit()
     dest = pasta() / str(lid)
     try:
@@ -478,7 +637,8 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         con.execute("UPDATE entrega_link SET arquivos=? WHERE id=?", (json.dumps(arquivos, ensure_ascii=False), lid))
         con.commit()
         link = f"{link_base(con)}/entrega/{token}"
-        t = textos(con, s, arquivos, link, expira, mensagem)
+        t = textos(con, s, arquivos, link, expira, mensagem, texto_cobranca(cob, link_pag) if cob else "",
+                   bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial"), link_pag, cob["justificativa"] if cob else "")
         responder = _cfg(con, "entrega.responder_para")
         envio_id = enviar(con, canal, para, s["solicitante"] or "", t, responder, None if teste else _pedido_site_id(con, sid))
     except (EnvioErro, OSError) as e:
@@ -490,8 +650,12 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         raise HTTPException(502, f"{msg}. Nada foi enviado e o pedido não mudou.")
     total = sum(a["tamanho"] or 0 for a in arquivos)
     resumo = f"{len(arquivos)} arquivo(s), {_fmt_tamanho(total)} · enviado por e-mail ({CANAIS[canal]}) para {para} · link até {_data_br(expira)}"
+    if cob:
+        resumo += (" · sem cobrança" if cob["modo"] == "sem" else f" · cobrança R$ {_brl(cob['valor'])}" + (" (download após o pagamento)" if cob["liberar"] else ""))
     if not teste:
         con.execute("UPDATE solicitacao SET situacao='entregue', entregue_em=datetime('now'), entrega=? WHERE id=?", (resumo, sid))
+        con.execute("""UPDATE solicitacao SET cobranca_modo=?, cobranca_motivo=?, cobranca_justificativa=?, cobranca_id=?,
+                       valor=COALESCE(?, valor) WHERE id=?""", (cob["modo"], cob["motivo"], cob["justificativa"], cob_id, cob["valor"], sid))
         entregues = {(a["codigo"], a["formato"]) for a in arquivos}
         for cod, fmt in con.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=?", (sid,)).fetchall():
             if (cod, fmt) in entregues or any(x[1] == fmt and x[0].startswith(cod + "-") for x in entregues):
@@ -499,10 +663,13 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,?,?,?)",
                 (str(sid), "envio_teste" if teste else "entregue_por_email", ator.get("email"),
                  json.dumps({"canal": canal, "para": para, "arquivos": len(arquivos), "fora": len(m["fora"]), "link_ate": expira,
-                             "envio_id": envio_id or None, "folhas": [a["codigo"] for a in arquivos][:200]}, ensure_ascii=False)))
+                             "envio_id": envio_id or None, "folhas": [a["codigo"] for a in arquivos][:200],
+                             **({"cobranca": cob["modo"], "motivo": cob["motivo"], "justificativa": cob["justificativa"], "valor": cob["valor"],
+                                 "cobranca_id": cob_id, "liberar_apos_pagamento": cob["liberar"]} if cob else {})}, ensure_ascii=False)))
     con.commit()
     return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"],
-            "validade": _data_br(expira), "entrega": resumo, "link": t["variaveis"]["link"]}
+            "validade": _data_br(expira), "entrega": resumo, "link": t["variaveis"]["link"],
+            "cobranca": ({"modo": cob["modo"], "justificativa": cob["justificativa"], "valor": cob["valor"], "id": cob_id, "link": link_pag} if cob else None)}
 
 
 def links(con, sid: int) -> list[dict]:
@@ -512,7 +679,7 @@ def links(con, sid: int) -> list[dict]:
         out.append({"id": r["id"], "para": r["para"], "canal": r["canal"], "teste": bool(r["teste"]), "criado_em": r["criado_em"],
                     "criado_por": r["criado_por"], "expira_em": r["expira_em"], "downloads": r["downloads"], "ultimo_download_em": r["ultimo_download_em"],
                     "aceite_em": r["aceite_em"], "aceite_nome": r["aceite_nome"],
-                    "situacao": "cancelado" if r["revogado_em"] else "vencido" if venceu else "ativo"})
+                    "situacao": "cancelado" if r["revogado_em"] else "vencido" if venceu else "aguardando pagamento" if not pago(con, r) else "ativo"})
     return out
 
 
@@ -544,6 +711,8 @@ def arquivo(con, token: str, n: int) -> tuple[Path, str]:
     r, motivo = achar(con, token)
     if motivo:
         raise HTTPException(410 if motivo in ("cancelado", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
+    if not pago(con, r):
+        raise HTTPException(402, "O download é liberado depois da confirmação do pagamento.")
     if not r["aceite_em"]:
         raise HTTPException(403, "Aceite o termo de uso antes de baixar.")
     a = next((x for x in json.loads(r["arquivos"] or "[]") if x.get("n") == n), None)
