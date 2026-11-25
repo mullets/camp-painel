@@ -12,6 +12,7 @@ principalmente consultoria / projetos complementares (engenharia, instalações,
   envia "Escritório (Disciplina); ..." para ele; senão os parceiros ficam só no painel (e na exportação EAD).
 """
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -155,6 +156,114 @@ def sugestoes(fundo: str | None = None, q: str | None = None, limite: int = 100,
                     a["do_fundo"] = True
         nomes = sorted(acc.values(), key=lambda a: (not a["do_fundo"], -a["folhas"], a["nome"].casefold()))[:limite]
         return {"nomes": nomes, "disciplinas": list(DISCIPLINAS)}
+    finally:
+        con.close()
+
+
+# CAMP-FICHA (25/11/2026). Rafael, na conferência de uma folha de estrutura cujo carimbo só tinha o escritório de cálculo ("DAPA LIMA
+# OTERO ENGENHARIA LTDA. S/C." lido como Cliente): "ver se outras folhas desse projeto têm algum escritório e já sugerir". Tudo do BANCO
+# (nada de QNAP): os escritórios das OUTRAS folhas do projeto, a disciplina que a própria folha indica (tipo lido / título) e o aviso de
+# que o "cliente" lido parece ser o escritório complementar. Nada grava sozinho: a tela só sugere; quem confere clica e salva.
+_RE_FIRMA = re.compile(r"\b(engenharia|projetos?|arquitetura|construtora|construcoes|ltda|s\s*/\s*c|s\.\s*a\.?|s/a|escritorio tecnico|calculos?"
+                       r"|instalacoes|consultoria|eireli|epp)\b")
+# a ordem importa: o primeiro que casa decide (tipo lido antes do título; ver disciplina_da_folha)
+_DISC_PALAVRAS = (
+    ("Ar-condicionado/climatização", r"ar[\s-]?condicionado|climatiza|ventilacao mecanica|exaust"),
+    ("Paisagismo", r"paisag|jardim|jardins"),
+    ("Luminotécnica", r"luminotec"),
+    ("Acústica", r"acustic"),
+    ("Instalações elétricas", r"eletric|luz e forca|forca e luz|telefon|para[\s-]?raios|spda"),
+    ("Instalações hidráulicas", r"hidraul|hidro[\s-]?sanit|sanitari|esgoto|agua fria|agua quente|aguas pluviais|pluvia|incendio"),
+    ("Fundações", r"fundac|estaca|sapata|tubulao|tubuloes"),
+    ("Estrutura", r"estrutur|concreto armado|armacao|armadura|ferragem|formas?\b|viga|pilar|laje|calculo estrutural"),
+)
+
+
+def _sa(t) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFKD", str(t or "").casefold()) if not unicodedata.combining(ch))
+
+
+def disciplina_da_folha(tipo_lido=None, *titulos) -> str | None:
+    """Disciplina complementar que a folha indica: primeiro pelo tipo lido ("Detalhe / Estrutura"), depois pelo título. Só valores de
+    DISCIPLINAS (a lista do painel); None quando não indica nenhuma (planta de arquitetura, por exemplo)."""
+    for fonte in (tipo_lido, " ".join(str(t or "") for t in titulos)):
+        txt = _sa(fonte)
+        if not txt.strip():
+            continue
+        for disc, rx in _DISC_PALAVRAS:
+            if re.search(rx, txt):
+                return disc
+    return None
+
+
+def chave_firma(nome) -> str:
+    """Nome sem acento, pontuação e o tipo de sociedade: "DAPA LIMA OTERO ENGENHARIA LTDA. S/C." e "DAPA Lima Otero Engenharia" batem."""
+    t = re.sub(r"[^a-z0-9 ]+", " ", _sa(nome).replace("s/c", " ").replace("s/a", " "))
+    t = re.sub(r"\b(ltda|s c|s a|sa|sc|me|epp|eireli|cia)\b", " ", t)
+    return " ".join(t.split())
+
+
+def parece_firma(nome) -> bool:
+    return bool(_RE_FIRMA.search(_sa(nome)))
+
+
+@router.get("/itens/{codigo}/parceiros/projeto")
+def sugestoes_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Sugestões para a ficha desta folha, tiradas das OUTRAS folhas do mesmo projeto:
+    - escritorios: [{escritorio, disciplina, folhas, combina}] (par escritório + disciplina, mais folhas primeiro; os da disciplina que
+      esta folha indica vêm antes, com combina=true); os que esta folha já tem ficam de fora;
+    - disciplina: a que esta folha indica pelo tipo lido / título (ou null);
+    - cliente: o cliente mais escrito nas outras folhas (que não parece escritório), com quantas folhas;
+    - cliente_e_escritorio: quando o Cliente lido desta folha parece um escritório (LTDA, ENGENHARIA, S/C…) E a folha é de projeto
+      complementar: {nome, disciplina, ja_escritorio_folhas} — a tela oferece "mover para Escritórios parceiros"."""
+    con = connect()
+    try:
+        i = con.execute("SELECT codigo, projeto_codigo, parceiros, cliente_folha, tipo_lido, titulo, pendencias FROM item WHERE codigo=?",
+                        (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        try:
+            titulo_lido = (json.loads(i["pendencias"] or "{}") or {}).get("titulo_lido")
+        except (ValueError, TypeError, AttributeError):
+            titulo_lido = None
+        disc = disciplina_da_folha(i["tipo_lido"], i["titulo"], titulo_lido)
+        meus = {(p["escritorio"].casefold(), p["disciplina"].casefold()) for p in ler(i["parceiros"])}
+        meus_nomes = {e for e, _ in meus}
+        pares: dict = {}
+        por_nome: dict = {}
+        clientes: dict = {}
+        for r in con.execute("""SELECT parceiros, cliente_folha FROM item WHERE projeto_codigo=? AND codigo<>? AND duplicata_de IS NULL""",
+                             (i["projeto_codigo"], codigo)):
+            vistos = set()
+            lista = ler(r["parceiros"])
+            for p in {chave_firma(p["escritorio"]): p for p in lista}.values():
+                k0 = chave_firma(p["escritorio"])
+                n0, _ = por_nome.get(k0, (0, p["escritorio"]))
+                por_nome[k0] = (n0 + 1, p["escritorio"])
+            for p in lista:
+                k = (p["escritorio"].casefold(), p["disciplina"].casefold())
+                if k in vistos:
+                    continue
+                vistos.add(k)
+                a = pares.setdefault(k, {"escritorio": p["escritorio"], "disciplina": p["disciplina"], "folhas": 0})
+                a["folhas"] += 1
+            c = _limpo(r["cliente_folha"])
+            if c and not parece_firma(c):
+                b = clientes.setdefault(c.casefold(), {"nome": c, "folhas": 0})
+                b["folhas"] += 1
+        esc = [dict(a, combina=bool(disc) and a["disciplina"] == disc) for k, a in pares.items() if k not in meus and k[0] not in meus_nomes]
+        esc.sort(key=lambda a: (not a["combina"], -a["folhas"], a["escritorio"].casefold()))
+        cli = max(clientes.values(), key=lambda b: (b["folhas"], b["nome"]), default=None)
+        lido = _limpo(i["cliente_folha"])
+        mover = None
+        if lido and disc and parece_firma(lido):
+            n0, grafia = por_nome.get(chave_firma(lido), (0, None))
+            # o nome como já está escrito nas outras folhas (se houver): "Mover" usa essa grafia
+            mover = {"nome": lido, "escritorio": grafia or lido, "disciplina": disc, "ja_escritorio_folhas": n0}
+            if cli and cli["nome"].casefold() == lido.casefold():
+                cli = None
+        return {"codigo": codigo, "disciplina": disc, "escritorios": esc[:6], "cliente": cli, "cliente_e_escritorio": mover}
     finally:
         con.close()
 
