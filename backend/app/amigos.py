@@ -995,6 +995,12 @@ def lembretes_devidos(con) -> list[dict]:
             continue
         falta = (v - h).days
         if r["situacao"] == "pago" and 0 <= falta <= dias[0]:
+            if r["modalidade"] == "mensal":
+                # CAMP-AMIGO-LEMBRETE-MENSAL (25/11/2026; Eveny, Amiga mensal: "Ué... eu já paguei"). Na mensal a validade é sempre o
+                # próximo mês (cada mensalidade paga empurra um mês): ela caía todo mês na janela de 30 dias e recebia "Sua anuidade
+                # está perto de vencer" logo depois de pagar. Mensal não recebe lembrete de renovação; se a mensalidade falhar e vencer,
+                # o aviso de vencido continua saindo.
+                continue
             marco = min(m for m in dias if falta <= m)
             modelo, chave = "lembrete_renovacao", f"renovacao:{r['id']}:{r['validade']}:{marco}"
         elif r["situacao"] == "vencido" and -60 <= falta < 0:

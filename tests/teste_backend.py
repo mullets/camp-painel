@@ -19002,6 +19002,11 @@ def filho(modo):
         quem = {s["id"]: (s["modelo"], s["marco"]) for s in rs["seriam"]}
         ver("simular: lista quem receberia (renovação 30 dias para Beto) e NÃO envia", quem.get(a2["id"]) == ("lembrete_renovacao", 30) and c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == 0, rs)
         ver("simular guarda a última simulação", _j.loads(am._estado(c, "lembretes_simulacao"))["n"] == len(rs["seriam"]))
+        # CAMP-AMIGO-LEMBRETE-MENSAL (25/11/2026; Amiga mensal: "Ué... eu já paguei"): mensal não recebe lembrete de renovação.
+        _mod = um(802)["modalidade"]
+        c.execute("UPDATE amigo SET modalidade='mensal' WHERE site_id=802"); c.commit()
+        ver("mensal (validade = próximo mês): sem lembrete de renovação", a2["id"] not in [s_["id"] for s_ in am.lembretes_devidos(c)], am.lembretes_devidos(c))
+        c.execute("UPDATE amigo SET modalidade=? WHERE site_id=802", (_mod,)); c.commit()
         # e-mail: SEMPRE pelo Sender do site (Rafael, 18/11/2026), pela rota POST /painel/apoios/{id}/email (contrato 1.12; site FALSO).
         # O SMTP do painel fica configurado de propósito: não pode ser usado (SMTP de verdade e email_envio.enviar explodem).
         for k_, v_ in (("smtp.host", "smtp.exemplo.com"), ("smtp.remetente", "amigos@camp.arq.br")):
