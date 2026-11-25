@@ -11,7 +11,9 @@
 """
 from __future__ import annotations
 
+import csv
 import hmac
+import io
 import json
 import logging
 import re
@@ -247,6 +249,35 @@ def metricas(u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close()
 
 
+@router.get("/solicitacoes/cobrancas.csv")
+def exportar_cobrancas(u: dict = Depends(auth.exige("admin"))):
+    """CAMP-ENTREGA: cada pedido entregue com a decisão de cobrar ou não e a justificativa (prestação de contas). Sem e-mail nem telefone."""
+    from . import cobrancas, entrega
+    con = connect()
+    try:
+        rows = con.execute("""SELECT s.id, s.recebida_em, s.entregue_em, s.solicitante, s.instituicao, s.finalidade, s.cobranca_modo, s.cobranca_motivo,
+                                     s.cobranca_justificativa, s.valor, s.cobranca_id, s.anonimizada,
+                                     (SELECT COUNT(*) FROM solicitacao_item si WHERE si.solicitacao_id=s.id) AS itens
+                              FROM solicitacao s WHERE s.cobranca_modo IS NOT NULL ORDER BY s.entregue_em DESC, s.id DESC""").fetchall()
+        prot = entrega.protocolos_pedidos(con, [r["id"] for r in rows], {r["id"]: r["recebida_em"] for r in rows})
+        buf = io.StringIO()
+        w = csv.writer(buf, delimiter=";")
+        w.writerow(["pedido", "protocolo", "recebido_em", "entregue_em", "quem pediu", "instituicao", "finalidade", "itens pedidos", "cobranca",
+                    "motivo", "justificativa", "valor (R$)", "referencia Mercado Pago", "situacao da cobranca"])
+        for r in rows:
+            c = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (r["cobranca_id"],)).fetchone() if r["cobranca_id"] else None
+            w.writerow([r["id"], prot.get(r["id"], ""), r["recebida_em"] or "", r["entregue_em"] or "",
+                        "(dados apagados)" if r["anonimizada"] else r["solicitante"] or "", "" if r["anonimizada"] else r["instituicao"] or "",
+                        r["finalidade"] or "", r["itens"], "com cobrança" if r["cobranca_modo"] == "com" else "sem cobrança",
+                        entrega.rotulo_motivo(con, r["cobranca_modo"], r["cobranca_motivo"] or ""), r["cobranca_justificativa"] or "",
+                        f"{r['valor']:.2f}".replace(".", ",") if r["cobranca_modo"] == "com" and r["valor"] is not None else "",
+                        (c["external_reference"] or "") if c else "", cobrancas.SITUACOES.get(cobrancas.situacao_efetiva(c), "") if c else ""])
+    finally:
+        con.close()
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="CAMP-pedidos-cobranca-justificativa.csv"'})
+
+
 @router.get("/solicitacoes/{sid}/pacote")
 def ver_pacote(sid: int, formato: str | None = None, u: dict = Depends(auth.exige("operador"))):
     con = connect()
@@ -293,6 +324,7 @@ class Envio(BaseModel):
     mensagem: str | None = None          # parágrafo opcional no e-mail (ex.: condições de uso, crédito)
     canal: str | None = None             # sender | site (vazio = o de Configurações)
     teste: bool = False                  # manda só para quem aprova (link de 1 dia) e não muda o pedido
+    cobranca: dict | None = None         # CAMP-ENTREGA: {modo: com|sem, motivo, texto, valor, liberar_apos_pagamento}; obrigatório (menos no teste)
 
 
 @router.get("/solicitacoes/{sid}/envio")
@@ -303,6 +335,7 @@ def previa_envio(sid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
     try:
         r = entrega.previa(con, sid)
         r["links"] = entrega.links(con, sid)
+        r["cobranca"] = entrega.cobranca_opcoes(con, sid, u, len(r["arquivos"]))
         return r
     finally:
         con.close()
@@ -314,7 +347,7 @@ def aprovar_e_enviar(sid: int, d: Envio, u: dict = Depends(auth.exige("operador"
     from . import entrega
     con = connect()
     try:
-        return entrega.aprovar_e_enviar(con, sid, u, d.mensagem or "", d.canal, d.teste)
+        return entrega.aprovar_e_enviar(con, sid, u, d.mensagem or "", d.canal, d.teste, d.cobranca)
     finally:
         con.close()
 

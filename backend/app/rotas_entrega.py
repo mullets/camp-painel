@@ -54,6 +54,8 @@ def pagina(token: str) -> HTMLResponse:
             quando = "venceu" if motivo == "vencido" else "foi cancelado"
             return _pagina("Link encerrado", f"<h1>Este link {quando}</h1><p>Responda o e-mail da CAMP que a equipe manda um link novo.</p>", 410)
         arquivos = json.loads(r["arquivos"] or "[]")
+        if not entrega.pago(con, r):
+            return _aguardando(con, r, len(arquivos))
         if not r["aceite_em"]:
             return _termo(con, token, r, len(arquivos))
         itens = "".join(
@@ -73,6 +75,19 @@ def pagina(token: str) -> HTMLResponse:
         con.close()
 
 
+def _aguardando(con, r, n: int) -> HTMLResponse:
+    """CAMP-ENTREGA: link com cobrança travado até o pagamento. Mostra o valor e o link do Mercado Pago; nada é listado nem baixado."""
+    c = entrega.cobranca_do_link(con, r) or {}
+    validade = entrega.validade_longa(r["expira_em"])
+    pagar = f'<p><a class="btn" href="{escape(c["link"])}" rel="noopener noreferrer">Pagar R$ {escape(c.get("valor", ""))} pelo Mercado Pago</a></p>' if c.get("link") else ""
+    corpo = (f'<h1>Material do pedido #{int(r["solicitacao_id"])}</h1>'
+             f'<p class="sub">{n} arquivo(s) do acervo da CAMP. O link vale até {escape(validade)}.</p>'
+             f'<p><b>Aguardando pagamento.</b> O download é liberado depois da confirmação do pagamento da cobrança'
+             f'{" de R$ " + escape(c["valor"]) if c.get("valor") else ""}. A confirmação pode levar alguns minutos: depois de pagar, volte a este link.</p>'
+             f'{pagar}<p class="sub">Se já pagou e o download não liberou em algumas horas, responda o e-mail da CAMP.</p>')
+    return _pagina("Aguardando pagamento", corpo)
+
+
 def _termo(con, token: str, r, n: int, erro: str = "") -> HTMLResponse:
     """02/11 (Rafael): "ele tenha que dar OK no termo de uso ... dando o aceite aí sim abre o download"."""
     validade = entrega.validade_longa(r["expira_em"])
@@ -82,9 +97,12 @@ def _termo(con, token: str, r, n: int, erro: str = "") -> HTMLResponse:
              f'{f"<p class=erro role=alert>{escape(erro)}</p>" if erro else ""}'
              f'<form method="post" action="/entrega/{escape(token)}/aceite">'
              f'<label for="nome">Seu nome completo</label><input type="text" id="nome" name="nome" required minlength="3" maxlength="160" autocomplete="name">'
-             f'<label><input type="checkbox" name="aceito" value="1" required> <span>Li e aceito o termo de uso. Declaro que o uso será <b>não comercial</b> '
-             f'e que o uso comercial depende de autorização da CAMP e custa R$ {escape(entrega.preco_comercial(con))} por folha.</span></label>'
-             f'<button type="submit">Aceitar e baixar</button></form>')
+             + (f'<label><input type="checkbox" name="aceito" value="1" required> <span>Li e aceito o termo de uso. O uso comercial está autorizado só '
+                f'para a finalidade informada no pedido, com o pagamento da cobrança; os demais itens do termo continuam valendo.</span></label>'
+                if "uso_comercial" in r.keys() and r["uso_comercial"] else
+                f'<label><input type="checkbox" name="aceito" value="1" required> <span>Li e aceito o termo de uso. Declaro que o uso será <b>não comercial</b> '
+                f'e que o uso comercial depende de autorização da CAMP e custa R$ {escape(entrega.preco_comercial(con))} por folha.</span></label>')
+             + '<button type="submit">Aceitar e baixar</button></form>')
     return _pagina("Termo de uso", corpo, 400 if erro else 200)
 
 
@@ -95,6 +113,8 @@ def aceitar(token: str, request: Request, nome: str = Form(""), aceito: str = Fo
         r, motivo = entrega.achar(con, token)
         if motivo:
             return _encerrado(r, motivo)
+        if not entrega.pago(con, r):
+            return RedirectResponse(f"/entrega/{token}", status_code=303, headers=_SEM_CACHE)
         if aceito != "1" or len(" ".join(nome.split())) < 3:
             return _termo(con, token, r, len(json.loads(r["arquivos"] or "[]")),
                           "Para baixar, escreva seu nome completo e marque \"Li e aceito\".")
@@ -122,7 +142,7 @@ def baixar_tudo(token: str):
         r, motivo = entrega.achar(con, token)
         if motivo:
             return _encerrado(r, motivo)
-        if not r["aceite_em"]:                       # sem aceite do termo, o .zip não sai: volta para a página do termo
+        if not entrega.pago(con, r) or not r["aceite_em"]:   # sem pagamento (link com cobrança) ou sem aceite do termo, o .zip não sai: volta para a página
             return RedirectResponse(f"/entrega/{token}", status_code=303, headers=_SEM_CACHE)
         arquivos = entrega.arquivos_do_zip(con, r)
         if not arquivos:
@@ -136,10 +156,18 @@ def baixar_tudo(token: str):
 
 
 @router.get("/entrega/{token}/{n}", include_in_schema=False)
-def baixar(token: str, n: int) -> FileResponse:
+def baixar(token: str, n: int):
     con = connect()
     try:
         alvo, nome = entrega.arquivo(con, token, n)
+    except HTTPException as e:
+        if e.status_code in (402, 403):          # sem pagamento ou sem aceite: volta para a página (que diz o que falta)
+            return RedirectResponse(f"/entrega/{token}", status_code=303, headers=_SEM_CACHE)
+        if e.status_code in (404, 410):
+            r, motivo = entrega.achar(con, token)
+            if motivo:
+                return _encerrado(r, motivo)
+        raise
     finally:
         con.close()
     tipo = "image/tiff" if alvo.suffix.lower() in (".tif", ".tiff") else "image/jpeg"
