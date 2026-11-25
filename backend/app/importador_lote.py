@@ -83,7 +83,8 @@ UNIFICADO = "Elevação/Fachada"     # CAMP-051
 _ALIAS_TIPO = {"elevação": UNIFICADO, "elevacao": UNIFICADO, "fachada": UNIFICADO, "elevação/fachada": UNIFICADO, "elevacao/fachada": UNIFICADO,
                "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO,
                "isometrica": "Isométrica", "isométrico": "Isométrica", "isometrico": "Isométrica", "axonometria": "Isométrica", "axonométrica": "Isométrica",
-               "diagrama": "Esquema", "esquemático": "Esquema", "esquematico": "Esquema"}   # 19/10: tipos novos
+               "diagrama": "Esquema", "esquemático": "Esquema", "esquematico": "Esquema",   # 19/10: tipos novos
+               "detalhe/estrutura": "Detalhe / Estrutura", "detalhe - estrutura": "Detalhe / Estrutura", "detalhe estrutural": "Detalhe / Estrutura"}   # 25/11/2026 (Rafael)
 
 
 def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
@@ -93,6 +94,9 @@ def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
     bruto = " ".join(str(tipo_lido or "").split())
     if not bruto:
         return None
+    inteiro = tipos.get(bruto.lower()) or tipos.get(_ALIAS_TIPO.get(bruto.lower(), "").lower())
+    if inteiro:
+        return inteiro       # 25/11/2026: tipo do painel com " / " no nome ("Detalhe / Estrutura") vale inteiro, antes de separar
     achados = set()
     for parte in re.split(r"\s+/\s+", bruto):
         p = parte.strip().lower()

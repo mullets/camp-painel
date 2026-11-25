@@ -78,6 +78,7 @@ MODOS_RAPIDOS |= {"home_maquete"}   # CAMP-HOME-UX maquete 22/11/2026: donut do 
 MODOS_RAPIDOS |= {"ranking_ligado"}   # CAMP-HOME-UX decisões do Rafael 22/11/2026: ranking da equipe (mês) ligado por padrão, migração 243 vira só o padrão, admin desliga; folhas e lotes nos números (linha própria)
 MODOS_RAPIDOS |= {"financeiro_nota_fiscal"}   # CAMP-FIN 24/11/2026: pedir nota fiscal ao fornecedor (SMTP do painel falso; PRONAC; nota pedida; lembrete; LGPD; migração 253; linha própria)
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
+MODOS_RAPIDOS |= {"tipo_detalhe_estrutura"}   # CAMP-FICHA 25/11/2026: tipo "Detalhe / Estrutura" na lista (decisão do Rafael; migração 261)
 MODOS_RAPIDOS |= {"parceiros_do_projeto"}   # CAMP-FICHA 25/11/2026: sugerir escritórios das outras folhas do projeto; cliente lido que parece escritório (navegador: tests/navegador_sugerir_escritorios.js)
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
@@ -9403,6 +9404,38 @@ def filho(modo):
         ver("a lista de Problemas traz a origem de cada um (leitura vê)", {x_["origem"] for x_ in lst} == {"campvision", "site", "operador"}, str({x_["origem"] for x_ in lst}))
         k.close()
         for l in res: print(l)
+    elif modo == "tipo_detalhe_estrutura":
+        # CAMP-FICHA (25/11/2026). Decisão do Rafael: o tipo "Detalhe / Estrutura" (lido pelo CAMP Vision; a ficha dizia "não existe na lista
+        # do painel") entra na lista de tipos. Prova: a migração 261 acrescenta (idempotente), a ficha recebe o tipo na lista (a tela casa o
+        # lido e oferece "Usar sugestão"), o importador casa o nome inteiro antes de separar por " / ", e a disciplina dele é Estrutura.
+        init_db(); aplicar_migracoes(); aplicar_migracoes()
+        from app.importador_lote import tipo_do_painel
+        from app import parceiros as pc, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        nomes = [r[0] for r in c.execute("SELECT nome FROM tipo_documento")]
+        ver("migração 261: 'Detalhe / Estrutura' na lista de tipos, uma vez só (rodou duas vezes)", nomes.count("Detalhe / Estrutura") == 1, nomes)
+        T = {n.lower(): n for n in nomes}
+        ver("importador: o lido 'Detalhe / Estrutura' vira o tipo inteiro (antes: Detalhe ≠ Estrutura → sem tipo)", tipo_do_painel("Detalhe / Estrutura", T) == "Detalhe / Estrutura")
+        ver("importador: 'Planta / Corte' continua sem tipo (tipos diferentes; uma pessoa escolhe)", tipo_do_painel("Planta / Corte", T) is None)
+        ver("importador: variações 'detalhe/estrutura' e 'Detalhe estrutural' também", tipo_do_painel("detalhe/estrutura", T) == "Detalhe / Estrutura" and tipo_do_painel("Detalhe estrutural", T) == "Detalhe / Estrutura")
+        ver("disciplina do tipo: Estrutura", pc.disciplina_da_folha("Detalhe / Estrutura") == "Estrutura")
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Edifício',1972)")
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_lido,origem,revisao) VALUES ('F099-P0001-1972-S01-D00001','F099-P0001','S01',1,'Detalhe da escada','Detalhe / Estrutura','campvision','pendente')")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        ed = x.get("/api/itens/F099-P0001-1972-S01-D00001/edicao").json()
+        ver("a ficha recebe o tipo na lista (a tela deixa de dizer 'não existe na lista do painel')", "Detalhe / Estrutura" in (ed.get("tipos_documento") or []), ed.get("tipos_documento"))
+        r = x.patch("/api/itens/F099-P0001-1972-S01-D00001", json={"tipo_documento": "Detalhe / Estrutura"})
+        ver("'Usar sugestão' grava o tipo", r.status_code == 200 and c.execute("SELECT tipo_documento FROM item WHERE codigo='F099-P0001-1972-S01-D00001'").fetchone()[0] == "Detalhe / Estrutura", f"{r.status_code} {r.text[:200]}")
+        ver("decisão registrada em docs/padroes.md", "Rafael, 25/11/2026: tipo Detalhe / Estrutura" in (RAIZ / "docs" / "padroes.md").read_text(encoding="utf-8"))
+        for l in res: print(l)
+
     elif modo == "parceiros_do_projeto":
         # CAMP-FICHA (25/11/2026). Rafael, na conferência de uma folha de estrutura ("DETALHE DA ESCADA E LANCE PILARES…", tipo lido
         # "Detalhe / Estrutura") cujo carimbo só tinha o escritório de cálculo, lido como Cliente ("DAPA LIMA OTERO ENGENHARIA LTDA. S/C."):
@@ -25711,6 +25744,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · Sincronizar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 5, "Financeiro · Sincronizar: todas as verificações rodaram")
+
+print("Ficha · tipo Detalhe / Estrutura na lista (decisão do Rafael)")
+rc, out = rodar("tipo_detalhe_estrutura", f"{tmp}/tipo_detalhe_estrutura.db")
+if rc != 0: ok(False, f"teste tipo_detalhe_estrutura não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha · Detalhe / Estrutura: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 8, "Ficha · Detalhe / Estrutura: todas as verificações rodaram")
 
 print("Ficha · escritórios parceiros das outras folhas do projeto e cliente que parece escritório")
 rc, out = rodar("parceiros_do_projeto", f"{tmp}/parceiros_do_projeto.db")
