@@ -97,13 +97,20 @@ def listar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
 
 
 @router.get("/{codigo}/originais.zip")
-def baixar_zip(codigo: str, folhas: str = "", formato: str = "tif", u: dict = Depends(auth.exige("operador"))):
+def baixar_zip(codigo: str, folhas: str = "", formato: str = "tif", categoria: str = "", todas: int = 0,
+               u: dict = Depends(auth.exige("operador"))):
+    """CAMP-PROJETO (25/11/2026): além das folhas escolhidas, uma categoria (disciplina nos desenhos, série nas outras: ?categoria=disc:Estrutura)
+    ou o projeto inteiro (?todas=1). Rafael: "ou se eu quiser um zip só com os tiffs"."""
     if formato not in FORMATOS:
         raise HTTPException(400, "Formato: tif ou jpg_original")
     con = connect()
+    rotulo = ""
     try:
         codigo = _projeto(con, codigo)
         pedidas = [c.strip().upper() for c in folhas.split(",") if c.strip()]
+        if not pedidas and (categoria or todas):
+            from .organizar_projeto import resolver_folhas
+            pedidas, rotulo = resolver_folhas(con, codigo, None, categoria or None, bool(todas))
         if not pedidas:
             raise HTTPException(400, "Escolha as folhas")
         if len(pedidas) > MAX_ZIP:
@@ -119,10 +126,12 @@ def baixar_zip(codigo: str, folhas: str = "", formato: str = "tif", u: dict = De
         if not arquivos:
             raise HTTPException(404, "Nenhum arquivo dessas folhas foi achado no QNAP")
         _registrar(con, codigo, u, {"formato": formato, "zip": True, "folhas": [Path(n).stem for _, n in arquivos][:200],
-                                    "quantidade": len(arquivos), "fora": fora[:200]})
+                                    "quantidade": len(arquivos), "fora": fora[:200], **({"categoria": rotulo} if rotulo else {})})
     finally:
         con.close()
-    nome = f"{codigo}-{'TIFF' if formato == 'tif' else 'JPG-original'}.zip"
+    import unicodedata
+    _r = re.sub(r"[^A-Za-z0-9]+", "-", "".join(ch for ch in unicodedata.normalize("NFD", rotulo) if unicodedata.category(ch) != "Mn")).strip("-")[:40]
+    nome = f"{codigo}-{'TIFF' if formato == 'tif' else 'JPG-original'}{'-' + _r if _r else ''}.zip"
     return StreamingResponse(entrega.zip_em_pedacos(arquivos), media_type="application/zip",
                              headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store",
                                       **({"X-Camp-Fora": ",".join(fora)[:900]} if fora else {})})

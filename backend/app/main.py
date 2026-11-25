@@ -44,6 +44,8 @@ app.include_router(rotas_site)
 app.include_router(rotas_fundos)
 from .originais import router as rotas_originais   # CAMP-ENTREGA: arquivos originais (TIFF/JPG) do projeto; antes das rotas genéricas de projeto
 app.include_router(rotas_originais)
+from .organizar_projeto import router as rotas_organizar_projeto   # CAMP-PROJETO: ordem pelo nome, PDF dos TIFF, onde estão as folhas (antes das rotas genéricas de projeto)
+app.include_router(rotas_organizar_projeto)
 app.include_router(rotas_projetos)
 app.include_router(rotas_itens)
 app.include_router(rotas_importacao)
