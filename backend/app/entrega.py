@@ -670,6 +670,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     if cob:
         resumo += (" · sem cobrança" if cob["modo"] == "sem" else f" · cobrança R$ {_brl(cob['valor'])}" + (" (download após o pagamento)" if cob["liberar"] else ""))
     if not teste:
+        substituir_links(con, sid, lid, ator)   # o link novo vale; os anteriores do pedido dizem que foram substituídos
         con.execute("UPDATE solicitacao SET situacao='entregue', entregue_em=datetime('now'), entrega=? WHERE id=?", (resumo, sid))
         con.execute("""UPDATE solicitacao SET cobranca_modo=?, cobranca_motivo=?, cobranca_justificativa=?, cobranca_id=?,
                        valor=COALESCE(?, valor) WHERE id=?""", (cob["modo"], cob["motivo"], cob["justificativa"], cob_id, cob["valor"], sid))
@@ -710,8 +711,28 @@ def links(con, sid: int) -> list[dict]:
         out.append({"id": r["id"], "para": r["para"], "canal": r["canal"], "teste": bool(r["teste"]), "criado_em": r["criado_em"],
                     "criado_por": r["criado_por"], "expira_em": r["expira_em"], "downloads": r["downloads"], "ultimo_download_em": r["ultimo_download_em"],
                     "aceite_em": r["aceite_em"], "aceite_nome": r["aceite_nome"],
-                    "situacao": "cancelado" if r["revogado_em"] else "vencido" if venceu else "aguardando pagamento" if not pago(con, r) else "ativo"})
+                    "situacao": ("substituído" if "substituido_em" in r.keys() and r["substituido_em"] else "cancelado") if r["revogado_em"] else "vencido" if venceu else "aguardando pagamento" if not pago(con, r) else "ativo"})
     return out
+
+
+def texto_encerrado(r, motivo: str) -> tuple[str, str]:
+    """(título, parágrafo) da página de um link que não vale mais. Substituído: diz quando o novo saiu; nunca mostra botão de pagar."""
+    if motivo == "substituido":
+        return ("Este link foi substituído",
+                f"Este link foi substituído por um novo enviado por e-mail em {_data_br(r['substituido_em'])}. Use o link mais recente.")
+    quando = "venceu" if motivo == "vencido" else "foi cancelado"
+    return f"Este link {quando}", "Responda o e-mail da CAMP que a equipe manda um link novo."
+
+
+def substituir_links(con, sid: int, novo: int, ator: dict) -> int:
+    """CAMP-ENTREGA (26/11/2026): o reenvio do pedido encerra os links anteriores (os de teste ficam): o link antigo não mostra mais
+    "Aguardando pagamento" com uma cobrança que pode ter sido cancelada; a página diz que foi substituído e por quando."""
+    n = con.execute("""UPDATE entrega_link SET revogado_em=datetime('now'), substituido_em=datetime('now'), substituido_por=?
+                       WHERE solicitacao_id=? AND id<>? AND teste=0 AND revogado_em IS NULL""", (novo, sid, novo)).rowcount
+    if n:
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'link_substituido',?,?)",
+                    (str(sid), ator.get("email"), json.dumps({"links": n, "novo": novo})))
+    return n
 
 
 def cancelar_links(con, sid: int, ator: dict) -> int:
@@ -725,14 +746,14 @@ def cancelar_links(con, sid: int, ator: dict) -> int:
 
 # ---------------------------------------------------------------- download público
 def achar(con, token: str):
-    """(link, motivo). Motivo: '' (vale), 'inexistente', 'cancelado' ou 'vencido'."""
+    """(link, motivo). Motivo: '' (vale), 'inexistente', 'cancelado', 'substituido' (um reenvio mandou um link novo) ou 'vencido'."""
     if not _TOKEN.match(token or ""):
         return None, "inexistente"
     r = con.execute("SELECT * FROM entrega_link WHERE token_hash=?", (_hash(token),)).fetchone()
     if not r:
         return None, "inexistente"
     if r["revogado_em"]:
-        return r, "cancelado"
+        return r, ("substituido" if "substituido_em" in r.keys() and r["substituido_em"] else "cancelado")
     if r["expira_em"] < datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"):
         return r, "vencido"
     return r, ""
@@ -741,7 +762,7 @@ def achar(con, token: str):
 def arquivo(con, token: str, n: int) -> tuple[Path, str]:
     r, motivo = achar(con, token)
     if motivo:
-        raise HTTPException(410 if motivo in ("cancelado", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
+        raise HTTPException(410 if motivo in ("cancelado", "substituido", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
     if not pago(con, r):
         raise HTTPException(402, "O download é liberado depois da confirmação do pagamento.")
     if not r["aceite_em"]:

@@ -907,3 +907,6 @@ Reenviar um pedido com valor novo cancela sozinha a cobrança anterior em aberto
 
 **PDF grande** (CAMP-PROJETO, 26/11/2026): antes de montar o PDF dos TIFF, se o tamanho estimado passar de `exportacao_pdf.aviso_gb` (2 GB), o
 diálogo **PDF grande** diz "O PDF deve ficar com cerca de X GB. Gerar mesmo assim?" com **Cancelar** e **Gerar mesmo assim**.
+Link de download substituído (CAMP-ENTREGA, 26/11/2026): reenviar o pedido encerra os links anteriores; a página do link antigo diz **Este link foi
+substituído** — "Este link foi substituído por um novo enviado por e-mail em dd/mm/aaaa. Use o link mais recente." (sem botão de pagar); na lista
+de links do envio, a situação **substituído**.

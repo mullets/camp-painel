@@ -51,8 +51,7 @@ def pagina(token: str) -> HTMLResponse:
         if motivo == "inexistente":
             return _pagina("Link não encontrado", "<h1>Link não encontrado</h1><p>Confira se o endereço foi copiado inteiro do e-mail.</p>", 404)
         if motivo:
-            quando = "venceu" if motivo == "vencido" else "foi cancelado"
-            return _pagina("Link encerrado", f"<h1>Este link {quando}</h1><p>Responda o e-mail da CAMP que a equipe manda um link novo.</p>", 410)
+            return _encerrado(r, motivo)
         arquivos = json.loads(r["arquivos"] or "[]")
         if not entrega.pago(con, r):
             return _aguardando(con, r, len(arquivos))
@@ -130,8 +129,8 @@ def aceitar(token: str, request: Request, nome: str = Form(""), aceito: str = Fo
 def _encerrado(r, motivo: str) -> HTMLResponse:
     if motivo == "inexistente":
         return _pagina("Link não encontrado", "<h1>Link não encontrado</h1><p>Confira se o endereço foi copiado inteiro do e-mail.</p>", 404)
-    quando = "venceu" if motivo == "vencido" else "foi cancelado"
-    return _pagina("Link encerrado", f"<h1>Este link {quando}</h1><p>Responda o e-mail da CAMP que a equipe manda um link novo.</p>", 410)
+    tit, txt = entrega.texto_encerrado(r, motivo)
+    return _pagina("Link encerrado", f"<h1>{escape(tit)}</h1><p>{escape(txt)}</p>", 410)
 
 
 @router.get("/entrega/{token}/tudo.zip", include_in_schema=False)

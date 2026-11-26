@@ -14588,8 +14588,21 @@ def filho(modo):
         def com(valor):   # reenviar = o pedido volta a "em preparação" (a equipe muda a situação) e sai de novo com o valor escolhido
             c.execute("UPDATE solicitacao SET situacao='em_preparacao' WHERE situacao='entregue'"); c.commit(); return _com(valor)
         S1 = pedido("Carla Lima", "carla@editora.exemplo")
+        pub = TestClient(app, raise_server_exceptions=False)
         r1 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(300)); c1 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        tok1 = ENV[-1]["v"]["link"].rsplit("/", 1)[-1]
+        ver("[6] antes do reenvio: o link mostra 'Aguardando pagamento' com o botão de pagar", "Aguardando pagamento" in pub.get(f"/entrega/{tok1}").text)
         r2 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(450)); c2 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        tok2 = ENV[-1]["v"]["link"].rsplit("/", 1)[-1]
+        pv = pub.get(f"/entrega/{tok1}"); pn = pub.get(f"/entrega/{tok2}")
+        ver("[6] reenvio: o link ANTIGO diz que foi substituído (com a data), sem 'Aguardando pagamento' nem botão/link de pagar", pv.status_code == 410
+            and "Este link foi substituído por um novo enviado por e-mail em " in pv.text and "Use o link mais recente." in pv.text
+            and "Aguardando pagamento" not in pv.text and "mp.exemplo/pagar" not in pv.text and "Pagar" not in pv.text, pv.text[-400:])
+        ver("[6] o link novo vale (aguardando o pagamento da cobrança nova)", pn.status_code == 200 and "Aguardando pagamento" in pn.text and "R$ 450,00" in pn.text, pn.text[-300:])
+        ver("[6] arquivo e .zip do link antigo: 410; na tela o link antigo aparece 'substituído'; histórico", pub.get(f"/entrega/{tok1}/1", follow_redirects=False).status_code == 410
+            and pub.get(f"/entrega/{tok1}/tudo.zip", follow_redirects=False).status_code == 410
+            and any(x.get("situacao") == "substituído" for x in adm.get(f"/api/solicitacoes/{S1}/envio").json().get("links", []))
+            and um("SELECT 1 FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='link_substituido'", str(S1)))
         ver("[3] reenviar com valor novo: cobrança nova (R$ 450) e a anterior (R$ 300) cancelada no site (link expirado)", r1.status_code == 200 and r2.status_code == 200
             and c1 and c2 and c1 != c2 and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c1)[0] == "cancelada" and um("SELECT valor, situacao FROM cobranca_avulsa WHERE id=?", c2) == (450.0, "aberta")
             and any((j or {}).get("acao") == "cancelar" for _, j in SITE), f"{r2.status_code} {r2.text[:200]} {c1} {c2}")
@@ -26532,7 +26545,7 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega · autorizados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 16, "Entrega · autorizados: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Entrega · autorizados: todas as verificações rodaram")
 
 print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
 rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")
