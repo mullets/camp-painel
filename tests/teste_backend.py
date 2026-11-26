@@ -57,6 +57,7 @@ MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
 MODOS_RAPIDOS |= {"doacoes_contrato"}   # CAMP-DOA-CONTRATO/AVISOS 20/11/2026: contrato para assinatura (TR30) + cobrança (TR27) separados, aviso de etapa (TR31) (site falso; contrato 1.25; linha própria)
 MODOS_RAPIDOS |= {"autentique_doacao"}   # CAMP-AUTENTIQUE 20/11/2026: contrato da doação criado na Autentique (PDF), link no TR30, assinado sozinho (Autentique e site falsos; linha própria)
+MODOS_RAPIDOS |= {"doacoes_trocar_email"}   # CAMP-DOA-EMAIL 26/11/2026: trocar o e-mail/telefone de quem doa e reenviar contrato/cobrança/andamento ao e-mail novo (contrato 1.39)
 MODOS_RAPIDOS |= {"doacoes_cpf"}   # CAMP-DOA-CPF 20/11/2026: CPF/CNPJ, endereço e valor proposto da intenção de doação (contrato 1.26; linha própria)
 MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha antiga do Google Forms (CSV) → simular, importar sem e-mail, idempotente (linha própria)
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
@@ -9510,7 +9511,7 @@ def filho(modo):
         r = op.post(TU, json={"itens": [D(1), D(3)], "tipos": ["Detalhe"], "modo": "tirar", "simular": False}).json()
         ver("tirar: sai, o resto fica", tp(D(1)) == "Estrutura" and tp(D(3)) == "Estrutura", (tp(D(1)), tp(D(3))))
         ver("repetir: nada muda", op.post(TU, json={"itens": [D(1)], "tipos": ["Estrutura"], "modo": "substituir", "simular": False}).json().get("mudaram") == [])
-        ver("contrato 1.38 documentado no CONTRATO_UNICO", "**1.38" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8") and "disciplinas-folhas" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8"))
+        ver("contrato 1.38 documentado no CONTRATO_UNICO", "NOVO 1.38" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8") and "disciplinas-folhas" in (RAIZ / "docs" / "CONTRATO_UNICO.md").read_text(encoding="utf-8"))
         for l in res: print(l)
 
     elif modo == "tipo_detalhe_estrutura":
@@ -23480,6 +23481,106 @@ def filho(modo):
         dz = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=801").fetchone()[0])
         ver("LGPD: anonimizada não recebe documento/endereço de volta do site", not dz.get("documento") and not dz.get("endereco"), dz)
         for l in res: print(l)
+    elif modo == "doacoes_trocar_email":
+        # CAMP-DOA-EMAIL 26/11/2026 (contrato 1.39; site FALSO, nada sai de verdade). Rafael: "na doação de acervo preciso trocar o email dele e enviar
+        # tudo novamente". Prova: o e-mail novo vai ao site (validado aqui), o histórico guarda só a máscara, site antigo avisa e nada muda; o
+        # reenvio mostra o que dá para mandar pela etapa e registra cada e-mail em "E-mails desta doação"; cobrança paga não é reenviada.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' / ')[:400]}")
+        c = connect()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.headers, s.content = code, dados, {}, b""
+            def json(s): return s._d
+        posts, R = [], {}
+        class H:
+            def get(s, path, params=None): return R.get(("GET", path), Resp(404, {"code": "rest_no_route"}))
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                r_ = R.get(("POST", path), Resp(404, {"code": "rest_no_route"}))
+                return r_(json) if callable(r_) else r_
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF()
+        from app import autentique as _aut
+        CHAMOU_AUT = []
+        _aut._cliente = lambda: CHAMOU_AUT.append(1) or (_ for _ in ()).throw(RuntimeError("Autentique não deve ser chamada"))
+        A = {"id": 901, "protocolo": "CAMP-2026-000901", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Pessoa Doadora Ficticia", "email": "antigo.ficticio@exemplo.com",
+             "telefone": "11 90000-0000", "relacao": "familia", "autor": "Arquiteto Ficticio", "descricao": "rolos", "tipos_nomes": ["Plantas"], "quantidade_estimativa_faixa": "51_500",
+             "local": "Campinas/SP", "fotos": [], "etapa": "contrato_enviado", "valor": 2000, "notas": [], "contrato_link": "https://www.autentique.com.br/x/abc",
+             "cobranca": {"id": 77, "situacao": "aberta", "situacao_nome": "Aberta", "valor": 2000.0, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=x", "external_reference": "CAMP-COB-77"},
+             "amigo": {"id": 5, "protocolo": "CAMP-AMG-5", "validade": "2027-11-20", "validade_br": "20/11/2027", "situacao": "ativo"},
+             "historico": [], "avisos": [], "alterado_em": "2026-11-20T12:00:00+00:00"}
+        da._gravar(c, A)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        RD = "/wp-json/camp/v1/painel/doacoes-acervo/901"
+        n0 = len(posts)
+        r_ = x.post("/api/doacoes-acervo/901", json={"email": "nao-e-email"})
+        ver("e-mail inválido: 400 e nada vai ao site", r_.status_code == 400 and "E-mail" in r_.text and len(posts) == n0, r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/901", json={"telefone": "abc"})
+        ver("telefone inválido: 400 e nada vai ao site", r_.status_code == 400 and len(posts) == n0, r_.text[:200])
+        R[("POST", RD)] = Resp(200, {"ok": True, "registro": A})          # site antigo: ignora o e-mail e devolve o registro como estava
+        r_ = x.post("/api/doacoes-acervo/901", json={"email": "Novo.Ficticio@Exemplo.com "})
+        ver("site antigo: avisa 'O site ainda não troca o e-mail … 1.50.0 … Nada foi mudado.' e o painel não muda", r_.status_code == 409 and "1.50.0" in r_.text and "Nada foi mudado" in r_.text
+            and c.execute("SELECT email FROM doacao_acervo WHERE site_id=901").fetchone()[0] == "antigo.ficticio@exemplo.com", r_.text[:300])
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": dict(A, email=j.get("email") or A["email"], telefone=j.get("telefone") or A["telefone"])})
+        r_ = x.post("/api/doacoes-acervo/901", json={"email": "Novo.Ficticio@Exemplo.com ", "telefone": "(21) 98888-7777"})
+        corpo = posts[-1][1]; d_ = r_.json() if r_.status_code == 200 else {}
+        ver("e-mail novo vai ao site (minúsculo, sem espaço) com o telefone", r_.status_code == 200 and posts[-1][0] == RD and corpo.get("email") == "novo.ficticio@exemplo.com"
+            and corpo.get("telefone") == "(21) 98888-7777", (r_.text[:200], corpo))
+        ver("painel guarda o e-mail novo; a tela diz de/para mascarado e pede o reenvio", c.execute("SELECT email FROM doacao_acervo WHERE site_id=901").fetchone()[0] == "novo.ficticio@exemplo.com"
+            and (d_.get("contato") or {}).get("reenviar") is True and "a***@exemplo.com" in (d_.get("contato") or {}).get("mensagem", "") and "n***@exemplo.com" in d_["contato"]["mensagem"], d_.get("contato"))
+        ver("Amigo ligado: avisa que o cadastro de Amigo continua com o e-mail antigo", "CAMP-AMG-5" in ((d_.get("contato") or {}).get("amigo") or ""), d_.get("contato"))
+        ev = c.execute("SELECT detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo='901' AND tipo='email_trocado'").fetchall()
+        tudo = _j.dumps([dict(r) for r in c.execute("SELECT * FROM log_tecnico").fetchall()], ensure_ascii=False, default=str) if c.execute("SELECT name FROM sqlite_master WHERE name='log_tecnico'").fetchone() else ""
+        ver("histórico: 'e-mail trocado' com a máscara, nunca o e-mail inteiro (nem no log técnico)", len(ev) == 1 and '"de": "a***@exemplo.com"' in ev[0][0] and "novo.ficticio" not in ev[0][0]
+            and "novo.ficticio@" not in tudo and "antigo.ficticio@" not in tudo, ev)
+        n1 = len(posts)
+        x.post("/api/doacoes-acervo/901", json={"email": "novo.ficticio@exemplo.com", "nota": "x"})
+        ver("o mesmo e-mail de novo não vai ao site como troca", "email" not in posts[-1][1] and len(posts) == n1 + 1, posts[-1][1])
+        ver("operador não troca (403)", op.post("/api/doacoes-acervo/901", json={"email": "z@exemplo.com"}).status_code == 403 and op.get("/api/doacoes-acervo/901/reenviar").status_code == 403)
+        # reenvio
+        RR = RD + "/reenviar"
+        r_ = x.get("/api/doacoes-acervo/901/reenviar")
+        ver("site antigo sem a rota de reenvio: avisa 1.50.0", r_.status_code == 409 and "1.50.0" in r_.text, r_.text[:200])
+        ITENS = {"contrato": {"rotulo": "Contrato para assinatura (TR30), com o mesmo link", "aplica": True, "padrao": True, "motivo": ""},
+                 "cobranca": {"rotulo": "Cobrança no Mercado Pago (TR27)", "aplica": True, "padrao": True, "motivo": ""},
+                 "andamento": {"rotulo": "Último andamento (TR31)", "aplica": False, "padrao": False, "motivo": "a etapa atual não tem aviso por e-mail"}}
+        def site_reenvio(j):
+            if j.get("simular") or not j.get("itens"):
+                return Resp(200, {"ok": True, "email": "n***@exemplo.com", "itens": ITENS, "simulado": True})
+            rs = {k: ({"enviado": True, "sender_id": "em-" + k} if ITENS[k]["aplica"] else {"enviado": False, "codigo": "nao_se_aplica", "erro": "não enviado: " + ITENS[k]["motivo"]}) for k in j["itens"]}
+            return Resp(200, {"ok": True, "email": "n***@exemplo.com", "itens": ITENS, "resultados": rs, "registro": dict(A, email="novo.ficticio@exemplo.com")})
+        R[("POST", RR)] = site_reenvio
+        r_ = x.get("/api/doacoes-acervo/901/reenviar"); p_ = r_.json() if r_.status_code == 200 else {}
+        ver("prévia do reenvio: contrato e cobrança marcados, andamento com o motivo; e-mail mascarado; nada sai", r_.status_code == 200 and p_["itens"]["contrato"]["padrao"] and p_["itens"]["cobranca"]["aplica"]
+            and not p_["itens"]["andamento"]["aplica"] and p_.get("email") == "n***@exemplo.com" and posts[-1][1].get("simular") is True, p_)
+        ver("reenviar sem escolher nada: 400", x.post("/api/doacoes-acervo/901/reenviar", json={"itens": []}).status_code == 400)
+        ne = c.execute("SELECT COUNT(*) FROM evento WHERE entidade='doacao_acervo' AND codigo='901' AND tipo IN ('email_enviado','email_falhou')").fetchone()[0]
+        r_ = x.post("/api/doacoes-acervo/901/reenviar", json={"itens": ["contrato", "cobranca", "andamento"]}); d_ = r_.json() if r_.status_code == 200 else {}
+        rs = {l["item"]: l for l in d_.get("resultados") or []}
+        ver("reenviar: contrato e cobrança enviados; andamento não (diz o motivo)", r_.status_code == 200 and rs["contrato"]["enviado"] and rs["cobranca"]["enviado"] and not rs["andamento"]["enviado"]
+            and "não tem aviso" in rs["andamento"]["mensagem"] and posts[-1][1].get("itens") == ["contrato", "cobranca", "andamento"], d_)
+        evs = [(t_, _j.loads(d__)) for t_, d__ in c.execute("SELECT tipo, detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo='901' AND tipo IN ('email_enviado','email_falhou') ORDER BY id")]
+        ver("cada e-mail reenviado entra em 'E-mails desta doação' (TR30 e TR27, marcados como reenvio)", len(evs) == ne + 2 and {e[1].get("template") for e in evs[-2:]} == {"TR30", "TR27"}
+            and all(e[1].get("reenvio") for e in evs[-2:]) and all(e[0] == "email_enviado" for e in evs[-2:]), evs[-2:])
+        ver("a tela recebe a doação atualizada com os e-mails", len((d_.get("doacao") or {}).get("emails") or []) >= 2, (d_.get("doacao") or {}).get("emails"))
+        ITENS["cobranca"] = {"rotulo": "Cobrança no Mercado Pago (TR27)", "aplica": False, "padrao": False, "motivo": "a contribuição já foi paga"}
+        n2 = c.execute("SELECT COUNT(*) FROM evento WHERE entidade='doacao_acervo' AND codigo='901' AND tipo IN ('email_enviado','email_falhou')").fetchone()[0]
+        r_ = x.post("/api/doacoes-acervo/901/reenviar", json={"itens": ["cobranca"]}); d_ = r_.json() if r_.status_code == 200 else {}
+        ver("cobrança paga: não é reenviada (o motivo aparece) e nada entra como e-mail", r_.status_code == 200 and not d_["resultados"][0]["enviado"] and "já foi paga" in d_["resultados"][0]["mensagem"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='doacao_acervo' AND codigo='901' AND tipo IN ('email_enviado','email_falhou')").fetchone()[0] == n2, d_)
+        ver("máscara do e-mail", da.mascarar_email("fulano@exemplo.com") == "f***@exemplo.com" and da.mascarar_email("") == "(vazio)")
+        ver("contrato pela Autentique: quem doa entra por NOME, o mesmo link vale para o e-mail novo — a Autentique não é chamada (nada novo criado nem cancelado)", not CHAMOU_AUT, CHAMOU_AUT)
+        for l in res: print(l)
     elif modo == "doacoes_importar":
         # CAMP-DOA-IMPORTAR 20/11/2026 (contrato 1.27; site FALSO; CSV FICTÍCIO com o cabeçalho da ficha). Rafael: "pode registrar todos, mas não
         # enviaremos email, e a raquel já tá aí". Leitura do CSV (BOM, campos com várias linhas, carimbo), CPF/CNPJ, valor, simular × importar,
@@ -26923,6 +27024,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (CPF/endereço): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 16, "Doações (CPF/endereço): todas as verificações rodaram")
+
+print("Doações de acervo · trocar o e-mail/telefone de quem doa e reenviar contrato, cobrança e andamento ao e-mail novo (contrato 1.39)")
+rc, out = rodar("doacoes_trocar_email", f"{tmp}/doacoes_trocar_email.db")
+if rc != 0: ok(False, f"teste doacoes_trocar_email não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (trocar e-mail): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Doações (trocar e-mail): todas as verificações rodaram")
 
 print("Doações de acervo · importar a ficha antiga (CSV do Google Forms): leitura, CPF/CNPJ, valor, simular × importar, idempotente, existente só o vazio, sem e-mail, texto, LGPD")
 rc, out = rodar("doacoes_importar", f"{tmp}/doacoes_importar.db")

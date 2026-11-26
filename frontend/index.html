@@ -11623,7 +11623,12 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   ${campo('assinado','Data em que as duas partes assinaram',x.assinado_em,'date')}
   ${campo('valor','Contribuição acordada no contrato (R$, mínimo 1.000)',x.valor||'','number',' min="1000" step="0.01" inputmode="decimal"')}
   ${x.valor_proposto_fmt?`<p class="help">Valor proposto pela pessoa no formulário: <b>${escHtml(x.valor_proposto_fmt)}</b></p>`:''}
-  ${an?'':`<details><summary>CPF/CNPJ e endereço (para o contrato)</summary>
+  ${an?'':`<details${DOA.contatoAberto?' open':''}><summary>E-mail e telefone</summary>
+  <p class="help">A pessoa mudou de e-mail? Troque aqui e clique em Salvar. Depois use Reenviar para mandar de novo o que já foi enviado (contrato, cobrança) ao e-mail novo.</p>
+  ${campo('p-email','E-mail',x.email||'','email',' maxlength="200" autocomplete="off" spellcheck="false"')}${campo('p-telefone','Telefone / WhatsApp',x.telefone||'','tel',' maxlength="40" autocomplete="off"')}
+  <div class="act"><button type="button" class="btn" data-doa-acao="reenviar" data-trabalhando="Conferindo…">Reenviar para o e-mail atual…</button></div>
+  <div id="doa-reenvio" hidden></div></details>
+  <details><summary>CPF/CNPJ e endereço (para o contrato)</summary>
   <p class="help">A pessoa pode ter errado: corrija aqui e clique em Salvar. O site confere os dígitos do CPF/CNPJ e o CEP.</p>
   ${campo('p-documento','CPF ou CNPJ',x.documento?String(x.documento_fmt||'').replace(/^[A-Z]+: /,''):'','text',' inputmode="numeric" maxlength="20" autocomplete="off"')}
   ${campo('p-cep','CEP',(x.endereco||{}).cep||'','text',' inputmode="numeric" maxlength="9" autocomplete="off"')}${campo('p-logradouro','Rua, avenida (logradouro)',(x.endereco||{}).logradouro||'','text',' maxlength="200" autocomplete="off"')}
@@ -11751,10 +11756,29 @@ async function doaReceberPrevia(id,inicio){const out=document.getElementById('do
   ${usaF?'':`<label class="field">Sigla (3 letras; pode ficar para depois)<input id="doa-rec-sigla" maxlength="3" value="${escHtml(f.sigla||'')}" autocomplete="off"></label>
   <p class="help">${[f.data_inicio?`Período: ${escHtml(String(f.data_inicio))}–${escHtml(String(f.data_fim||''))} (dos documentos, pelo formulário)`:'',f.dimensao_suporte?`Dimensão: ${escHtml(f.dimensao_suporte)}`:'','Procedência: doação à CAMP. Nada de CPF, endereço ou biografia vai ao fundo ou ao arquiteto.'].filter(Boolean).join(' · ')}</p>`}
   <div class="act"><button type="button" class="btn" data-doa-acao="rec-previa">Atualizar a prévia</button></div>`}
-async function doaMudar(id,corpo,ok){try{const x=await API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(x);toast(x.aviso?x.aviso.mensagem:x.email_cobranca?ok+'. '+x.email_cobranca.mensagem:x.dados_pessoais&&!x.dados_pessoais.salvo?x.dados_pessoais.mensagem:ok);carregarDoacoes()}catch(err){toast(err.message)}}
+async function doaMudar(id,corpo,ok){try{const x=await API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');DOA.contatoAberto=!!(x.contato&&x.contato.reenviar);doaDrawer(x);DOA.contatoAberto=false;
+  toast(x.aviso?x.aviso.mensagem:x.email_cobranca?ok+'. '+x.email_cobranca.mensagem:x.dados_pessoais&&!x.dados_pessoais.salvo?x.dados_pessoais.mensagem:x.contato?x.contato.mensagem+(x.contato.amigo?' '+x.contato.amigo:''):ok);carregarDoacoes();
+  if(x.contato&&x.contato.reenviar)doaReenvioPrevia(x.id)}catch(err){toast(err.message)}}
+/* CAMP-DOA-EMAIL ("trocar o e-mail dele e enviar tudo novamente"): o que dá para mandar de novo, pela etapa, para o e-mail atual. */
+async function doaReenvioPrevia(id){const el=document.getElementById('doa-reenvio');if(!el)return;
+  let r;try{r=await API('/api/doacoes-acervo/'+id+'/reenviar')}catch(err){el.hidden=false;el.innerHTML=`<p class="help">${escHtml(err.message)}</p>`;return}
+  const it=r.itens||{},ks=['contrato','cobranca','andamento'].filter(k=>it[k]);
+  el.hidden=false;el.innerHTML=`<div class="panel cob-previa"><b>Reenviar para ${escHtml(r.email||'')}</b><br><small class="help">Os mesmos links de antes (contrato e pagamento). Nada muda na etapa.</small>
+  ${ks.map(k=>`<label class="conf-opcao"><input type="checkbox" data-doa-reenvio="${k}"${it[k].aplica&&it[k].padrao?' checked':''}${it[k].aplica?'':' disabled'}><span><b>${escHtml(it[k].rotulo||k)}</b>${it[k].aplica?'':`<small>${escHtml(it[k].motivo||'não se aplica')}</small>`}</span></label>`).join('')}
+  <div class="act"><button type="button" class="btn pri" data-doa-acao="reenviar-enviar" data-trabalhando="Enviando…">Enviar</button></div><div id="doa-reenvio-res"></div></div>`;
+  el.closest('details')&&(el.closest('details').open=true);el.scrollIntoView({block:'nearest'})}
+async function doaReenviar(id){const itens=Array.from(document.querySelectorAll('[data-doa-reenvio]')).filter(c=>c.checked&&!c.disabled).map(c=>c.dataset.doaReenvio);
+  if(!itens.length){toast('Marque o que reenviar');return}
+  try{const r=await API('/api/doacoes-acervo/'+id+'/reenviar',{method:'POST',body:JSON.stringify({itens})});
+    const linhas=(r.resultados||[]).map(l=>`<li>${escHtml(l.rotulo)}: ${l.enviado?'enviado':'não saiu'}${l.enviado?'':' — '+escHtml(l.mensagem)}</li>`).join('');
+    const ok=(r.resultados||[]).filter(l=>l.enviado).length;
+    if(r.doacao)doaDrawer(r.doacao);const res=document.getElementById('doa-reenvio')||null;
+    if(res){res.hidden=false;res.innerHTML=`<div class="panel cob-previa"><b>Reenvio</b><ul class="list">${linhas}</ul></div>`;res.closest('details')&&(res.closest('details').open=true)}
+    toast(ok===(r.resultados||[]).length?`Reenviado: ${qtd(ok,'e-mail','e-mails')}. Está em E-mails desta doação.`:`${qtd(ok,'e-mail enviado','e-mails enviados')}; ${(r.resultados||[]).length-ok} não saiu: veja o motivo no bloco E-mail e telefone.`);carregarDoacoes()}
+  catch(err){toast(err.message)}}
 /* CAMP-DOA-CPF: só vai ao site o que a equipe mudou no bloco CPF/CNPJ e endereço (apagou = "__limpar__"). */
 function doaPessoaisMudados(corpo){const mud=k=>{const el=document.getElementById('doa-p-'+k);if(!el)return null;const a0=el.tagName==='SELECT'?((Array.from(el.options).find(o=>o.defaultSelected)||{}).value||''):el.defaultValue;const v1=el.value.trim();return v1===String(a0).trim()?null:(v1||'__limpar__')};
-  const dm=mud('documento');if(dm!==null)corpo.documento=dm;const en={};['cep','logradouro','numero','complemento','bairro','cidade','uf'].forEach(k=>{const m=mud(k);if(m!==null)en[k]=m});if(Object.keys(en).length)corpo.endereco=en;return corpo}
+  const dm=mud('documento');if(dm!==null)corpo.documento=dm;const em=mud('email');if(em!==null&&em!=='__limpar__')corpo.email=em;const tm=mud('telefone');if(tm!==null)corpo.telefone=tm;const en={};['cep','logradouro','numero','complemento','bairro','cidade','uf'].forEach(k=>{const m=mud(k);if(m!==null)en[k]=m});if(Object.keys(en).length)corpo.endereco=en;return corpo}
 document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)return;
   if(t.closest('#doa-sinc')){const b=t.closest('#doa-sinc');b.disabled=true;try{const r=await API('/api/doacoes-acervo/sincronizar',{method:'POST'});toast(r.erro?`A busca falhou: ${r.erro}`:r.sem_rota?'O site ainda não tem as intenções de doação: avise quem cuida do site.':`Sincronizado: ${qtd(r.lidos||0,'intenção atualizada','intenções atualizadas')}`);carregarDoacoes()}catch(err){toast(err.message)}b.disabled=false;return}
   const ab=t.closest('[data-doa-abrir]');if(ab&&t.closest('#v-doacoes')){doaAbrir(ab.dataset.doaAbrir);return}
@@ -11766,6 +11790,8 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='consultar'){doaMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
   if(a==='texto'){await doaTexto(id,true);return}
   if(a==='rec-previa'){doaReceberPrevia(id);return}
+  if(a==='reenviar'){await doaReenvioPrevia(id);return}
+  if(a==='reenviar-enviar'){await doaReenviar(id);return}
   if(a==='conferir-assinatura'){try{const r=await API('/api/doacoes-acervo/'+id+'/conferir-assinatura',{method:'POST'});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r.doacao);toast(r.resultado.mensagem);carregarDoacoes()}catch(err){toast(err.message)}return}
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{};
   const corpo={contrato_link:v('contrato')||(x.contrato_link?'__limpar__':''),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
