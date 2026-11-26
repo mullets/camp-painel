@@ -382,6 +382,7 @@ kbd{font-family:var(--mono);font-size:var(--fs-sm);border:1px solid var(--line);
 .nav button .n+kbd{margin-left:6px}
 .filterbar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
 .filterbar input{padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-width:220px}
+:is(#v-fundos,#v-arquitetos,#v-localizacao,#v-emprestimos) .filterbar input:not([type=checkbox]):not([type=date]){flex:0 1 400px;min-width:min(400px,100%)}   /* CAMP-UX: o texto de ajuda do campo de busca aparecia cortado ("sigla ou nc") */
 .filterbar input[type=checkbox],.filterbar input[type=radio]{min-width:0;width:auto;padding:0;margin:0 6px 0 0;border:0;background:none}   /* CAMP-UX: a caixa "só Amigos" (e outras) herdava a largura mínima da busca e ficava solta no meio do botão */
 .filterbar input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px var(--blue-soft)}
 .filterbar .cnt{margin-left:auto;font-size:var(--fs-sm2);color:var(--ink3)}
@@ -1086,7 +1087,7 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 .c-sit .sit-chips{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
 .c-sit .sit-frase{display:block;margin-top:4px;font-size:var(--fs-2nd);color:var(--ink2);line-height:1.45}
 .c-parado .atualizado-lote{display:block;margin-top:2px}.c-parado .rot-cel{display:none;color:var(--ink2)}
-.acao-cel{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}
+.acao-cel{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}.lista-mais-vazio{display:inline-block;width:36px;flex:none}
 .lista-mais>summary{min-width:36px;min-height:36px;justify-content:center;font-size:var(--fs-sub);line-height:1}
 .lista-mais .mais-lista{right:0;top:calc(100% + 4px);text-align:left}
 .lista-tab .fila-grupo td{background:var(--surface2);font-size:var(--fs-2nd);padding:8px 12px}
@@ -1128,7 +1129,7 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
   .lista-tab tbody tr[data-fase]{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:14px var(--pad-card);border-bottom:1px solid var(--line);height:auto}
   .lista-tab tbody tr[data-fase]>td{display:block;padding:0;border:0;min-width:0;max-width:none;width:auto;text-align:left}
   .lista-tab tbody tr[data-fase]>td.c-fundo{display:none}
-  .lista-tab .c-acao{white-space:normal}.lista-tab .acao-cel{justify-content:flex-start;flex-wrap:wrap}.lista-tab .acao-cel .btn{min-height:44px}
+  .lista-tab .c-acao{white-space:normal}.lista-tab .acao-cel{justify-content:flex-start;flex-wrap:wrap}.lista-mais-vazio{display:none}.lista-tab .acao-cel .btn{min-height:44px}
   .lista-tab .lista-mais .mais-lista{right:auto;left:0}
   .lista-tab .fila-grupo,.lista-tab .fila-det-tr,.lista-tab tbody tr:not([data-fase]):not(.lst-linha){display:block}.lista-tab .fila-grupo td,.lista-tab .fila-det-tr>td,.lista-tab tbody tr:not([data-fase]):not(.lst-linha)>td{display:block}
   .fila-det{padding:14px;grid-template-columns:minmax(0,1fr)}
@@ -1414,7 +1415,7 @@ tr.emp-atrasado td{background:var(--red-soft)}tr.emp-atrasado td:first-child{box
 .sol-email{width:100%;box-sizing:border-box;font:13px var(--sans);padding:8px}
 .fd-pj-n{margin-left:auto;font-size:var(--fs-sm2);color:var(--ink3)}#fd-projetos .filterbar .abas-sit{border-bottom:0;margin:0}
 .dr-sit-opcoes{border:0;padding:0;margin:0;display:grid;gap:6px}.dr-sit-opcoes legend{font-size:var(--fs-md);color:var(--ink2);margin-bottom:4px}.dr-termo{display:grid;gap:6px}.dr-termo-atual{font-size:var(--fs-md)}
-.nf-sigla{text-transform:uppercase;font-family:var(--mono)}.erro-txt{color:var(--red)}.fd-pend{font-size:var(--fs-md);color:var(--ink2)}
+.nf-sigla{text-transform:uppercase;font-family:var(--mono)}.erro-txt{color:var(--red)}.fd-pend{font-size:var(--fs-md);color:var(--ink2);min-width:220px}   /* CAMP-UX: a coluna Pendências ficava espremida (uma palavra por linha) e cortada na borda */
 .bulk-rodape.on{position:sticky;bottom:0;z-index:6;border-top:1px solid var(--line);border-bottom:0;box-shadow:0 -6px 18px rgba(0,0,0,.08)}.bulk-todos{font-size:var(--fs-md);color:var(--ink2)}.bulk-todos .lnk{margin-left:4px}
 .busca-grande{margin:0 0 10px}.busca-grande input{width:100%;box-sizing:border-box;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
 .prox-passo{font-size:var(--fs-md);color:var(--ink2);white-space:nowrap}.np-sem-data{display:flex;gap:6px;align-items:center;font-size:var(--fs-sm2);color:var(--ink2);margin-top:4px}.bulkbar .spacer{flex:1}.bulkbar .count{font-weight:600;color:var(--blue)}
@@ -1677,6 +1678,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 #v-painel .ini-fila-barra .ini-filtros{border-top:1px solid var(--line2);padding:4px 0 6px}
 #v-painel .ini-fila-barra .ini-filtros .btn{font-size:var(--fs-xs);padding:3px 8px}
 #v-painel .ini-filtros-rot{font-size:var(--fs-xs);text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink3)}
+#v-painel .ini-fila-barra .abas-sit.ini-filtros{flex-wrap:wrap;overflow-x:visible}   /* CAMP-UX: os tipos ("Melhorar a base 42") ficavam cortados na borda, numa rolagem lateral sem aviso: quebram linha */
 #v-painel .ini-task{grid-template-columns:4px 72px minmax(0,1fr) auto;gap:2px 14px;padding:10px 18px;min-height:64px;align-items:center}
 #v-painel .ini-task>.ini-sev{align-self:stretch;width:4px;border-radius:var(--r-pill);margin:2px 0}
 #v-painel .ini-task>.mini{width:72px;height:46px;border-radius:var(--r-sm);border-color:var(--line2)}
@@ -1714,6 +1716,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 #v-painel .ini-passo.zero .q{color:var(--ink)}
 #v-painel .ini-passo.stuck .ini-step{border:2px solid var(--amber);background:var(--amber-soft)}
 #v-painel .ini-passo.stuck .i{border-color:var(--amber);background:var(--surface)}
+@container (max-width:900px){#v-painel .ini-flow{grid-template-columns:repeat(4,minmax(0,1fr))}}   /* CAMP-UX: 7 colunas num painel de ~700 px cortavam o texto ("esperanc", "aguar..."); 4 + 3 */
 @container (max-width:540px){#v-painel .ini-flow{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}}
 /* folhas conferidas por dia */
 #v-painel .ini-ritmo-p .ph h2{flex:1 1 auto}
@@ -1879,7 +1882,7 @@ button.ini-kpi:hover .ini-kpi-regra,button.ini-kpi:focus-visible .ini-kpi-regra{
 .conf-pf{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .conf-opcoes{display:grid;gap:6px}
 .conf-opcao{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;cursor:pointer}
-.pgu-desc{width:100%;box-sizing:border-box;margin:2px 0 8px}.pgu-antigos{margin:0 0 8px}
+.pgu-desc{width:100%;box-sizing:border-box;margin:2px 0 8px}#pj-guardados>.ph>.ph-txt{flex:1 1 auto}   /* CAMP-UX: a etiqueta "faltam guardar" fica na borda direita, como nos outros quadros */.pgu-antigos{margin:0 0 8px}
 .conf-opcao:has(input:checked){border-color:var(--blue);background:var(--blue-soft)}
 .conf-opcao b{display:block;font-weight:500}.conf-opcao small{display:block;color:var(--ink3);font-size:var(--fs-sm2)}
 .btn.perigo{background:var(--red);border-color:var(--red);color:var(--on-red)}   /* §18: no escuro o branco sobre o vermelho claro dava 2,9 */.btn.perigo:disabled{opacity:.5}
@@ -2274,7 +2277,8 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 #pd[data-vista="lista"] .thumb .cap-cab{grid-column:1}
 #pd[data-vista="lista"] .fb-tam{display:none}
 @container pjpg (max-width:640px){#pd[data-vista="lista"] .thumb .cap{grid-template-columns:minmax(0,1fr)}#pd[data-vista="lista"] .thumb{grid-template-columns:88px minmax(0,1fr)}}
-#pd .folhas-bar{top:var(--top-h,64px)}
+#pd .folhas-bar{top:var(--top-h,64px);justify-content:flex-start}
+.fb-ver{display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:nowrap}.fb-ver .fb-tam{margin-left:0}   /* CAMP-UX: Grade/Lista e P/M/G juntos na direita (o P M G ficava sozinho numa linha) */
 @media (max-height:760px),(max-width:720px){#pd .folhas-bar{position:static}}
 .folhas-bar .fb-tipo select.ativo{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
 .mt-recolhido>summary{list-style:none;cursor:pointer;display:grid;gap:6px;border-radius:var(--r)}
@@ -2489,7 +2493,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .sev-baixo .cp-sev-ic{background:var(--blue-soft);color:var(--blue);font-family:Georgia,serif}
 .cp-corpo{min-width:0;display:flex;flex-direction:column;gap:3px}
 .cp-tit b{font-size:var(--fs-body)}
-.cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums}
+.cp-id{color:var(--ink3);font-size:var(--fs-2xs);font-variant-numeric:tabular-nums;white-space:nowrap}
 .cp-ctx{font-size:var(--fs-md);color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-ctx .lnk{color:var(--ink2)}
 #d-body .cp-ctx,.cp-tri .cp-ctx{white-space:normal}   /* no painel o contexto quebra a linha; na lista fica numa linha só, com reticências */
@@ -5296,7 +5300,7 @@ function projGuardar(){const E=PROJ_ESTADO;LST.sessao.set('camp.proj.estado',{ro
   LISTA_MEM.set('projetos',{q:E.q||'',fundo:E.fundo||'',situacao:E.situacao||'todos',ordem:E.ordem||'codigo',arq:E.arq||'',periodo:E.periodo||'',material:E.material||'',pend:E.pend||''})}
 function projAutores(a){return String(a||'').split(/[;\n]+/).map(x=>x.trim()).filter(Boolean)}
 function projDataTxt(p){const a=+p.ano||0,b=+p.ano_fim||0;return a?(b&&b!==a?`${a}–${b}`:String(a)):''}
-function projArqCel(p){const as=projAutores(p.autoria);if(!as.length)return '<span class="help" title="Nenhuma autoria registrada no projeto. O fundo não diz quem projetou.">não registrada</span>';
+function projArqCel(p){const as=projAutores(p.autoria);if(!as.length)return '<span class="help" title="Nenhuma autoria registrada no projeto. O fundo não diz quem projetou.">sem autoria registrada</span>';
   const tit=`Autoria registrada no projeto: ${as.join('; ')}${p.papel_no_projeto?` · papel do titular do fundo: ${p.papel_no_projeto}`:''}`;
   return `<span class="pj-arq" title="${escHtml(tit)}">${as.slice(0,2).map(escHtml).join('<br>')}${as.length>2?`<br><small class="help">e mais ${escHtml(fmtN(as.length-2))}</small>`:''}</span>`}
 function projMaisItens(p){const c=escHtml(p.codigo),it=[],mi=(cls,txt,at)=>`<button type="button" class="btn ${cls}" role="menuitem" ${at}>${txt}</button>`,noAr=p.status_site==='no_ar';
@@ -5466,7 +5470,7 @@ function semImagemFolha(it){return (!usaPreviaFolha(it)&&!it.thumb_url)||!!(wind
 function flagsFolha(it){const tp=tiposProblemaFolha(it);return [emConferencia(it)&&it.revisao==='pendente'?'conferir':'',tp.length?'problema':'',semImagemFolha(it)?'semimg':'',DISC_SERIES.includes(it.serie_codigo)&&!it.retida&&!it.duplicata_de&&it.origem_catalogacao!=='site'&&!((Array.isArray(it.parceiros)?it.parceiros:[]).some(p=>p&&p.escritorio))?'semesc':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':'',folhaSemNumero(it)?'semnum':'',...tp.map(x=>'t-'+x.k)].filter(Boolean).join(' ')}
 function contagemFolhas(its0){const its=semCopias(its0),c={todas:its.length,copias:(its0||[]).length-its.length,conferir:0,problema:0,semimg:0,site:0,lote:0,conferidas:0,semnum:0,semesc:0};for(const it of its){const f=flagsFolha(it).split(' ');if(f.includes('semnum'))c.semnum++;if(f.includes('semesc'))c.semesc++;if(f.includes('conferir'))c.conferir++;if(f.includes('problema'))c.problema++;if(f.includes('semimg'))c.semimg++;if(f.includes('site'))c.site++;if(it.lote_id){c.lote++;if(it.revisao!=='pendente')c.conferidas++}}return c}
 function barraFolhasHTML(its,noSite){const c=contagemFolhas(its);if(c.todas<2&&!c.copias)return '';const b=(f,t,n)=>`<button class="btn sm${f===''?' on':''}" aria-pressed="${f===''}" data-fl-f="${f}" data-fl-t="${t}">${t} (${n})</button>`;   // #95: filtro ligado não é botão azul (o azul é só o próximo passo)
-  return `<div class="folhas-bar" role="toolbar" aria-label="Filtrar folhas"><span class="fb-cont" role="status">${c.lote?`Conferidas <b>${c.conferidas} de ${c.lote}</b>`:`<b>${fmtN(c.todas)}</b> folhas`}${noSite!=null?` <small class="help fb-site">· ${escHtml(Math.max(Number(noSite)||0,c.site))} no site</small>`:''}</span><div class="act">${b('','Todas',c.todas)}${b('problema','Com problema',c.problema)}${b('semimg','Sem imagem',c.semimg)}${b('conferir','A conferir',c.conferir)}${b('site','No site',c.site)}${c.semnum?b('semnum','Sem nº',c.semnum):''}${c.semesc&&EU&&['operador','admin','master'].includes(EU.papel)?b('semesc','Sem escritório',c.semesc):''}${c.copias?b('copias','Cópias',c.copias):''}</div>${(()=>{const ch=chipsTiposHTML(semCopias(its),'','data-fl-f');return ch?`<div class="act fb-tipos" role="group" aria-label="Problemas por tipo">${ch}</div>`:''})()}${(()=>{const n=new Map();semCopias(its).forEach(i=>separarTipos(i.tipo_documento).forEach(x=>n.set(x,(n.get(x)||0)+1)));if(!n.size)return '';const L=[...n].sort((a,b)=>LST.colator.compare(a[0],b[0]));return `<label class="fb-ordem fb-tipo">Tipo <select data-fl-tipo aria-label="Filtrar por tipo de representação"><option value="">Todos os tipos</option>${L.map(([k,q])=>`<option value="${escHtml(k)}"${FL_TIPO===k?' selected':''}>${escHtml(k)} (${fmtN(q)})</option>`).join('')}</select></label>`})()}<label class="fb-ordem">Ordem <select data-fl-ordem aria-label="Ordem das folhas">${[['codigo','código'],['folha','nº de folha'],['tipo','tipo'],['manual','definida à mão']].map(([v,t])=>`<option value="${v}"${ordemFolhas()===v?' selected':''}>${t}</option>`).join('')}</select></label><span class="fb-ordem-acoes" data-ordem-acoes>${ordemAcoesHTML(its)}</span>${discBarraHTML(its)}<div class="act fb-vista" role="group" aria-label="Ver as folhas em">${[['grade','Grade'],['lista','Lista']].map(([v,r])=>`<button type="button" class="btn sm${vistaFolhas()===v?' on':''}" aria-pressed="${vistaFolhas()===v}" data-fl-vista="${v}">${r}</button>`).join('')}</div><div class="act fb-tam" role="group" aria-label="Tamanho das miniaturas">${['p','m','g'].map(t=>`<button class="btn sm${tamMiniaturas()===t?' on':''}" aria-pressed="${tamMiniaturas()===t}" data-tam="${t}" title="Miniaturas ${({p:'pequenas',m:'médias',g:'grandes'})[t]}">${t.toUpperCase()}</button>`).join('')}</div></div>`}
+  return `<div class="folhas-bar" role="toolbar" aria-label="Filtrar folhas"><span class="fb-cont" role="status">${c.lote?`Conferidas <b>${c.conferidas} de ${c.lote}</b>`:`<b>${fmtN(c.todas)}</b> folhas`}${noSite!=null?` <small class="help fb-site">· ${escHtml(Math.max(Number(noSite)||0,c.site))} no site</small>`:''}</span><div class="act">${b('','Todas',c.todas)}${b('problema','Com problema',c.problema)}${b('semimg','Sem imagem',c.semimg)}${b('conferir','A conferir',c.conferir)}${b('site','No site',c.site)}${c.semnum?b('semnum','Sem nº',c.semnum):''}${c.semesc&&EU&&['operador','admin','master'].includes(EU.papel)?b('semesc','Sem escritório',c.semesc):''}${c.copias?b('copias','Cópias',c.copias):''}</div>${(()=>{const ch=chipsTiposHTML(semCopias(its),'','data-fl-f');return ch?`<div class="act fb-tipos" role="group" aria-label="Problemas por tipo">${ch}</div>`:''})()}${(()=>{const n=new Map();semCopias(its).forEach(i=>separarTipos(i.tipo_documento).forEach(x=>n.set(x,(n.get(x)||0)+1)));if(!n.size)return '';const L=[...n].sort((a,b)=>LST.colator.compare(a[0],b[0]));return `<label class="fb-ordem fb-tipo">Tipo <select data-fl-tipo aria-label="Filtrar por tipo de representação"><option value="">Todos os tipos</option>${L.map(([k,q])=>`<option value="${escHtml(k)}"${FL_TIPO===k?' selected':''}>${escHtml(k)} (${fmtN(q)})</option>`).join('')}</select></label>`})()}<label class="fb-ordem">Ordem <select data-fl-ordem aria-label="Ordem das folhas">${[['codigo','código'],['folha','nº de folha'],['tipo','tipo'],['manual','definida à mão']].map(([v,t])=>`<option value="${v}"${ordemFolhas()===v?' selected':''}>${t}</option>`).join('')}</select></label><span class="fb-ordem-acoes" data-ordem-acoes>${ordemAcoesHTML(its)}</span>${discBarraHTML(its)}<div class="fb-ver"><div class="act fb-vista" role="group" aria-label="Ver as folhas em">${[['grade','Grade'],['lista','Lista']].map(([v,r])=>`<button type="button" class="btn sm${vistaFolhas()===v?' on':''}" aria-pressed="${vistaFolhas()===v}" data-fl-vista="${v}">${r}</button>`).join('')}</div><div class="act fb-tam" role="group" aria-label="Tamanho das miniaturas">${['p','m','g'].map(t=>`<button class="btn sm${tamMiniaturas()===t?' on':''}" aria-pressed="${tamMiniaturas()===t}" data-tam="${t}" title="Miniaturas ${({p:'pequenas',m:'médias',g:'grandes'})[t]}">${t.toUpperCase()}</button>`).join('')}</div></div></div>`}
 function preencherHTML(codigo,campo,rot){return EU&&pode('projeto.editar')?`<span class="vazio-campo">—</span> <button type="button" class="lnk" onclick="acaoCondicao('editar_projeto','${escHtml(codigo)}:${escHtml(campo)}')">${escHtml(rot||'Preencher')}</button>`:'—'}   /* H8 */
 function previaSiteProjetoHTML(p,its){const f=(its||[]).find(i=>i.thumb_url)||(its||[]).find(i=>i.pendencias&&i.pendencias.previa),img=f?(f.thumb_url||urlPreviaFolha(f.codigo,f.giro_manual,320,f.espelhar,ajusteChave(f))):'';
   return `<div class="previa-site" aria-label="Prévia do cartão do projeto no site">${img?`<img src="${escHtml(img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`:'<span class="previa-sem">sem imagem</span>'}<div><b>${escHtml(tituloExibicao(p.titulo))}</b><small>${escHtml([p.ano||'sem data',p.cidade].filter(Boolean).join(' · '))}</small><small>Acervo ${escHtml(p.fundo||'')}/CAMP</small></div></div>`}   /* H8: como o cartão aparece no site */
@@ -8329,7 +8333,7 @@ function pjGuardadosDesenhar(g){const el=document.getElementById('pj-guardados')
   const rec=(g.recipientes||[]).map(r=>`<li class="pgu-rec"><div class="pgu-cab"><span class="tag">${escHtml(r.tipo)}</span> <b>${escHtml(r.identificador)}</b> <span class="help">${escHtml(qtd(r.quantidade,'folha','folhas'))}${r.de_outros?` · também guarda ${escHtml(qtd(r.de_outros,'folha','folhas'))} de outros projetos`:''}${r.descricao?` · ${escHtml(r.descricao)}`:''}</span><span class="pgu-acoes"><a class="lnk" href="#estante/caixa/${r.id}">Conferir</a><a class="lnk" href="#etiquetas/local/${r.id}">Imprimir etiqueta</a></span></div>${r.quantidade>12?`<details><summary>Ver as ${fmtN(r.quantidade)} folhas</summary><ul class="pgu-folhas">${fl(r.folhas)}</ul></details>`:`<ul class="pgu-folhas">${fl(r.folhas)}</ul>`}</li>`).join('');
   const falta=g.faltam||[],antigos=(g.recipientes||[]).filter(r=>/^TB-F\d{3}-P\d{4}\.\d+$/i.test(r.identificador)),adm=EU&&['admin','master'].includes(EU.papel);
   const renom=antigos.length&&adm?`<p class="help pgu-antigos">${escHtml(qtd(antigos.length,'tubo ainda está','tubos ainda estão'))} no nome antigo. <button type="button" class="btn sm" data-tubos-renomear>Renomear tubos antigos para o novo padrão</button></p>`:'';
-  el.innerHTML=renom+`<div class="ph"><div class="ph-txt"><h2>Onde estão as folhas</h2><p class="ph-resumo">${escHtml(qtd(g.guardadas,'folha guardada','folhas guardadas'))} de ${fmtN(g.total)}${(g.recipientes||[]).length?` em ${escHtml(qtd(g.recipientes.length,'lugar','lugares'))}`:''}. Para dividir em vários tubos: Escolher folhas → Guardar em….</p></div>${falta.length?`<span class="tag a">faltam guardar ${fmtN(falta.length)}</span>`:g.total?'<span class="tag g">todas guardadas</span>':''}</div>
+  el.innerHTML=renom+`<div class="ph"><div class="ph-txt"><h2>Onde estão as folhas</h2><p class="ph-resumo">${escHtml(qtd(g.guardadas,'folha guardada','folhas guardadas'))} de ${fmtN(g.total)}${(g.recipientes||[]).length?` em ${escHtml(qtd(g.recipientes.length,'lugar','lugares'))}`:''}. Para dividir em vários tubos: Escolher folhas → Guardar em…</p></div>${falta.length?`<span class="tag a">faltam guardar ${fmtN(falta.length)}</span>`:g.total?'<span class="tag g">todas guardadas</span>':''}</div>
     <div class="pb">${rec?`<ul class="pgu-lista">${rec}</ul>`:'<p class="help">Nenhuma folha deste projeto está guardada ainda.</p>'}
     ${falta.length?`<div class="pgu-falta"><div class="pgu-cab"><b>Faltam guardar (${fmtN(falta.length)})</b>${op?'<button type="button" class="btn sm" data-pgu-escolher-faltam>Escolher as que faltam</button>':''}</div>${falta.length>12?`<details><summary>Ver as ${fmtN(falta.length)} folhas</summary><ul class="pgu-folhas">${fl(falta)}</ul></details>`:`<ul class="pgu-folhas">${fl(falta)}</ul>`}</div>`:''}</div>`;
   el.dataset.faltam=JSON.stringify(falta.map(f=>f.codigo))}
@@ -9002,7 +9006,7 @@ function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
     k('',+p.folhas_conferir||0,+p.folhas_conferir===1?'folha para conferir':'folhas para conferir',`em ${qtd(+p.lotes_conferir||0,'lote','lotes')}`,'filas/conferir',INI_EXPLICA.conferir,INI_REGRA.conferir,'camadas'),
     admin?(p.folhas_esperam_admin==null   /* servidor antigo, sem as folhas: só os lotes, como antes */
       ?k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'lote espera um admin':'lotes esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin,INI_REGRA.admin,'alerta')
-      :k(p.esperam_admin?'go':'',+p.folhas_esperam_admin,+p.folhas_esperam_admin===1?'folha espera um admin':'folhas esperam um admin',`em ${qtd(+p.esperam_admin||0,'lote','lotes')}: ${fmtN(p.lotes_aprovar)} para aprovar, ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin,INI_REGRA.admin,'alerta'))
+      :k(p.esperam_admin?'go':'',+p.folhas_esperam_admin,+p.folhas_esperam_admin===1?'folha espera um admin':'folhas esperam um admin',(+p.esperam_admin?`em ${qtd(+p.esperam_admin,'lote','lotes')}: ${fmtN(p.lotes_aprovar)} para aprovar, ${fmtN(p.lotes_publicar)} para publicar`:'nenhum lote esperando aprovação ou publicação'),'filas/admin',INI_EXPLICA.admin,INI_REGRA.admin,'alerta'))
       :k('',p.lotes_importar,p.lotes_importar===1?'lote para importar':'lotes para importar','o CAMP Vision leu; falta trazer as folhas','filas/importar',INI_EXPLICA.importar,INI_REGRA.importar,'entrada'),
     /* "Folhas conferidas hoje" não é uma lista: o cartão leva ao gráfico dos últimos dias (Resultados), com a mesma regra */
     `<button type="button" class="ini-kpi ini-kpi-info k-hoje" id="ini-kpi-hoje" data-ini-rolar="ini-t-ritmo" aria-label="${escHtml('Folhas conferidas hoje: ver o gráfico dos últimos dias. Como conta: '+INI_REGRA.hoje)}">${iniKpiHojeHTML(undefined)}</button>`];
@@ -9784,7 +9788,7 @@ const LST={
   progresso(o){const pct=o.total?Math.min(100,Math.round(100*(+o.feito||0)/o.total)):null;
     return `<div class="prog${o.cls?' '+o.cls:''}"><span class="prog-rot">${escHtml(o.rot)}</span><span class="prog-txt">${escHtml(o.texto)}</span>${pct!=null?`<span class="prog-barra"><progress class="pg" value="${escHtml(+o.feito||0)}" max="${escHtml(o.total)}" aria-label="${escHtml(o.rot+': '+o.texto)}"></progress><span class="prog-pct" aria-hidden="true">${pct}%</span></span>`:''}</div>`},
   mini(codigo){return `<span class="mini" aria-hidden="true">${codigo?`<img src="${escHtml(urlPreviaFolha(codigo,0,120))}" alt="" loading="lazy" decoding="async" width="56" height="42" onerror="this.remove()">`:''}</span>`},
-  mais(rotulo,itens){return itens.length?`<details class="mais-menu lista-mais" data-no-nav><summary class="btn sm" aria-haspopup="menu" aria-label="${escHtml('Mais ações: '+rotulo)}" title="Mais ações"><span aria-hidden="true">⋯</span></summary><div class="mais-lista" role="menu">${itens.join('')}</div></details>`:''},
+  mais(rotulo,itens){return itens.length?`<details class="mais-menu lista-mais" data-no-nav><summary class="btn sm" aria-haspopup="menu" aria-label="${escHtml('Mais ações: '+rotulo)}" title="Mais ações"><span aria-hidden="true">⋯</span></summary><div class="mais-lista" role="menu">${itens.join('')}</div></details>`:'<span class="lista-mais-vazio" aria-hidden="true"></span>'},   /* CAMP-UX: sem ações secundárias, o lugar do ⋯ fica reservado e o botão principal alinha com as outras linhas */
   normal(t){return String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()},
   casa(campos,q){const h=LST.normal(campos.join(' ')),hs=h.replace(/[\s\-_./]/g,'');return LST.normal(q).split(/\s+/).filter(Boolean).every(t=>h.includes(t)||hs.includes(t.replace(/[\-_./]/g,'')))},
   sessao:{get(k){try{return JSON.parse(sessionStorage.getItem(k)||'null')}catch(_){return null}},set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(_){}}},
