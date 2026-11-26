@@ -621,27 +621,37 @@ def cancelar(cid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         r = _um(con, cid)
-        if situacao_efetiva(r) in ("paga", "estornada"):
-            raise HTTPException(409, "Esta cobrança já foi paga: não dá para cancelar")
         if r["situacao"] == "cancelada":
             return {"cobranca": _detalhe(con, cid)}
-        aviso = None
-        if r["site_id"]:
-            resp = _post_site(con, r, "", {"acao": "cancelar"}, "cancelar")
-            if resp.status_code >= 400:
-                raise _erro_site(resp, "cancelar")
-            d = _json(resp)
-            if isinstance(d.get("registro"), dict):
-                _aplicar_site(con, cid, d["registro"], u["email"])
-            if d.get("mp_expirou") is False:
-                aviso = "Cancelada no painel e no site, mas o Mercado Pago não confirmou que o link expirou: confira lá se precisar."
-        else:
-            con.execute("UPDATE cobranca_avulsa SET situacao='cancelada', cancelada_em=datetime('now') WHERE id=?", (cid,))
-        _evento(con, cid, "cancelado", u["email"], {})
-        con.commit()
+        aviso = cancelar_cobranca(con, cid, u["email"])
         return {"cobranca": _detalhe(con, cid), "aviso": aviso}
     finally:
         con.close()
+
+
+def cancelar_cobranca(con, cid: int, ator_email: str, extra: dict | None = None) -> str | None:
+    """O cancelamento de "Cancelar" (o site expira o link no Mercado Pago), reaproveitado pelo reenvio de um pedido com valor novo
+    (CAMP-ENTREGA, 26/11/2026). Devolve o aviso (ou None); erro do site = HTTPException; paga/estornada = 409; já cancelada = nada."""
+    r = _um(con, cid)
+    if situacao_efetiva(r) in ("paga", "estornada"):
+        raise HTTPException(409, "Esta cobrança já foi paga: não dá para cancelar")
+    if r["situacao"] == "cancelada":
+        return None
+    aviso = None
+    if r["site_id"]:
+        resp = _post_site(con, r, "", {"acao": "cancelar"}, "cancelar")
+        if resp.status_code >= 400:
+            raise _erro_site(resp, "cancelar")
+        d = _json(resp)
+        if isinstance(d.get("registro"), dict):
+            _aplicar_site(con, cid, d["registro"], ator_email)
+        if d.get("mp_expirou") is False:
+            aviso = "Cancelada no painel e no site, mas o Mercado Pago não confirmou que o link expirou: confira lá se precisar."
+    else:
+        con.execute("UPDATE cobranca_avulsa SET situacao='cancelada', cancelada_em=datetime('now') WHERE id=?", (cid,))
+    _evento(con, cid, "cancelado", ator_email, extra or {})
+    con.commit()
+    return aviso
 
 
 @router.post("/{cid}/consultar")

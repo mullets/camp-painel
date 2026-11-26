@@ -173,9 +173,9 @@ def cobranca_opcoes(con, sid: int, ator: dict, n_folhas: int) -> dict:
             "justificativa": (s["cobranca_justificativa"] if "cobranca_justificativa" in k else None), "cobranca": ult}
 
 
-def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: dict) -> tuple[int, str]:
+def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: dict) -> tuple[int, str, int | None]:
     """Cria (ou refaz, se o pedido já tem uma sem pagamento) a cobrança do Mercado Pago pelo módulo de cobranças avulsas.
-    (id, link). Sem link: HTTPException 502 e nada é enviado."""
+    (id, link, id da cobrança ANTERIOR ainda aberta que ficou substituída — valor mudou — ou None). Sem link: HTTPException 502 e nada é enviado."""
     from . import cobrancas
     projetos = sorted({c[:10] for c in codigos if re.match(r"^F\d{3}-P\d{4}", c)})
     vin = projetos[0] if len(projetos) == 1 and con.execute("SELECT 1 FROM projeto WHERE codigo=?", (projetos[0],)).fetchone() else None
@@ -183,7 +183,8 @@ def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: di
     cid = s["cobranca_id"] if "cobranca_id" in s.keys() else None
     r = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() if cid else None
     if r and r["situacao"] in ("sem_link", "aberta") and abs((r["valor"] or 0) - d["valor"]) < 0.005 and r["link"]:
-        return r["id"], r["link"]
+        return r["id"], r["link"], None
+    antiga = r["id"] if r and cobrancas.situacao_efetiva(r) == "aberta" else None   # Rafael (26/11): valor novo → a anterior em aberto é cancelada depois do envio
     if not r or r["situacao"] not in ("sem_link",):
         cur = con.execute("""INSERT INTO cobranca_avulsa (nome, email, valor, finalidade, descricao, vinculo_tipo, vinculo_codigo, situacao,
                              statement_descriptor, criado_por, criado_por_nome, solicitacao_id) VALUES (?,?,?,?,?,?,?,'sem_link',?,?,?,?)""",
@@ -203,7 +204,7 @@ def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: di
     link = (con.execute("SELECT link FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() or [""])[0] or ""
     if erro or not link:
         raise HTTPException(502, f"A cobrança não foi criada no Mercado Pago: {erro or 'o site não devolveu o link'}. Nada foi enviado e o pedido não mudou.")
-    return cid, link
+    return cid, link, (antiga if antiga and antiga != cid else None)
 
 
 def pago(con, r) -> bool:
@@ -606,13 +607,13 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     if not m["arquivos"]:
         raise HTTPException(409, "Nenhum arquivo deste pedido foi achado no QNAP. Veja o que ficou de fora no pacote.")
     # CAMP-ENTREGA: com ou sem cobrança, sempre com a justificativa (o teste para quem aprova não cobra nem justifica)
-    cob, cob_id, link_pag = None, None, ""
+    cob, cob_id, link_pag, cob_antiga = None, None, "", None
     if not teste:
         cob = validar_cobranca(con, cobranca, len(m["arquivos"]))
         if cob["modo"] == "com":
             if ator.get("papel") not in ("admin", "master"):
                 raise HTTPException(403, "Só admin cria cobrança (dados de pagamento). Peça a um admin para enviar este pedido com cobrança.")
-            cob_id, link_pag = _criar_cobranca(con, s, cob, len(m["arquivos"]), [a["codigo"] for a in m["arquivos"]], ator)
+            cob_id, link_pag, cob_antiga = _criar_cobranca(con, s, cob, len(m["arquivos"]), [a["codigo"] for a in m["arquivos"]], ator)
     token = secrets.token_urlsafe(32)
     dias = 1 if teste else validade_dias(con)
     expira = calcular_expira_em(dias)
@@ -667,9 +668,23 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
                              **({"cobranca": cob["modo"], "motivo": cob["motivo"], "justificativa": cob["justificativa"], "valor": cob["valor"],
                                  "cobranca_id": cob_id, "liberar_apos_pagamento": cob["liberar"]} if cob else {})}, ensure_ascii=False)))
     con.commit()
-    return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"],
+    aviso_cob = None
+    if cob_antiga:   # CAMP-ENTREGA (Rafael, 26/11/2026): o e-mail com o link novo saiu → a cobrança anterior, ainda em aberto, é cancelada
+        from . import cobrancas
+        try:
+            aviso_cob = cobrancas.cancelar_cobranca(con, cob_antiga, ator.get("email") or "", {"motivo": "substituída pela cobrança nº %d (valor novo) no pedido #%d" % (cob_id, sid)})
+            ev, det = "cobranca_anterior_cancelada", {"cobranca_id": cob_antiga, "nova": cob_id, "aviso": aviso_cob}
+        except Exception as e:  # noqa: BLE001 — falhar o cancelamento não desfaz o envio: avisa e guarda
+            msg = e.detail if isinstance(e, HTTPException) else type(e).__name__
+            aviso_cob = f"O e-mail saiu com a cobrança nova, mas a anterior (nº {cob_antiga}) não foi cancelada: {msg}. Cancele em Cobranças avulsas."
+            ev, det = "cobranca_anterior_nao_cancelada", {"cobranca_id": cob_antiga, "nova": cob_id, "erro": str(msg)[:300]}
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,?,?,?)",
+                    (str(sid), ev, ator.get("email"), json.dumps(det, ensure_ascii=False)))
+        con.commit()
+    return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"], "aviso_cobranca": aviso_cob,
             "validade": _data_br(expira), "entrega": resumo, "link": t["variaveis"]["link"],
-            "cobranca": ({"modo": cob["modo"], "justificativa": cob["justificativa"], "valor": cob["valor"], "id": cob_id, "link": link_pag} if cob else None)}
+            "cobranca": ({"modo": cob["modo"], "justificativa": cob["justificativa"], "valor": cob["valor"], "id": cob_id, "link": link_pag,
+                          "anterior_cancelada": cob_antiga if cob_antiga and not aviso_cob else None} if cob else None)}
 
 
 def links(con, sid: int) -> list[dict]:

@@ -12019,7 +12019,7 @@ async function enviarPedido(id,teste){const er=document.getElementById('se-err')
   document.querySelectorAll('[data-se-enviar],[data-se-teste]').forEach(b=>b.disabled=true);
   try{const r=await API(`/api/solicitacoes/${id}/enviar`,{method:'POST',body:JSON.stringify(corpo)});
     if(teste){toast(`Teste enviado para ${r.para}`);abrirEnvio(id);return}
-    toast(`Pedido #${id} enviado para ${r.para}`);closeDrawer(true);carregarSolicitacoes();carregarPainel()}
+    toast(`Pedido #${id} enviado para ${r.para}`+(r.aviso_cobranca?`. ${r.aviso_cobranca}`:(r.cobranca&&r.cobranca.anterior_cancelada?'. A cobrança anterior em aberto foi cancelada.':'')));closeDrawer(true);carregarSolicitacoes();carregarPainel()}
   catch(e){if(er)er.textContent=e.message;document.querySelectorAll('[data-se-enviar],[data-se-teste]').forEach(b=>b.disabled=false)}}
 document.addEventListener('click',async e=>{let b=e.target.closest('[data-sol-envio]');if(b){abrirEnvio(+b.dataset.solEnvio);return}
   b=e.target.closest('[data-se-enviar]');if(b){enviarPedido(+b.dataset.seEnviar,false);return}

@@ -82,6 +82,7 @@ MODOS_RAPIDOS |= {"estante_tubos_tb001"}   # CAMP-ESTANTE 25/11/2026: tubos no p
 MODOS_RAPIDOS |= {"projeto_ordem_pdf_tubos"}   # CAMP-PROJETO/ESTANTE 25/11/2026: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria, tubos (guardar em, mover, faltam guardar)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"ux_publico"}   # CAMP-UX 26/11/2026: Amigo sem situação virava "Pago" ao salvar; "Todos" deixava de fora quem não tem situação (navegador: tests/navegador_ux_publico.js)
+MODOS_RAPIDOS |= {"autorizados_entrega"}   # CAMP-ENTREGA 26/11/2026 (quiz do Rafael): reenvio com valor novo cancela a cobrança anterior; layout próprio no Sender
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
 MODOS_RAPIDOS |= {"tipo_detalhe_estrutura"}   # CAMP-FICHA 25/11/2026: tipo "Detalhe / Estrutura" na lista (decisão do Rafael; migração 261)
@@ -14530,6 +14531,89 @@ def filho(modo):
             and le.post(f"/api/projetos/{P}/guardar-em", json={"itens": [F[0]], "novo_tubo": True}).status_code == 403)
         for l in res: print(l)
 
+    elif modo == "autorizados_entrega":
+        # CAMP-ENTREGA (26/11/2026), itens autorizados pelo Rafael no quiz da revisão de usabilidade. QNAP, Sender e site FALSOS (nada sai).
+        # [3] reenviar um pedido com valor NOVO cancela sozinha a cobrança anterior ainda em aberto (depois que o e-mail novo sai); falha no
+        #     cancelamento não desfaz o envio: avisa e fica no histórico.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth, entrega, cobrancas
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        base = _P(tempfile.mkdtemp(prefix="aut_", dir=os.environ.get("TMPDIR") or None))
+        os.environ["CAMP_ENTREGAS_DIR"] = str(base / "entregas")
+        raiz = base / "ACERVOS_CAMP"; rel = "F001 - ARM/01 - Projetos/F001-P0001 - Residência/TIF"; pj = raiz / rel; pj.mkdir(parents=True)
+        P = "F001-P0001"; F = [f"{P}-1965-S01-D0000{n}" for n in range(1, 3)]
+        for cod in F:
+            Image.new("RGB", (300, 200), (10, 20, 30)).save(pj / f"{cod}.tif", "TIFF")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        for k, v in (("painel.url", "https://painel.exemplo"), ("sender.token", "tok-falso-123"), ("sender.campanha_entrega", "TR09abc"),
+                     ("entrega.canal", "sender"), ("wp.app_password", "abcd efgh ijkl"), ("entrega.preco_comercial_folha", "150")):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES (?,?)", (k, v))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (P, "F001", 1, "Residência"))
+        for n, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif) VALUES (?,?,?,?,?,?,?)",
+                      (cod, P, "S01", n, f"Planta {n}", "campvision", f"{rel}/{cod}.tif"))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-admin-12345"})
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        ENV = []
+        entrega._enviar_sender = lambda con, para, nome, variaveis, chave_campanha="sender.campanha_entrega": (ENV.append({"para": para, "v": variaveis, "campanha": chave_campanha}), "email-1")[1]
+        SITE, FALHA_CANCELAR = [], [False]
+        class _R:
+            def __init__(s_, code, d): s_.status_code, s_._d = code, d
+            def json(s_): return s_._d
+        class _H:
+            def post(s_, path, json=None):
+                SITE.append((path, json))
+                if (json or {}).get("acao") == "cancelar":
+                    if FALHA_CANCELAR[0]:
+                        return _R(502, {"message": "site fora do ar"})
+                    return _R(200, {"registro": {"situacao": "cancelada"}, "mp_expirou": True})
+                n = 900 + len(SITE)
+                return _R(200, {"registro": {"id": n, "link": f"https://mp.exemplo/pagar/{n}", "external_reference": f"CAMP-COB-{n}", "situacao": "aberta", "mp": {"statement_descriptor": "CAMP SERVICO"}}})
+        class _WP: h = _H()
+        cobrancas._wp = lambda: _WP()
+        def pedido(nome, email):
+            return adm.post(f"/api/projetos/{P}/originais/pedido", json={"nome": nome, "email": email, "finalidade": "publicacao", "folhas": F, "formato": "tif"}).json()["id"]
+        _com = lambda valor: {"cobranca": {"modo": "com", "motivo": "comercial", "texto": "livro à venda", "valor": valor, "liberar_apos_pagamento": True}}
+        def com(valor):   # reenviar = o pedido volta a "em preparação" (a equipe muda a situação) e sai de novo com o valor escolhido
+            c.execute("UPDATE solicitacao SET situacao='em_preparacao' WHERE situacao='entregue'"); c.commit(); return _com(valor)
+        S1 = pedido("Carla Lima", "carla@editora.exemplo")
+        r1 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(300)); c1 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        r2 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(450)); c2 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        ver("[3] reenviar com valor novo: cobrança nova (R$ 450) e a anterior (R$ 300) cancelada no site (link expirado)", r1.status_code == 200 and r2.status_code == 200
+            and c1 and c2 and c1 != c2 and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c1)[0] == "cancelada" and um("SELECT valor, situacao FROM cobranca_avulsa WHERE id=?", c2) == (450.0, "aberta")
+            and any((j or {}).get("acao") == "cancelar" for _, j in SITE), f"{r2.status_code} {r2.text[:200]} {c1} {c2}")
+        ver("[3] a resposta diz que a anterior foi cancelada; histórico do pedido e da cobrança", (r2.json().get("cobranca") or {}).get("anterior_cancelada") == c1
+            and um("SELECT 1 FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='cobranca_anterior_cancelada'", str(S1))
+            and "substituída pela cobrança" in (um("SELECT detalhe FROM evento WHERE entidade='cobranca_avulsa' AND codigo=? AND tipo='cancelado'", str(c1)) or [""])[0], r2.text[:300])
+        n_site = len(SITE)
+        r3 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(450))
+        ver("[3] reenviar com o MESMO valor: usa a mesma cobrança, nada é cancelado", r3.status_code == 200 and um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0] == c2
+            and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c2)[0] == "aberta" and not any((j or {}).get("acao") == "cancelar" for _, j in SITE[n_site:]))
+        c.execute("UPDATE cobranca_avulsa SET situacao='paga' WHERE id=?", (c2,)); c.commit(); n_site = len(SITE)
+        r4 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(600)); c4 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        ver("[3] a anterior já paga nunca é cancelada", r4.status_code == 200 and c4 != c2 and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c2)[0] == "paga"
+            and not any((j or {}).get("acao") == "cancelar" for _, j in SITE[n_site:]), r4.text[:200])
+        FALHA_CANCELAR[0] = True
+        r5 = adm.post(f"/api/solicitacoes/{S1}/enviar", json=com(700)); c5 = um("SELECT cobranca_id FROM solicitacao WHERE id=?", S1)[0]
+        ver("[3] cancelar falhou: o envio vale (cobrança nova), a anterior fica aberta, aviso na resposta e no histórico", r5.status_code == 200 and c5 != c4
+            and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c4)[0] == "aberta" and "não foi cancelada" in (r5.json().get("aviso_cobranca") or "")
+            and um("SELECT 1 FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='cobranca_anterior_nao_cancelada'", str(S1)), r5.text[:300])
+        FALHA_CANCELAR[0] = False
+        ver("[3] Cancelar à mão (Cobranças avulsas) continua igual", adm.post(f"/api/cobrancas/{c4}/cancelar").status_code == 200 and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c4)[0] == "cancelada")
+        c.close()
+        for l in res: print(l)
+
     elif modo == "entrega_original_cobranca":
         # CAMP-ENTREGA (25/11/2026). Rafael: "Dentro de um projeto, no painel preciso conseguir baixar o arquivo em TIFF em alguma aba, ou o seu
         # original em alta. Além disso, caso alguém solicite acesso a algum, fazer uma resposta para download com link temporário e uma
@@ -26405,6 +26489,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX · Público: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 7, "UX · Público: todas as verificações rodaram")
+
+print("Entrega · itens autorizados (26/11): cobrança anterior cancelada no reenvio; layout próprio no Sender")
+rc, out = rodar("autorizados_entrega", f"{tmp}/autorizados_entrega.db")
+if rc != 0: ok(False, f"teste autorizados_entrega não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega · autorizados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Entrega · autorizados: todas as verificações rodaram")
 
 print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
 rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")
