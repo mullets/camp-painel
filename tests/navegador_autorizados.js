@@ -109,6 +109,30 @@ async function entrar(br, w, h) {
     chk(!pg.erros.length, '[4] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
     await pg.close();
   }
+  if (roda('5')) {
+    const pg = await entrar(br, 1440, 900);
+    const cfg = v => pg.evaluate(v => fetch('/api/config/exportacao_pdf.aviso_gb', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valor: v }) }).then(r => r.status), v);
+    let tarefas = 0; await pg.route('**/api/projetos/*/exportar-pdf?tarefa=1', r => { tarefas++; r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 1, situacao: 'concluida', resultado: {} }) }); });
+    await pg.route('**/api/projetos/*/exportar-pdf', r => { if (r.request().url().includes('estimar')) return r.continue(); tarefas++; r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ arquivo: '' }) }); });
+    chk(await cfg('0.0000001') === 200, '[5] limite do aviso baixado só para o teste (exportacao_pdf.aviso_gb)');
+    const exportar = async () => {
+      await pg.goto(BASE + '/#projeto/F026-P0001'); await pg.waitForSelector('#pd', { timeout: 15000 }); await pg.waitForTimeout(1500);
+      await pg.evaluate(() => { pjExportar([]); }); await pg.waitForSelector('#conf-ov input[name="pex-oq"]', { timeout: 10000 });
+      await pg.check('#conf-ov input[name="pex-oq"][value="todas"]'); await pg.check('#conf-ov input[name="pex-fmt"][value="pdf"]'); await pg.waitForTimeout(900);
+      await pg.click('#conf-ov [data-conf="sim"]'); await pg.waitForTimeout(1200);
+      return pg.evaluate(() => { const o = document.getElementById('conf-ov'); return o ? o.textContent : ''; });
+    };
+    const t1 = await exportar();
+    chk(/PDF grande/.test(t1) && /O PDF deve ficar com cerca de [0-9,.]+ (GB|MB|KB)\. Gerar mesmo assim\?/.test(t1), `[5] acima do limite: pede confirmação com o tamanho (${t1.replace(/\s+/g, ' ').slice(0, 120)})`);
+    await pg.screenshot({ path: PRINTS + '/pdf-grande-1440.png' });
+    await pg.click('#conf-ov [data-conf="nao"]'); await pg.waitForTimeout(600);
+    chk(tarefas === 0, `[5] "Cancelar" no aviso: o PDF não começa (${tarefas})`);
+    chk(await cfg('2') === 200, '[5] limite de volta a 2 GB');
+    const t2 = await exportar();
+    chk(!/PDF grande/.test(t2) && tarefas === 1, `[5] abaixo do limite: começa sem perguntar (${tarefas})`);
+    chk(!pg.erros.length, '[5] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
+    await pg.close();
+  }
   await br.close();
   console.log(problemas.length ? `\n${problemas.length} FALHA(S)` : '\nTUDO OK');
   process.exit(problemas.length ? 1 : 0);

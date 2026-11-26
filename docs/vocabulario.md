@@ -904,3 +904,6 @@ comercial"), {{valor}}, {{link_pagamento}}, {{justificativa}}, {{liberacao}} ("o
 {{mensagem}} (só o recado da equipe). Sem ID: "Sem ID: o e-mail com cobrança sai pelo TR09." (a cobrança dentro de {{mensagem}}, como antes).
 Reenviar um pedido com valor novo cancela sozinha a cobrança anterior em aberto (aviso: "A cobrança anterior em aberto foi cancelada."; se falhar:
 "O e-mail saiu com a cobrança nova, mas a anterior (nº N) não foi cancelada: … Cancele em Cobranças avulsas.").
+
+**PDF grande** (CAMP-PROJETO, 26/11/2026): antes de montar o PDF dos TIFF, se o tamanho estimado passar de `exportacao_pdf.aviso_gb` (2 GB), o
+diálogo **PDF grande** diz "O PDF deve ficar com cerca de X GB. Gerar mesmo assim?" com **Cancelar** e **Gerar mesmo assim**.

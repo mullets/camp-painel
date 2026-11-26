@@ -14640,6 +14640,12 @@ def filho(modo):
         ver("[4] sem cobrança: continua pelo TR09 mesmo com o ID preenchido", ENV[-1]["campanha"] == "sender.campanha_entrega" and "Sem cobrança" in ENV[-1]["v"]["mensagem"])
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("[4] tela: bloco 'Entrega com cobrança (modelo do painel)' em Modelos do Sender", "Entrega com cobrança (modelo do painel)" in html and "/api/emails-site/painel/entrega-cobranca" in html)
+        # [5] PDF dos TIFF: a estimativa traz o limite do aviso (exportacao_pdf.aviso_gb, padrão 2 GB); a tela pede confirmação acima dele
+        e = adm.post(f"/api/projetos/{P}/exportar-pdf/estimar", json={"todas": True}); ej = e.json() if e.status_code == 200 else {}
+        ver("[5] estimativa do PDF com o limite do aviso (2 GB por padrão)", ej.get("aviso_bytes") == 2 * 1024 ** 3 and ej.get("bytes_estimados", 0) > 0, str(ej)[:200])
+        c.execute("UPDATE configuracao SET valor='0,5' WHERE chave='exportacao_pdf.aviso_gb'"); c.commit()
+        ver("[5] o limite muda pela configuração (0,5 GB)", adm.post(f"/api/projetos/{P}/exportar-pdf/estimar", json={"todas": True}).json().get("aviso_bytes") == 512 * 1024 ** 2)
+        ver("[5] tela: 'O PDF deve ficar com cerca de … Gerar mesmo assim?' antes de começar", "Gerar mesmo assim?" in html and "pexConfirmarGrande(code,b.corpo)" in html)
         c.close()
         for l in res: print(l)
 
@@ -26526,7 +26532,7 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega · autorizados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 13, "Entrega · autorizados: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 16, "Entrega · autorizados: todas as verificações rodaram")
 
 print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
 rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")
