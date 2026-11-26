@@ -2220,7 +2220,8 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 @container pjpg (min-width:1020px){
   .pj-vg[data-pj-vista="itens"]{grid-template-columns:minmax(0,1fr) minmax(280px,330px);grid-template-areas:"st lado" "corpo lado"}
   .pj-vg[data-pj-vista="itens"] .pj-vg-lado .pj-cards{grid-template-columns:minmax(0,1fr)}
-  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado{position:sticky;top:12px;max-height:calc(100vh - var(--top-h,64px) - 24px);overflow:auto;overscroll-behavior:contain;padding-right:2px}
+  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado{align-self:start}
+  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado.pj-lado-fixa{position:sticky;top:12px}   /* CAMP-UX (Rafael, 26/11): a coluna não rola mais por dentro (o fim, "Ver requisitos", ficava escondido); fixa ao rolar só quando cabe inteira na tela (pjLadoAjustar) */
 }
 .pj-dados-grade{margin-bottom:var(--sp-4)}
 /* conferência dentro do Próximo passo (§3.3) */
@@ -13594,6 +13595,11 @@ function garantirAjudaNoTitulo(){const h=document.querySelector('.content.on:not
 renderFundos();renderLabel();instalarExportacoes();route_to(rotaAtual());checarSessao();
 
 // A janela lateral começa logo ABAIXO da barra fixa do topo (que inclui a faixa de saúde do sistema); antes o cabeçalho e o botão de fechar ficavam escondidos atrás dela
+/* CAMP-UX (26/11/2026): "Situação do projeto" acompanha a rolagem (sticky) só quando cabe inteira na área visível do .main; senão segue o
+   fluxo normal da página e todo o conteúdo dela é alcançado rolando a tela (nada de rolagem interna escondendo o fim). */
+function pjLadoAjustar(){const l=document.querySelector('.pj-vg[data-pj-vista="itens"]>.pj-vg-lado');if(!l||l.hidden)return;const sc=l.closest('.main');const disp=(sc?sc.clientHeight:innerHeight)-24;l.classList.toggle('pj-lado-fixa',l.scrollHeight<=disp)}
+(function(){let ro=null,obs=null;const ligar=()=>{const l=document.querySelector('.pj-vg[data-pj-vista="itens"]>.pj-vg-lado');if(window.ResizeObserver){if(!ro)ro=new ResizeObserver(()=>pjLadoAjustar());ro.disconnect();if(l)ro.observe(l)}pjLadoAjustar()};
+  window.addEventListener('resize',pjLadoAjustar);const pd=document.getElementById('pd');if(pd&&window.MutationObserver){obs=new MutationObserver(ligar);obs.observe(pd,{childList:true,subtree:false})}})();
 (function(){const t=document.querySelector('.top');if(!t)return;const set=()=>document.documentElement.style.setProperty('--top-h',t.offsetHeight+'px');set();if(window.ResizeObserver)new ResizeObserver(set).observe(t);window.addEventListener('resize',set)})();
 
 (function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();marcarTermosTela();normalizarPlurais(document.body);a11yPreparar();a11yLinhas()},80)}).observe(document.body,{childList:true,subtree:true})})();
