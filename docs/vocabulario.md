@@ -889,3 +889,10 @@ histórico de cada folha.", **Aplicar**), **Tirar escritório…** (janela **Tir
 de N folhas (M não têm)", **Tirar**) e **Definir tipo…** (janela **Definir tipo**: **Substituir** / **Acrescentar** / **Tirar**, os tipos,
 "Vai mudar N folhas" com antes → depois, **Aplicar**). Disciplina é agrupamento: as séries S01–S08/S99 não mudam. Dizer "escritório
 parceiro" e "disciplina" (nunca "consultoria" no lugar de disciplina, nem "categoria").
+
+**Revisão de usabilidade — Público e processos** (CAMP-UX, 26/11/2026): nos pedidos de alta resolução a finalidade aparece pelo rótulo
+(**Pesquisa**, **Publicação**, **Editorial**, **Exposição**, **Família**, **Outro**), nunca o valor interno. No Amigo ainda sem cobrança, o campo
+**Situação** do bloco **Alterar** mostra **sem situação (ainda sem cobrança)**; "Todos" conta todos os da lista. Em Ingressos, a ajuda da
+referência é o botão **referência no Mercado Pago** (o "?" do título é a ajuda da tela). Em Cobranças avulsas, os filtros de data dizem
+**criadas de** e **até**. Doação ou patrocínio sem data de recebimento: **sem data**. A trilha de Ingressos, Cobranças avulsas, Doações de acervo
+e Patrocínios mostra o grupo **Público e processos**; tela sem permissão: **Sem acesso** na trilha (não "Não encontrado").
