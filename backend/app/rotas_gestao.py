@@ -607,7 +607,13 @@ def _medir_site(url: str) -> dict:
         res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado, "medido": "pagina_publica"}
     except Exception as e:  # noqa: BLE001
         res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta", "medido": "pagina_publica"}
-    if res["status"] is not None and res["status"] < 500:          # a API do site (o que o painel usa para publicar), só quando a página respondeu
+    from . import portao_site                                      # CAMP-SITE-CARGA: página pública sem resposta = site sobrecarregado: pausa os envios
+    if res["estado"] == "sem_resposta":
+        portao_site.registrar_falha("a página pública não respondeu" if res.get("status") is None else f"a página pública respondeu {res['status']}")
+    res["envios_site"] = portao_site.estado()
+    if res["envios_site"]["disjuntor_aberto"]:
+        res["api"] = {"status": None, "pausado": True}             # não toca a API (não fica em cache, pesa no site) enquanto o disjuntor está aberto
+    elif res["status"] is not None and res["status"] < 500:          # a API do site (o que o painel usa para publicar), só quando a página respondeu
         m0 = time.monotonic()
         try:
             ra = httpx.get(url + "/wp-json/", timeout=15, follow_redirects=True)
@@ -902,3 +908,41 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
                "quem": grupos_quem}
     con.close()
     return {"total": total, "pagina": pagina, "por_pagina": por, "eventos": [dict(r) for r in rows], "facetas": facetas}
+
+
+# ---- CAMP-SITE-CARGA (26/11/2026): envios ao site em série, com pausa e disjuntor (portao_site.py) ----
+def _gravar_pausa_manual(valor: str, quem: str) -> None:
+    con = connect()
+    try:
+        con.execute("""INSERT INTO configuracao (chave, valor, descricao, sensivel) VALUES ('site.envios_pausados', ?, '1 = envios ao site pausados à mão', 0)
+                       ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor""", (valor,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('site', 'envios', ?, ?, NULL)",
+                    ("envios_site_pausados" if valor == "1" else "envios_site_retomados", quem))
+        con.commit()
+    finally:
+        con.close()
+
+
+@router.get("/site/envios")
+def site_envios(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Fila dos envios ao site, disjuntor (pausado até HH:MM e por quê) e pausa manual."""
+    from . import portao_site
+    return portao_site.estado()
+
+
+@router.post("/site/envios/pausar")
+def site_envios_pausar(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Pausar envios ao site: as escritas esperam até Retomar (as pendências ficam; leituras seguem)."""
+    from . import portao_site
+    _gravar_pausa_manual("1", u["email"])
+    portao_site.esquecer_cfg()
+    return portao_site.estado()
+
+
+@router.post("/site/envios/retomar")
+def site_envios_retomar(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Retomar agora: desliga a pausa manual e fecha o disjuntor (o próximo envio vai na hora; se o site falhar de novo, ele reabre)."""
+    from . import portao_site
+    _gravar_pausa_manual("0", u["email"])
+    portao_site.retomar()
+    return portao_site.estado()

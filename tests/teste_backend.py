@@ -88,6 +88,7 @@ MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sinc
 MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
 MODOS_RAPIDOS |= {"tipo_detalhe_estrutura"}   # CAMP-FICHA 25/11/2026: tipo "Detalhe / Estrutura" na lista (decisão do Rafael; migração 261)
 MODOS_RAPIDOS |= {"parceiros_do_projeto"}   # CAMP-FICHA 25/11/2026: sugerir escritórios das outras folhas do projeto; cliente lido que parece escritório (navegador: tests/navegador_sugerir_escritorios.js)
+MODOS_RAPIDOS |= {"site_envio_em_serie"}   # CAMP-SITE-CARGA 26/11/2026: envios ao site um de cada vez, com pausa, disjuntor, pausa manual e envios juntados
 MODOS_RAPIDOS |= {"financeiro_tela_branca"}   # CAMP-FIN-CONSERTOS 24/11/2026: clicar numa receita deixava a tela inteira branca (camada fixa esquecida); estado no endereço; linha própria
 MODOS_RAPIDOS |= {"financeiro_saidas_mp"}   # CAMP-FIN-CONSERTOS 24/11/2026: saídas do Mercado Pago visíveis (Pix enviado, Pagamento com Pix, boleto, cartão, saque; Extrato CSV; situação, erro, Buscar agora, Configurar relatório; linha própria)
 MODOS_RAPIDOS |= {"financeiro_mp_livro"}   # CAMP-FIN 24/11/2026: o livro da conta (relatório de liberações + Extrato, com sinal) decide entrada/saída; VINDI −1.707,34; −472,24 exato; liberações não são receita nova (linha própria)
@@ -103,7 +104,7 @@ def rodar(modo, db):
         return 0, ""
     if (modo, db) in _ADIANTADOS:
         return _ADIANTADOS.pop((modo, db))
-    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_TMP_PRONTOS=os.environ.get("CAMP_TMP_PRONTOS") or str(pathlib.Path(db).parent / "prontos"), CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
+    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_TMP_PRONTOS=os.environ.get("CAMP_TMP_PRONTOS") or str(pathlib.Path(db).parent / "prontos"), CAMP_COOKIE_SECURE="false", CAMP_SITE_PAUSA_MS=os.environ.get("CAMP_SITE_PAUSA_MS", "0"), CAMP_SITE_DISJUNTOR=os.environ.get("CAMP_SITE_DISJUNTOR", "0"), PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
     r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
@@ -21251,6 +21252,124 @@ def filho(modo):
         ver("botões das saídas com a mesma largura e a mesma borda direita", ".fin-fontes li{display:grid;grid-template-columns:minmax(0,1fr) auto" in html and "min-width:190px" in html)
         for l in res: print(l)
 
+    elif modo == "site_envio_em_serie":
+        # CAMP-SITE-CARGA (26/11/2026). Site fora do ar: o plano tem 3 processos PHP e o painel mandava várias edições de fichas ao mesmo
+        # tempo (um envio em segundo plano por "salvar"; "Definir tipo" em N folhas = N envios do projeto inteiro). Site FALSO (MockTransport).
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import threading as _th, time as _t, httpx as _hx
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        try:
+            from app import portao_site as ps
+        except ImportError as e:
+            ver("módulo do portão do site existe", False, e); [print(l) for l in res]; raise SystemExit(0)
+        from app import wp as wpm, alteracoes_site as als, disciplina_site as dss
+        c = connect()
+        cfg = dict(c.execute("SELECT chave, valor FROM configuracao WHERE chave LIKE 'site.%'").fetchall())
+        ver("migração: pausa 5000 ms, espera 120 s a 1800 s, lote 25, pausa manual desligada",
+            cfg.get("site.envio_pausa_ms") == "5000" and cfg.get("site.backoff_inicio_s") == "120" and cfg.get("site.backoff_max_s") == "1800"
+            and cfg.get("site.envio_lote") == "25" and cfg.get("site.envios_pausados") == "0", cfg)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='site.backoff_inicio_s'"); c.execute("UPDATE configuracao SET valor='4' WHERE chave='site.backoff_max_s'"); c.commit()
+        os.environ["CAMP_SITE_PAUSA_MS"] = "200"; os.environ["CAMP_SITE_DISJUNTOR"] = "1"; ps.esquecer_cfg(); ps.retomar()
+        est = {"agora": 0, "max": 0, "inicios": [], "status": 200, "chamadas": 0}
+        trava = _th.Lock()
+        def site(req):
+            with trava:
+                est["agora"] += 1; est["max"] = max(est["max"], est["agora"]); est["chamadas"] += 1
+                if req.method != "GET": est["inicios"].append(_t.monotonic())
+            _t.sleep(0.05)
+            with trava: est["agora"] -= 1
+            return _hx.Response(est["status"], json={"ok": True})
+        cli = _hx.Client(base_url="https://site.falso", transport=ps.TransporteSite(_hx.MockTransport(site)))
+        ws = [_th.Thread(target=lambda i=i: cli.patch(f"/wp-json/tainacan/v2/items/{i}", json={"x": i})) for i in range(6)]
+        [w.start() for w in ws]; [w.join() for w in ws]
+        gaps = [b - a for a, b in zip(est["inicios"], est["inicios"][1:])]
+        ver("6 edições ao mesmo tempo: no máximo 1 requisição de escrita por vez no site", est["max"] == 1 and len(est["inicios"]) == 6, est)
+        ver("pausa mínima entre dois envios respeitada (200 ms no teste)", gaps and min(gaps) >= 0.19, [round(g, 3) for g in gaps])
+        t0 = _t.monotonic(); cli.get("/wp-json/"); ver("leitura não espera a pausa das escritas", _t.monotonic() - t0 < 0.15)
+        est["status"] = 503; n0 = est["chamadas"]
+        r = cli.patch("/wp-json/tainacan/v2/items/9", json={})
+        e1 = ps.estado()
+        ver("site respondeu 503: disjuntor abre, com o motivo", r.status_code == 503 and e1["disjuntor_aberto"] and "503" in e1["motivo"] and e1["pausado_ate_hhmm"], e1)
+        try:
+            cli.patch("/wp-json/tainacan/v2/items/10", json={}); pausou = False; erro = None
+        except ps.SitePausado as e:
+            pausou, erro = True, e
+        ver("disjuntor aberto: a escrita seguinte NÃO vai ao site (SitePausado), sem retentativa curta", pausou and est["chamadas"] == n0 + 1 and "pausados até" in str(erro), str(erro))
+        try:
+            cli.get("/wp-json/"); leu = True
+        except ps.SitePausado:
+            leu = False
+        ver("disjuntor aberto: leituras (conferência com o site) também esperam", not leu and est["chamadas"] == n0 + 1)
+        ver("SitePausado conta como erro passageiro (a pendência fica, o coletor tenta depois)", wpm.erro_passageiro(erro))
+        _t.sleep(1.05); est["status"] = 503
+        cli.patch("/wp-json/tainacan/v2/items/11", json={}); e2 = ps.estado()
+        ver("segunda falha seguida: a espera dobra (1 s → 2 s no teste)", e2["falhas_seguidas"] == 2, e2)
+        _t.sleep(2.05); est["status"] = 200
+        r = cli.patch("/wp-json/tainacan/v2/items/12", json={}); e3 = ps.estado()
+        ver("passada a espera e o site bom: envia e o disjuntor fecha", r.status_code == 200 and not e3["disjuntor_aberto"] and e3["falhas_seguidas"] == 0, e3)
+        def tempo_esgotado(req): raise _hx.ReadTimeout("timed out", request=req)
+        cli2 = _hx.Client(base_url="https://site.falso", transport=ps.TransporteSite(_hx.MockTransport(tempo_esgotado)))
+        try: cli2.patch("/x", json={})
+        except _hx.ReadTimeout: pass
+        ver("tempo esgotado também abre o disjuntor", ps.estado()["disjuntor_aberto"] and "tempo" in ps.estado()["motivo"], ps.estado())
+        ps.retomar()
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='site.envios_pausados'"); c.commit(); ps.esquecer_cfg()
+        try: cli.patch("/x", json={}); manual = False
+        except ps.SitePausado as e: manual = "Máquinas" in str(e)
+        ver("pausa manual (Máquinas): escritas seguram; leituras seguem", manual and cli.get("/wp-json/").status_code == 200)
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        g = x.get("/api/site/envios").json()
+        ver("GET /api/site/envios mostra a pausa manual", g.get("pausa_manual") is True, g)
+        rr = x.post("/api/site/envios/retomar").json(); ps.esquecer_cfg()
+        val = c.execute("SELECT valor FROM configuracao WHERE chave='site.envios_pausados'").fetchone()[0]
+        ver("Retomar agora: desliga a pausa manual e fecha o disjuntor", rr.get("pausa_manual") is False and not rr.get("disjuntor_aberto") and val == "0", (rr, val))
+        rp = x.post("/api/site/envios/pausar").json()
+        ver("Pausar envios ao site (admin) liga a pausa manual", rp.get("pausa_manual") is True, rp)
+        x.post("/api/site/envios/retomar")
+        chamadas = []
+        def enviar_falso(pj, ator, cs): chamadas.append(list(cs)); _t.sleep(0.3); return {}
+        als.enviar, enviar_orig = enviar_falso, als.enviar
+        als.enviar_sozinho, sozinho_orig = (lambda: True), als.enviar_sozinho
+        t1 = _th.Thread(target=als.enviar_folhas_agora, args=(["F001-P0001-1970-S01-D00001"], "teste")); t1.start(); _t.sleep(0.05)
+        outros = [_th.Thread(target=als.enviar_folhas_agora, args=([f"F001-P0001-1970-S01-D0000{i}"], "teste")) for i in (2, 3, 2, 4)]
+        [w.start() for w in outros]; [w.join() for w in outros]; t1.join()
+        als.enviar, als.enviar_sozinho = enviar_orig, sozinho_orig
+        ver("5 'salvar' seguidos no mesmo projeto: 2 envios (o primeiro e um com as outras juntas, sem repetir a mesma folha)",
+            len(chamadas) == 2 and sorted(chamadas[1]) == ["F001-P0001-1970-S01-D00002", "F001-P0001-1970-S01-D00003", "F001-P0001-1970-S01-D00004"], chamadas)
+        dchamadas = []
+        dss.enviar, denv_orig = (lambda pj, ator: (dchamadas.append(pj), _t.sleep(0.3))), dss.enviar
+        als.enviar_sozinho = lambda: True
+        ws = [_th.Thread(target=dss.enviar_depois, args=("F001-P0001", "teste")) for _ in range(10)]
+        [w.start() for w in ws]; [w.join() for w in ws]
+        dss.enviar, als.enviar_sozinho = denv_orig, sozinho_orig
+        ver("'Definir tipo' em 10 folhas: no máximo 2 envios da disciplina do projeto (eram 10)", 1 <= len(dchamadas) <= 2, len(dchamadas))
+        class WPF:
+            def __init__(s): s.tam = []
+            def gravar_disciplinas_folhas(s, dossie, folhas): s.tam.append(len(folhas)); return {"ok": True, "gravados": list(folhas)}
+        wf = WPF(); out = dss._enviar(wf, 99, {str(i): {"disciplina": "Estrutura"} for i in range(60)})
+        ver("disciplina das folhas em lotes de 25 (60 folhas = 25 + 25 + 10)", wf.tam == [25, 25, 10] and len(out["gravados"]) == 60, wf.tam)
+        from app import rotas_gestao as rg
+        get_orig = _hx.get; chamadas_api = []
+        def get_falso(url, **k):
+            chamadas_api.append(url)
+            return _hx.Response(503, request=_hx.Request("GET", url))
+        _hx.get = get_falso
+        try:
+            ps.retomar(); m = rg._medir_site("https://site.falso")
+        finally:
+            _hx.get = get_orig
+        ver("página pública com 503: envios pausam e a API do site não é consultada", m["estado"] == "sem_resposta" and m["envios_site"]["disjuntor_aberto"]
+            and not any("wp-json" in u for u in chamadas_api), (m, chamadas_api))
+        ps.retomar()
+        src = (RAIZ / "backend" / "app" / "wp.py").read_text(encoding="utf-8")
+        ver("o cliente do site (wp.WP) usa o portão", "transport=TransporteSite()" in src)
+        for l in res: print(l)
+
     elif modo == "financeiro_tela_branca":
         # CAMP-FIN-CONSERTOS (24/11/2026). Rafael: "em qualquer aba, se eu clico num item pra ter infos dele, simplesmente fica tudo branco".
         # Causa: o painel lateral da receita tinha um <div class="fin-fila"> esquecido e ".fin-fila" era a camada FIXA de tela inteira da fila
@@ -26633,6 +26752,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ficha · parceiros do projeto: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Ficha · parceiros do projeto: todas as verificações rodaram")
+
+print("Site · envios em série (um de cada vez, pausa, disjuntor, pausa manual, envios juntados, lotes)")
+rc, out = rodar("site_envio_em_serie", f"{tmp}/site_envio_em_serie.db")
+if rc != 0: ok(False, f"teste site_envio_em_serie não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Site · envios em série: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Site · envios em série: todas as verificações rodaram")
 
 print("Financeiro · saída do Mercado Pago sem direção (Pix a empresa, Pix enviado, cartão) não é receita")
 rc, out = rodar("financeiro_mp_saida_sem_direcao", f"{tmp}/financeiro_mp_saida_sem_direcao.db")

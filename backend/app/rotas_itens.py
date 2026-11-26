@@ -341,7 +341,7 @@ def tipos_em_lote(projeto: str, d: TiposLote, tarefas: BackgroundTasks, u: dict 
             raise HTTPException(400, "Escolha pelo menos um tipo")
         q = ",".join("?" * len(alvo))
         linhas = {r["codigo"]: r for r in con.execute(
-            f"SELECT codigo, tipo_documento, tipos_documento FROM item WHERE projeto_codigo=? AND codigo IN ({q})", (projeto, *alvo))}
+            f"SELECT codigo, tipo_documento, tipos_documento, tainacan_item_id FROM item WHERE projeto_codigo=? AND codigo IN ({q})", (projeto, *alvo))}
     finally:
         con.close()
     mudam, ja, fora = [], [], []
@@ -368,4 +368,6 @@ def tipos_em_lote(projeto: str, d: TiposLote, tarefas: BackgroundTasks, u: dict 
             feitas.append(m)
         except HTTPException as e:
             erros.append({"codigo": m["codigo"], "motivo": str(e.detail)[:200]})
-    return {"ok": not erros, "simulado": False, "modo": d.modo, "tipos": tipos, "mudaram": feitas, "ja_estavam": ja, "fora": fora, "erros": erros}
+    no_site = sum(1 for m in feitas if (linhas.get(m["codigo"]) or {}) and linhas[m["codigo"]]["tainacan_item_id"])
+    return {"ok": not erros, "simulado": False, "modo": d.modo, "tipos": tipos, "mudaram": feitas, "ja_estavam": ja, "fora": fora, "erros": erros,
+            "na_fila_site": no_site}   # CAMP-SITE-CARGA: as do site vão em segundo plano, uma de cada vez (portao_site.py)
