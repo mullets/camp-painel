@@ -512,7 +512,7 @@ def registrar_pagamento(con, aid: int, data_pg: str, valor: float, meio: str, no
 def mudar(con, aid: int, campos: dict, ator: str) -> dict:
     r = _um(con, aid)
     upd, pend, mud = {}, {}, {}
-    if campos.get("situacao") is not None:
+    if campos.get("situacao") not in (None, ""):          # CAMP-UX: vazio = não mexe (Amigo sem situação ainda; antes o formulário mandava "pago")
         s = campos["situacao"]
         if r["tipo"] != "amigo" or s not in SITUACOES:
             raise HTTPException(400, "Situação inválida")
@@ -1444,6 +1444,9 @@ def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | No
         for r in con.execute(f"SELECT {campo} s, COUNT(*) n FROM amigo WHERE {w} GROUP BY {campo}", vals):
             if r["s"] in resumo:
                 resumo[r["s"]] = r["n"]
+        # CAMP-UX (26/11/2026): "Todos" é o total da lista, inclusive quem ainda não tem situação de pagamento (pré-adesão, sem cobrança);
+        # antes a tela somava só as situações e mostrava "Todos 4" com 6 registros na lista.
+        resumo["todos"] = con.execute(f"SELECT COUNT(*) FROM amigo WHERE {w}", vals).fetchone()[0]
         rep = repetidos(con) if aba == "amigos" else {}
         if aba == "amigos":
             w_i, vals_i = _filtro(aba, INATIVOS, categoria, ano, vencendo, q)
