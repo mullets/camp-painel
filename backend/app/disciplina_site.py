@@ -65,13 +65,21 @@ def marcar(con, projeto: str) -> bool:
 
 
 def _enviar(wp, dossie: int, folhas: dict) -> dict:
-    r = wp.gravar_disciplinas_folhas(dossie, folhas)
-    if r is None:
-        raise RuntimeError(SEM_ROTA)
-    erros = r.get("erros") or []
-    if erros or not r.get("ok", False):
-        raise RuntimeError("O site não confirmou a separação por disciplina: " + json.dumps(erros, ensure_ascii=False)[:200])
-    return r
+    """CAMP-SITE-CARGA: em lotes de `site.envio_lote` folhas (padrão 25), um lote por requisição (o portão do site espaça)."""
+    from .portao_site import lote
+    tam = lote()
+    itens = list(folhas.items())
+    gravados: list = []
+    r: dict = {"ok": True}
+    for i in range(0, len(itens), tam):
+        r = wp.gravar_disciplinas_folhas(dossie, dict(itens[i:i + tam]))
+        if r is None:
+            raise RuntimeError(SEM_ROTA)
+        erros = r.get("erros") or []
+        if erros or not r.get("ok", False):
+            raise RuntimeError("O site não confirmou a separação por disciplina: " + json.dumps(erros, ensure_ascii=False)[:200])
+        gravados += list(r.get("gravados") or [])
+    return {**r, "gravados": gravados}
 
 
 def enviar(projeto: str, ator: str) -> dict:
@@ -114,10 +122,36 @@ def enviar_depois(projeto: str, ator: str) -> None:
     """Segundo plano. Respeita `site.enviar_correcoes_sozinho` (desligado: a pendência espera o reenvio). Nunca levanta."""
     try:
         from .alteracoes_site import enviar_sozinho
-        if enviar_sozinho():
-            enviar(projeto, ator)
+        if not enviar_sozinho():
+            return
+        # CAMP-SITE-CARGA (26/11): "Definir tipo" em 50 folhas criava 50 envios do projeto INTEIRO. Agora pedidos repetidos do mesmo
+        # projeto viram um só: se já há um envio rodando, só marca "de novo" e ele manda o estado mais novo uma vez ao terminar.
+        with _JUNTAR:
+            if projeto in _RODANDO:
+                _DE_NOVO.add(projeto)
+                return
+            _RODANDO.add(projeto)
+        try:
+            while True:
+                enviar(projeto, ator)
+                with _JUNTAR:
+                    if projeto in _DE_NOVO:
+                        _DE_NOVO.discard(projeto)
+                        continue
+                    _RODANDO.discard(projeto)
+                    break
+        except BaseException:
+            with _JUNTAR:
+                _RODANDO.discard(projeto)
+                _DE_NOVO.discard(projeto)
+            raise
     except Exception:  # noqa: BLE001
         pass
+
+
+_JUNTAR = threading.Lock()
+_RODANDO: set = set()
+_DE_NOVO: set = set()
 
 
 def depois_de_editar_folha(codigo: str, ator: str) -> None:

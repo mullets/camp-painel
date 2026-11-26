@@ -20,7 +20,7 @@ RE_CODIGO = re.compile(r"\bF(\d{3})(?:-P(\d{4}))?(?:-(\d{4}))?(?:-S(\d{2}))?(?:-
 # 27/10 (produção, F009-P0131): com o site respondendo em ~3,4 s e 5 folhas ao mesmo tempo, a criação do item passou dos 60 s de leitura
 # ("The read operation timed out") e a folha "NÃO subiu". Leitura/escrita: 90 s (margem para o site sobrecarregado sem esperar para sempre).
 # Conexão: 15 s (site sem resposta falha logo e entra na nova tentativa). O upload da imagem tem o próprio teto (TIMEOUT_UPLOAD).
-TIMEOUT_PADRAO = httpx.Timeout(90.0, connect=15.0)
+TIMEOUT_PADRAO = httpx.Timeout(90.0, connect=15.0)   # CAMP-SITE-CARGA: mantido (requisição cortada continua pesando no site); a carga é controlada pelo portão
 # 27/10 (investigação do site): mudar o status (publicar/despublicar) faz o site limpar o cache INTEIRO dentro da própria requisição;
 # passa fácil dos 60 s com o site lento. 120 s, e num tempo esgotado o painel RELÊ o item antes de dizer que falhou.
 TIMEOUT_STATUS = httpx.Timeout(120.0, connect=15.0)
@@ -98,8 +98,9 @@ class WP:
         if not senha:
             raise RuntimeError("Application Password não configurada (Configurações → wp.app_password ou WP_APP_PASSWORD no .env)")
         tok = base64.b64encode(f"{usuario}:{senha}".encode()).decode()
+        from .portao_site import TransporteSite        # CAMP-SITE-CARGA: escritas uma por vez, com pausa, e disjuntor (portao_site.py)
         self.h = httpx.Client(base_url=self.base, headers={"Authorization": f"Basic {tok}", "User-Agent": "CAMP-Painel/0.3"},
-                              timeout=TIMEOUT_PADRAO, follow_redirects=True)
+                              timeout=TIMEOUT_PADRAO, follow_redirects=True, transport=TransporteSite())
 
     def _get(self, path: str, **params) -> httpx.Response:
         r = self.h.get(path, params=params)

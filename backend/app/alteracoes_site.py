@@ -133,17 +133,39 @@ def enviar_folhas_agora(codigos: list[str], ator: str) -> None:
     continua em "alteradas depois de publicar", com o botão para tentar de novo."""
     if not codigos or not enviar_sozinho():
         return
+    # CAMP-SITE-CARGA (26/11): cada "salvar" criava um envio em segundo plano; várias edições seguidas = várias requisições ao site ao
+    # mesmo tempo. Agora as folhas pedidas entram num conjunto por projeto e UM esvaziador por projeto manda o que juntou (a mesma folha
+    # salva 3 vezes vai uma vez só, com o estado mais novo); o portão do site (portao_site.py) espaça e serializa as requisições.
     por_projeto: dict = {}
     for c in codigos:
-        por_projeto.setdefault(str(c)[:10], []).append(c)
+        por_projeto.setdefault(str(c)[:10], set()).add(c)
     for pj, cs in por_projeto.items():
         with _TRAVA_GERAL:
+            _JUNTAR.setdefault(pj, set()).update(cs)
+            if pj in _ESVAZIANDO:
+                continue                                     # outro esvaziador já vai levar estas folhas
+            _ESVAZIANDO.add(pj)
             trava = _TRAVAS.setdefault(pj, _threading.Lock())
-        with trava:
-            try:
-                enviar(pj, ator, cs)
-            except Exception:  # noqa: BLE001
-                pass
+        try:
+            while True:
+                with _TRAVA_GERAL:
+                    lote = _JUNTAR.pop(pj, set())
+                    if not lote:
+                        _ESVAZIANDO.discard(pj)
+                        break
+                with trava:
+                    try:
+                        enviar(pj, ator, sorted(lote))
+                    except Exception:  # noqa: BLE001
+                        pass
+        except BaseException:
+            with _TRAVA_GERAL:
+                _ESVAZIANDO.discard(pj)
+            raise
+
+
+_JUNTAR: dict = {}           # projeto -> folhas pedidas e ainda não levadas
+_ESVAZIANDO: set = set()     # projetos com um esvaziador rodando
 
 
 def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
