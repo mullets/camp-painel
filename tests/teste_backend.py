@@ -81,6 +81,7 @@ MODOS_RAPIDOS |= {"ficha_escritorios_tipos"}   # CAMP-FICHA 25/11/2026: usar tod
 MODOS_RAPIDOS |= {"estante_tubos_tb001"}   # CAMP-ESTANTE 25/11/2026: tubos no padrão TB001-01 (continuar o grupo, grupo novo, leitor, nomes antigos, renomear simulando)
 MODOS_RAPIDOS |= {"projeto_ordem_pdf_tubos"}   # CAMP-PROJETO/ESTANTE 25/11/2026: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria, tubos (guardar em, mover, faltam guardar)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
+MODOS_RAPIDOS |= {"ux_publico"}   # CAMP-UX 26/11/2026: Amigo sem situação virava "Pago" ao salvar; "Todos" deixava de fora quem não tem situação (navegador: tests/navegador_ux_publico.js)
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
 MODOS_RAPIDOS |= {"tipo_detalhe_estrutura"}   # CAMP-FICHA 25/11/2026: tipo "Detalhe / Estrutura" na lista (decisão do Rafael; migração 261)
@@ -19586,6 +19587,41 @@ def filho(modo):
         ver("projeto sem folha no site: a ordem fica só no painel, sem pendência", r.status_code == 200 and r.json().get("vai_ao_site") is False and pend() is None, r.text[:200])
         for l in res: print(l)
 
+    elif modo == "ux_publico":
+        # CAMP-UX (26/11/2026). Rafael: "Revise a usabilidade de todo painel". Na revisão de Público e processos: (1) o formulário "Alterar" de
+        # um Amigo SEM situação (pré-adesão, ainda sem cobrança) mostrava "Pago" escolhido e mandava situacao="pago" ao salvar qualquer coisa
+        # (uma nota): o Amigo virava pago sem pagamento; (2) "Todos" somava só as situações e mostrava 4 com 6 na lista.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        from fastapi.testclient import TestClient
+        from app import auth, amigos as am
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        am._disparar_envio = lambda *a, **k: None                              # nada vai ao site neste teste
+        c = connect()
+        for i, (nome, sit) in enumerate([("Sem Situação", None), ("Paga", "pago"), ("Pendente", "pendente")]):
+            c.execute("INSERT INTO amigo (site_id, tipo, categoria, modalidade, nome, email, situacao, criado_no_site) VALUES (?, 'amigo', 'amigo', 'anual', ?, ?, ?, '2026-11-20T10:00:00')",
+                      (9100 + i, nome, f"ux{i}@exemplo.org", sit))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        d = x.get("/api/amigos?aba=amigos").json()
+        ver("\"Todos\" conta todos da lista, inclusive sem situação", d["resumo"].get("todos") == len(d["itens"]) == 3, (d["resumo"], len(d["itens"])))
+        sid = c.execute("SELECT id FROM amigo WHERE nome='Sem Situação'").fetchone()[0]
+        r = x.patch(f"/api/amigos/{sid}", json={"situacao": "", "notas": "ligou pedindo o boleto"})
+        a = c.execute("SELECT situacao, notas FROM amigo WHERE id=?", (sid,)).fetchone()
+        ver("salvar uma nota com a situação vazia não muda a situação (não vira pago)", r.status_code == 200 and a["situacao"] is None and a["notas"] == "ligou pedindo o boleto", (r.status_code, dict(a)))
+        r = x.patch(f"/api/amigos/{sid}", json={"situacao": None, "notas": "outra"})
+        ver("situação ausente também não muda", r.status_code == 200 and c.execute("SELECT situacao FROM amigo WHERE id=?", (sid,)).fetchone()[0] is None, r.status_code)
+        r = x.patch(f"/api/amigos/{sid}", json={"situacao": "isento"})
+        ver("escolher uma situação de verdade continua funcionando", r.status_code == 200 and c.execute("SELECT situacao FROM amigo WHERE id=?", (sid,)).fetchone()[0] == "isento", r.status_code)
+        ver("situação inválida continua recusada", x.patch(f"/api/amigos/{sid}", json={"situacao": "qualquer"}).status_code == 400)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: Amigo sem situação mostra \"sem situação\" (não \"Pago\") e salva vazio como nulo",
+            "<option value=\"\" selected>sem situação (ainda sem cobrança)</option>" in html and "situacao:v('am-f-sit')||null" in html)
+        ver("tela: finalidade do pedido com rótulo", "function finSolRot(v)" in html and "escHtml(finSolRot(x.finalidade))" in html)
+        for l in res: print(l)
+
     elif modo == "amigos_painel":
         # 18/11/2026 · Amigos da CAMP no painel (contrato 1.11): coleta incremental do site (cliente FALSO), pagamento à mão calcula a
         # validade, pago → vencido sozinho, mudanças voltam ao site (vazio não apaga), e-mails com prévia e fila sempre pelo Sender do site (site FALSO; nenhum
@@ -26360,6 +26396,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Financeiro · saídas do Mercado Pago: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 20, "Financeiro · saídas do Mercado Pago: todas as verificações rodaram")
+
+print("UX · Público e processos: Amigo sem situação não vira pago ao salvar; Todos = total da lista")
+rc, out = rodar("ux_publico", f"{tmp}/ux_publico.db")
+if rc != 0: ok(False, f"teste ux_publico não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX · Público: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 7, "UX · Público: todas as verificações rodaram")
 
 print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
 rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")
