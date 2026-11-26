@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.38 (25/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
+Versão deste documento: **1.39 (26/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -335,6 +335,10 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - Site: com duas ou mais disciplinas recebidas num projeto, a seção dos desenhos ganha os filtros por disciplina com o escritório ("Estrutura — Sociedade civil de engenharia José Roberto Parisi Ltd."); sem nada recebido, a página é a de antes.
   - Painel: manda ao mudar escritórios em lote (`POST /api/projetos/{p}/parceiros/lote`, simular por padrão), ao salvar parceiros ou tipo de uma folha que está no site e ao criar a folha no site; falha = pendência `pendente_disciplinas_no_site` do projeto (reenvio). Itens de `GET /api/projetos/{c}/detalhe` ganham, OPCIONAIS, `disciplina` e `disciplina_escritorio`.
   - Ordem de deploy: qualquer uma (site antigo: 404 `rest_no_route` → "atualize o site", nada quebra; site novo com painel antigo: nada recebido, página como antes). Recomendado: site primeiro.
+- **NOVO 1.39** (Doação de acervo: trocar o e-mail de quem doa e reenviar tudo, 26/11/2026; Rafael: "preciso trocar o email dele e enviar tudo novamente"; site plugin 1.50.0, painel `app/doacoes_acervo.py`). Campos e rota novos, OPCIONAIS.
+  - `POST /painel/doacoes-acervo/{id}` aceita `email` (validado, minúsculo; não aceita `"__limpar__"`) e `telefone` (`"__limpar__"` apaga). Trocar o e-mail: o índice `_cdi_email` acompanha; a cobrança ainda aberta passa ao e-mail novo (`_cob_email`, para o TR27); o antigo fica em `_cdi_emails_antigos` (apagado na LGPD); o histórico diz só "e-mail trocado de a***@x para b***@y". Trocar não manda e-mail.
+  - `POST /painel/doacoes-acervo/{id}/reenviar` {`itens?`: ["contrato","cobranca","andamento"], `simular?`, `autor_painel?`} → {`ok`, `email` (mascarado), `itens`: {chave: {`aplica`, `motivo`, `padrao`, `rotulo`}}, `resultados?`: {chave: {`enviado`, `codigo?`, `erro?`, `sender_id?`}}, `registro`}. Manda de novo ao e-mail ATUAL: contrato (TR30, mesmo link; com o contrato na Autentique quem doa entra por nome, então o link continua valendo), cobrança aberta (TR27, mesmo link de pagamento; paga/estornada/cancelada não) e, se pedido, o último andamento (TR31). Não muda etapa, não gera link, não abre cobrança. `simular` ou `itens` vazio: só a prévia.
+  - Painel: bloco "E-mail e telefone" no detalhe da doação, "Reenviar para o e-mail atual…" (prévia com caixas por item), cada envio em "E-mails desta doação" (`reenvio: true`); evento `email_trocado` com a máscara. Site antigo: troca → 409 "O site ainda não troca o e-mail … 1.50.0 … Nada foi mudado."; reenvio → 409 com a versão. Ordem de deploy: site primeiro (o painel novo com o site antigo só avisa).
 
 ## 7. Versionamento e exemplos
 

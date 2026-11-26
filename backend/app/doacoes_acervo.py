@@ -110,6 +110,21 @@ UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "
 ENDERECO = {"cep": 8, "logradouro": 200, "numero": 20, "complemento": 100, "bairro": 100, "cidade": 100, "uf": 2}
 COMBINAR = "A combinar com a equipe"
 VERSAO_CPF_SITE = "1.35.0"
+VERSAO_EMAIL_SITE = "1.50.0"     # CAMP-DOA-EMAIL (contrato 1.39): trocar e-mail/telefone e reenviar (TR30/TR27/TR31) para o e-mail novo
+RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MSG_SITE_SEM_EMAIL = (f"O site ainda não troca o e-mail: avise quem cuida do site (plugin da CAMP {VERSAO_EMAIL_SITE} ou mais novo). "
+                      "Nada foi mudado.")
+MSG_SITE_SEM_REENVIO = f"O site ainda não reenvia os e-mails da doação: avise quem cuida do site (plugin da CAMP {VERSAO_EMAIL_SITE} ou mais novo). Nada foi enviado."
+ITENS_REENVIO = ("contrato", "cobranca", "andamento")
+MODELO_REENVIO = {"contrato": "contrato_assinatura", "cobranca": "cobranca_avulsa"}   # andamento (TR31): o site registra em `avisos`
+
+
+def mascarar_email(e: str | None) -> str:
+    """"fulano@exemplo.com" → "f***@exemplo.com" (histórico e log: nunca o e-mail inteiro)."""
+    e = str(e or "")
+    if "@" not in e or e.startswith("@"):
+        return "(vazio)" if not e else "***"
+    return e[0] + "***" + e[e.index("@"):]
 
 
 # ---------------------------------------------------------------- utilidades
@@ -1173,6 +1188,8 @@ class Mudanca(BaseModel):
     fundo: str | None = None
     documento: str | None = None     # CAMP-DOA-CPF (contrato 1.26): CPF/CNPJ corrigido pela equipe ("__limpar__" apaga)
     endereco: dict | None = None     # CAMP-DOA-CPF: partes do endereço corrigidas (vazio não mexe; "__limpar__" apaga)
+    email: str | None = None         # CAMP-DOA-EMAIL (contrato 1.39): e-mail trocado pela equipe (não aceita "__limpar__")
+    telefone: str | None = None      # CAMP-DOA-EMAIL: telefone trocado ("__limpar__" apaga)
     acao: str | None = None          # gerar_cobranca | consultar
     avisar: bool | None = None       # CAMP-DOA-AVISOS: avisar a pessoa por e-mail (TR31) da etapa nova
     aviso_texto: str | None = None   # o texto pronto da etapa, editado
@@ -1185,11 +1202,23 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Etapa, nota, contrato, valor, volume, fundo e/ou ação (gerar_cobranca, consultar): vai ao site, que valida e devolve o registro."""
     con = connect()
     try:
-        _um(con, sid)
+        linha0 = _um(con, sid)
         if not _tem_site(con):
             raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
         dados_b = b.model_dump()
         avisar = bool(dados_b.pop("avisar", None))
+        contato = {}                                         # CAMP-DOA-EMAIL: e-mail e telefone (mesma validação do site)
+        em_b = (dados_b.pop("email", None) or "").strip().lower()
+        if em_b:
+            if not RE_EMAIL.match(em_b) or len(em_b) > 200:
+                raise HTTPException(400, "E-mail: informe um endereço válido (ex.: nome@exemplo.com). Nada foi mudado.")
+            if em_b != str(linha0["email"] or "").strip().lower():
+                contato["email"] = em_b
+        tel_b = (dados_b.pop("telefone", None) or "").strip()
+        if tel_b:
+            if tel_b != "__limpar__" and (not re.fullmatch(r"[0-9()+\-\s.]{8,40}", tel_b) or len(re.sub(r"\D", "", tel_b)) < 8):
+                raise HTTPException(400, "Telefone: só números, espaços, parênteses, + e - (mínimo 8 dígitos). Nada foi mudado.")
+            contato["telefone"] = tel_b
         end_b = dados_b.pop("endereco", None)
         pessoais = {}                                        # CAMP-DOA-CPF: mesma validação do site
         doc_b = (dados_b.pop("documento", None) or "").strip()
@@ -1218,6 +1247,7 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         if corpo.get("acao") and corpo["acao"] not in ("gerar_cobranca", "consultar"):
             raise HTTPException(400, "Ação desconhecida")
         corpo.update(pessoais)
+        corpo.update(contato)
         if not corpo:
             raise HTTPException(400, "Nada para mudar")
         if avisar:
@@ -1234,8 +1264,16 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         if resp.status_code >= 400:
             raise _erro_site(resp)
         d = _json(resp)
-        if isinstance(d.get("registro"), dict):
-            _gravar(con, d["registro"])
+        reg = d.get("registro") if isinstance(d.get("registro"), dict) else None
+        if contato.get("email") and reg is not None and str(reg.get("email") or "").strip().lower() != contato["email"]:
+            raise HTTPException(409, MSG_SITE_SEM_EMAIL)      # site antigo: ignorou o e-mail (e nada mais foi pedido junto que valha)
+        if reg is not None:
+            _gravar(con, reg)
+        if contato.get("email"):
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'email_trocado',?,?)",
+                        (str(int(sid)), (u or {}).get("email") or "painel",
+                         json.dumps({"de": mascarar_email(linha0["email"]), "para": mascarar_email(contato["email"]),
+                                     "por": _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)}, ensure_ascii=False)))
         email_cob = _email_cobranca(con, sid, corpo, d, u)
         con.commit()
         registrar(logging.INFO, "doacoes_acervo_mudanca", "Intenção de doação atualizada pelo painel", site_id=int(sid),
@@ -1245,11 +1283,90 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
             x["dados_pessoais"] = {"salvo": False, "mensagem": f"CPF/CNPJ e endereço não foram guardados: o site ainda não tem esses campos (plugin da CAMP {VERSAO_CPF_SITE} ou mais novo). Avise quem cuida do site."}
         elif pessoais:
             x["dados_pessoais"] = {"salvo": True, "mensagem": "CPF/CNPJ e endereço atualizados no site."}
+        if contato:
+            am = x.get("amigo") if isinstance(x.get("amigo"), dict) else None
+            msg = ("E-mail trocado no site: de " + mascarar_email(linha0["email"]) + " para " + mascarar_email(contato["email"]) + "." if contato.get("email")
+                   else "Telefone atualizado no site.")
+            x["contato"] = {"salvo": True, "mensagem": msg, "reenviar": bool(contato.get("email")),
+                            "amigo": (f"O cadastro de Amigo {_txt(am.get('protocolo') or '', 40) or 'da CAMP'} continua com o e-mail antigo: "
+                                      "avise quem cuida do site para trocar também.") if (am and contato.get("email")) else None}
         if avisar:
             x["aviso"] = _aviso_resposta(d)
         if email_cob is not None:
             x["email_cobranca"] = email_cob
         return x
+    finally:
+        con.close()
+
+
+class Reenvio(BaseModel):
+    itens: list[str] = []
+
+
+def _reenvio_site(con, sid: int, corpo: dict) -> dict:
+    try:
+        resp = _wp().h.post(f"{ROTA}/{int(sid)}/reenviar", json=corpo)
+    except Exception as e:  # noqa: BLE001
+        registrar(logging.WARNING, "doacoes_acervo_reenvio", "Reenvio: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
+        raise HTTPException(502, "O site não respondeu agora: nada foi enviado. Tente de novo em instantes") from e
+    if resp.status_code == 404 and str(_json(resp).get("code") or "") in ("", "rest_no_route"):
+        raise HTTPException(409, MSG_SITE_SEM_REENVIO)
+    if resp.status_code >= 400:
+        dd = _json(resp)
+        if str(dd.get("code") or "") in ("camp_sender_email", "camp_doa_etapa"):
+            raise HTTPException(409, _txt(dd.get("message"), 300) or "O site recusou.")
+        raise _erro_site(resp)
+    return _json(resp)
+
+
+@router.get("/{sid}/reenviar")
+def reenvio_previa(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-DOA-EMAIL: o que dá para mandar de novo à pessoa (pela etapa), para o e-mail atual. Nada sai."""
+    con = connect()
+    try:
+        r = _um(con, sid)
+        if r["anonimizado"]:
+            raise HTTPException(409, "Os dados desta pessoa foram apagados (LGPD): nada a reenviar.")
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+        d = _reenvio_site(con, sid, {"simular": True})
+        return {"email": _txt(d.get("email"), 120) or mascarar_email(r["email"]), "itens": d.get("itens") or {}}
+    finally:
+        con.close()
+
+
+@router.post("/{sid}/reenviar")
+def reenviar(sid: int, b: Reenvio, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-DOA-EMAIL ("trocar o e-mail e enviar tudo novamente"): contrato (TR30, o mesmo link — na Autentique quem doa entra por NOME, então o
+    link continua valendo para o e-mail novo), cobrança aberta (TR27, o mesmo link de pagamento) e, se marcado, o último andamento (TR31).
+    Não muda etapa nem gera link novo. Cada envio vai para "E-mails desta doação"."""
+    itens = [i for i in ITENS_REENVIO if i in (b.itens or [])]
+    if not itens:
+        raise HTTPException(400, "Escolha o que reenviar")
+    con = connect()
+    try:
+        r = _um(con, sid)
+        if r["anonimizado"]:
+            raise HTTPException(409, "Os dados desta pessoa foram apagados (LGPD): nada a reenviar.")
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+        autor = _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)
+        d = _reenvio_site(con, sid, {"itens": itens, "autor_painel": autor})
+        res = d.get("resultados") if isinstance(d.get("resultados"), dict) else {}
+        for k, v in res.items():
+            if k in MODELO_REENVIO and isinstance(v, dict) and v.get("codigo") != "nao_se_aplica":
+                _evento_email(con, sid, MODELO_REENVIO[k], bool(v.get("enviado")), (u or {}).get("email") or "painel",
+                              {"reenvio": True, "sender_id": _txt(v.get("sender_id"), 80), "erro": _txt(v.get("erro"), 300)})
+        if isinstance(d.get("registro"), dict):
+            _gravar(con, d["registro"])                    # o TR31 reenviado chega em `avisos` e vira e-mail aqui (uma vez)
+        con.commit()
+        registrar(logging.INFO, "doacoes_acervo_reenvio", "E-mails da doação reenviados pelo painel", site_id=int(sid),
+                  itens=",".join(itens), enviados=sum(1 for v in res.values() if isinstance(v, dict) and v.get("enviado")))
+        nomes = {"contrato": "Contrato (TR30)", "cobranca": "Cobrança (TR27)", "andamento": "Andamento (TR31)"}
+        linhas = [{"item": k, "rotulo": nomes[k], "enviado": bool((res.get(k) or {}).get("enviado")),
+                   "mensagem": "enviado para " + (_txt(d.get("email"), 120) or "o e-mail novo") if (res.get(k) or {}).get("enviado")
+                   else (_txt((res.get(k) or {}).get("erro"), 300) or "não saiu")} for k in itens]
+        return {"resultados": linhas, "doacao": _completo(con, sid)}
     finally:
         con.close()
 
