@@ -47,6 +47,59 @@ async function entrar(br, w, h) {
     chk(!pg.erros.length, `[1] ${w}px: nenhum erro de JS ${pg.erros.join(' | ').slice(0, 160)}`);
     await pg.close();
   }
+  if (roda('2')) {
+    const pg = await entrar(br, 1440, 900);
+    for (const [tela, sel, id] of [['amigos', '#am-lista', 1], ['solicitacoes', null, 1], ['decisoes', null, 1]]) {
+      await pg.goto(BASE + '/#' + tela); await pg.waitForTimeout(1500);
+      const h0 = await pg.evaluate(() => history.length);
+      const fn = { amigos: 'abrirAmigo', solicitacoes: 'abrirSolicitacao', decisoes: 'abrirDecisao' }[tela];
+      await pg.evaluate(([f, i]) => window[f](i), [fn, id]); await pg.waitForTimeout(1200);
+      const r1 = await pg.evaluate(() => ({ h: location.hash, aberto: document.querySelector('.main').classList.contains('with-drawer'), len: history.length }));
+      chk(r1.aberto && r1.h === `#${tela}/${id}`, `[2] ${tela}: abrir o item põe #${tela}/${id} no endereço (${r1.h})`);
+      chk(r1.len === h0 + 1, `[2] ${tela}: abrir empilha uma entrada (${h0} → ${r1.len})`);
+      await pg.goBack(); await pg.waitForTimeout(900);
+      const r2 = await pg.evaluate(() => ({ h: location.hash, aberto: document.querySelector('.main').classList.contains('with-drawer'), vis: !!document.querySelector('#v-' + location.hash.slice(1).split('/')[0] + '.on') }));
+      chk(!r2.aberto && r2.h === '#' + tela, `[2] ${tela}: Voltar fecha o painel e fica na tela (${r2.h}, aberto=${r2.aberto})`);
+      // link direto / recarregar reabre o mesmo item
+      await pg.goto(BASE + `/#${tela}/${id}`); await pg.reload(); await pg.waitForTimeout(2500);
+      const r3 = await pg.evaluate(() => ({ h: location.hash, aberto: document.querySelector('.main').classList.contains('with-drawer') }));
+      chk(r3.aberto && r3.h === `#${tela}/${id}`, `[2] ${tela}: recarregar o endereço reabre o item (aberto=${r3.aberto}, ${r3.h})`);
+      // fechar com Esc não duplica a entrada e volta à tela
+      const h3 = await pg.evaluate(() => history.length);
+      await pg.keyboard.press('Escape'); await pg.waitForTimeout(700);
+      const r4 = await pg.evaluate(() => ({ h: location.hash, aberto: document.querySelector('.main').classList.contains('with-drawer'), len: history.length }));
+      chk(!r4.aberto && r4.h === '#' + tela && r4.len === h3, `[2] ${tela}: Esc fecha, volta a #${tela} sem nova entrada (${r4.h}, ${h3} → ${r4.len})`);
+      if (tela === 'amigos') { await pg.evaluate(() => abrirAmigo(1)); await pg.waitForTimeout(900); await pg.screenshot({ path: PRINTS + '/item-no-endereco-amigos-1440.png' }); await pg.keyboard.press('Escape'); }
+    }
+    chk(!pg.erros.length, '[2] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
+    await pg.close();
+  }
+  if (roda('2b')) {
+    const pg = await entrar(br, 1440, 900);
+    await pg.goto(BASE + '/#erros'); await pg.waitForTimeout(2000);
+    // um grupo e uma linha desenhados lado a lado com as funções da própria tela (dados de mentira, só para medir a grade)
+    const m = await pg.evaluate(() => {
+      const e = { id: 9001, aberto: true, severidade: 'medio', severidade_rotulo: 'Médio', titulo: 'Folha pode ser de outro projeto', descricao: 'teste', tipo: 'comum', tipo_rotulo: 'Projeto', fase: 'novo', idade_dias: 3, cta: 'Analisar', prioridade: {}, projeto_codigo: 'F001-P0001', projeto_titulo: 'Teste', folha: 'F001-P0001-1970-S01-D00001' };
+      const g = { chave: 'F001-P0001|projeto_errado', severidade: 'medio', severidade_rotulo: 'Médio', categoria: 'projeto_errado', n: 3, projeto_codigo: 'F001-P0001', projeto_titulo: 'Teste', tipo_rotulo: 'Projeto', idade_dias: 5, membros: [e], rapido: { acoes: ['deste_projeto', 'fica_fora'] }, prioridade: {} };
+      const box = document.getElementById('err-body'); box.innerHTML = cpGrupoHTML(g) + cpLinhaHTML(e);
+      const gr = box.querySelector('[data-cp-grupo]'), li = box.querySelector(':scope > [data-err-linha]');
+      const pos = (el, s) => { const r = el.querySelector(':scope > ' + s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; };
+      return { tagG: pos(gr, '.cp-sev-tag'), tagL: pos(li, '.cp-sev-tag'), ctaG: pos(gr, '.cp-acoes'), ctaL: pos(li, '.cp-acoes'), ctaCls: gr.querySelector(':scope > .cp-acoes .cp-cta') ? 'cp-cta' : '', decide: !!gr.querySelector(':scope > .cp-g-decide [data-cp-g="deste_projeto"]') };
+    });
+    chk(Math.abs(m.tagG[0] - m.tagL[0]) <= 2, `[2b] Problemas: etiqueta de prioridade no mesmo lugar no grupo e na linha (${m.tagG} × ${m.tagL})`);
+    chk(Math.abs(m.ctaG[1] - m.ctaL[1]) <= 2 && m.ctaCls === 'cp-cta', `[2b] Problemas: botão principal no mesmo lugar e no mesmo estilo (${m.ctaG} × ${m.ctaL})`);
+    chk(m.decide, '[2b] Problemas: as decisões para todas ficam numa faixa abaixo');
+    await pg.locator('#err-body').scrollIntoViewIfNeeded(); await pg.locator('#err-body').screenshot({ path: PRINTS + '/problemas-grupo-linha-1440.png' });
+    // cartões de números: um estilo só (Amigos, Ingressos, Pedidos comparados com o do Financeiro)
+    const est = async (rota, sel) => { await pg.goto(BASE + '/#' + rota); await pg.waitForTimeout(1800); return pg.evaluate(s => { const k = document.querySelector(s); if (!k) return null; const c = getComputedStyle(k), v = getComputedStyle(k.querySelector('.v')); return [c.borderRadius, c.boxShadow !== 'none', c.backgroundColor, v.fontFamily.split(',')[0], v.fontWeight, v.fontSize].join(' | '); }, sel); };
+    const fin = await est('financeiro/geral', '.fin-kpi');
+    for (const [rota, sel] of [['amigos', '#am-kpis .hoje-kpi'], ['cobrancas', '#cob-kpis .hoje-kpi'], ['ingressos', '#ig-kpis .ig-kpi'], ['solicitacoes', '.sol-stats .stat']]) {
+      const x = await est(rota, sel);
+      chk(x && x === fin, `[2b] cartão de números em ${rota} igual ao do Financeiro (${x} × ${fin})`);
+    }
+    chk(!pg.erros.length, '[2b] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
+    await pg.close();
+  }
   await br.close();
   console.log(problemas.length ? `\n${problemas.length} FALHA(S)` : '\nTUDO OK');
   process.exit(problemas.length ? 1 : 0);

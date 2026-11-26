@@ -2481,7 +2481,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
 .cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
 .cp-lista{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
-.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
+.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px 150px;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
 .cp-linha:hover{border-color:var(--blue)}
 .cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
 .cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -2517,7 +2517,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .sev-baixo .cp-sev-tag{background:var(--blue-soft);color:var(--blue)}
 .cp-rapida{color:var(--green)}
 .cp-mesma-folha{color:var(--amber);font-weight:600}
-.cp-acoes{display:flex;align-items:center;gap:8px}
+.cp-acoes{display:flex;align-items:center;justify-content:flex-end;gap:8px}   /* coluna de ações com largura fixa (150 px): grupo e linha alinhados (CAMP-UX 26/11) */
 .cp-acoes .cp-cta{min-width:84px}
 .cp-acoes .cp-cta:not(.pri){border-color:var(--blue);color:var(--blue)}
 .cp-acoes .mais-menu summary{padding:4px 10px}
@@ -2636,12 +2636,12 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .cp-rap-busca{display:flex;flex-direction:column;gap:6px;flex:1 1 260px;min-width:0}
 .cp-rap-res{display:flex;flex-wrap:wrap;gap:6px}
 .cp-rap-res .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cp-linha.cp-grupo{cursor:default;grid-template-columns:16px 38px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo sev" "sel ic acoes acoes"}
+.cp-linha.cp-grupo{cursor:default}   /* CAMP-UX (Rafael, 26/11): o grupo usa a MESMA grade da linha de um problema: etiqueta de prioridade e o botão principal no mesmo lugar; as decisões para todas numa faixa abaixo */
+.cp-g-decide{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;cursor:default}
 /* 23/11 (Rafael: "ao clicar pra ver uma a uma quebra a página"): só os filhos DIRETOS do grupo; com seletor de descendente as regras
    do grupo pegavam também as linhas de dentro de "Ver uma a uma" e desmontavam a grade delas */
-.cp-linha.cp-grupo>.cp-sel{grid-area:sel}.cp-linha.cp-grupo>.cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo>.cp-corpo{grid-area:corpo}.cp-linha.cp-grupo>.cp-sev-tag{grid-area:sev;align-self:start}
-.cp-linha.cp-grupo>.cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo>.cp-corpo>.cp-meta{flex-wrap:wrap}
-@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo>.cp-sel{display:none}.cp-linha.cp-grupo>.cp-sev-tag{justify-self:start}}
+.cp-linha.cp-grupo>.cp-corpo>.cp-meta{flex-wrap:wrap}
+
 .cp-grupo>.cp-corpo .cp-tit b{overflow-wrap:anywhere}
 .cp-g-membros>.cp-linha{cursor:pointer}
 .cp-g-thumbs{display:flex;gap:6px;overflow:hidden;margin-top:4px}
@@ -2730,6 +2730,11 @@ button.fin-kpi{cursor:pointer}button.fin-kpi:hover{border-color:var(--amber)}but
 .fin-kpi .ico{width:22px;height:22px;stroke:var(--ink2);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .fin-kpi .v{font:600 var(--fs-xl)/1.15 var(--sans);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fin-kpi .l{font-weight:600;font-size:var(--fs-base)}.fin-kpi .d{font-size:var(--fs-xs);color:var(--ink3)}
+/* CAMP-UX (Rafael, 26/11/2026): um só estilo de cartão de números em todo o painel — o do Financeiro (antes três: Pedidos, Amigos/Cobranças/Ingressos, Doações/Patrocínios) */
+.hoje-kpi,#v-ingressos .ig-kpi,.sol-stats .stat{background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--fin-sombra);padding:14px 16px;display:grid;gap:4px;align-content:start;min-width:0}
+.hoje-kpi .v,#v-ingressos .ig-kpi .v,.sol-stats .stat .v{font:600 var(--fs-xl)/1.15 var(--sans);font-variant-numeric:tabular-nums;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hoje-kpi .l,#v-ingressos .ig-kpi .l,.sol-stats .stat .l{font-weight:600;font-size:var(--fs-base);color:var(--ink);margin:0}
+.hoje-kpi .d,#v-ingressos .ig-kpi .d,.sol-stats .stat .d{font-size:var(--fs-xs);color:var(--ink3);margin:0}
 .fin-kpi.sup .v{color:var(--green)}.fin-kpi.def .v{color:var(--red)}.fin-kpi.atn{border-color:var(--amber);background:var(--amber-soft)}.fin-kpi.atn .v{color:var(--amber)}
 .fin-abas{margin-bottom:14px}
 .fin-grade{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start}.fin-sub{margin:6px 0 0;padding-left:16px;display:grid;gap:6px}
@@ -12302,10 +12307,12 @@ function cpGrupoHTML(g){const sev=g.severidade||'medio',r=g.rapido||{},adm=cpAdm
   return `<div class="cp-linha cp-grupo sev-${sev}" role="listitem" data-cp-grupo="${id}">
     <span class="cp-sel"></span><span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(cpProjNome(g))} · <span data-cp-gtit>${escHtml(tit)}</span></b></div>
-      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}<span>${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span>${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
+      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
       <div class="cp-g-thumbs">${thumbs}</div>${nota?`<small class="cp-rap-nota" data-cp-gnota>${escHtml(nota)}</small>`:''}</div>
+    <div class="cp-quando"><span>${cpIc('cal')}${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span><span>${escHtml(qtd(g.n,'folha','folhas'))}</span></div>
     <span class="cp-sev-tag"${pr.razao?` title="${escHtml(pr.razao)}"`:''}>${escHtml(g.severidade_rotulo||'')}</span>
-    <div class="cp-acoes">${bts}${mov}<button type="button" class="btn sm lnk" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
+    <div class="cp-acoes"><button type="button" class="btn sm cp-cta" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
+    ${bts||mov?`<div class="cp-g-decide" data-no-nav role="group" aria-label="Decidir para todas">${bts}${mov}</div>`:''}
     <div class="cp-rap-conf" hidden data-no-nav role="group" aria-label="Confirmar"></div>
     <div class="cp-g-membros" hidden>${g.membros.map(cpLinhaHTML).join('')}</div></div>`}
 let CP_LINHAS=[];   /* as linhas desenhadas (problema solto ou grupo); ERR_LISTA continua sendo a lista de problemas (os do grupo, um a um) */
@@ -13595,6 +13602,28 @@ function garantirAjudaNoTitulo(){const h=document.querySelector('.content.on:not
 renderFundos();renderLabel();instalarExportacoes();route_to(rotaAtual());checarSessao();
 
 // A janela lateral começa logo ABAIXO da barra fixa do topo (que inclui a faixa de saúde do sistema); antes o cabeçalho e o botão de fechar ficavam escondidos atrás dela
+/* CAMP-UX (Rafael, quiz de 26/11/2026: "Item aberto no endereço"): nas telas com painel lateral de um item, o item aberto mora no
+   endereço (#tela/<id>, só o id numérico interno; nenhum dado de pessoa), como no Financeiro: abrir EMPILHA a entrada; Voltar fecha o
+   painel e fica na tela; fechar (×, Esc) volta a entrada sem duplicar; recarregar ou abrir o link reabre o mesmo item; trocar de item
+   na mesma tela só substitui o endereço. Aberto a partir de outra tela (Home, busca), o endereço não muda. */
+const ITEM_URL={solicitacoes:'abrirSolicitacao',inscricoes:'abrirInscricao',amigos:'abrirAmigo',ingressos:'igDetalhe',cobrancas:'cobAbrir',doacoes:'doaAbrir',patrocinios:'patAbrir',decisoes:'abrirDecisao'};
+const ITEM_ABRE={};let ITEM_SILENCIO=false,ITEM_REABRINDO=false;
+function itemRota(r){const m=/^([a-z_]+)\/(\d+)$/.exec(r||'');return m&&ITEM_URL[m[1]]?{tela:m[1],id:+m[2]}:null}
+function itemUrlMarcar(tela,id){if(ITEM_REABRINDO)return;const r=rotaAtual(),base=r.split('/')[0];if(base!==tela||!/^\d+$/.test(String(id)))return;const alvo=tela+'/'+(+id);if(r===alvo)return;
+  if(itemRota(r)){history.replaceState({...(history.state||{}),campRoute:alvo},'','#'+alvo);return}
+  salvarContextoNavegacao();NAV_INDEX+=1;history.pushState({camp:true,campIndex:NAV_INDEX,campRoute:alvo,campScroll:mainEl.scrollTop||0,campItem:true},'','#'+alvo)}
+function itemUrlFechou(){if(ITEM_SILENCIO)return;const it=itemRota(rotaAtual());if(!it)return;
+  if(history.state&&history.state.campItem&&NAV_INDEX>0){ITEM_SILENCIO=true;POP_ITEM=true;history.back()}else history.replaceState({...(history.state||{}),campRoute:it.tela,campItem:false},'','#'+it.tela)}
+let POP_ITEM=false;
+Object.entries(ITEM_URL).forEach(([tela,fn])=>{const orig=window[fn];if(typeof orig!=='function')return;ITEM_ABRE[tela]=orig;
+  window[fn]=function(id,...resto){const ab=orig.call(this,id,...resto);const marca=()=>{if(mainEl.classList.contains('with-drawer'))itemUrlMarcar(tela,id)};if(ab&&typeof ab.then==='function')ab.then(marca,()=>{});else marca();return ab}});
+{const fecharOrig=closeDrawer;window.closeDrawer=closeDrawer=function(...a){const ok=fecharOrig.apply(this,a);if(ok)itemUrlFechou();return ok}}
+{const rotaOrig=route_to;window.route_to=route_to=function(route){if(POP_ITEM){POP_ITEM=false;ITEM_SILENCIO=false;return}   /* o Voltar que o próprio fechar pediu: a tela já está certa */
+  const it=itemRota(route);const base=(route||'').split('/')[0];
+  if(!it&&ITEM_URL[base]&&mainEl.classList.contains('with-drawer')&&!document.getElementById('drawer').querySelector('.rev-cheia')){ITEM_SILENCIO=true;try{closeDrawer(true)}finally{ITEM_SILENCIO=false}}   /* Voltar do navegador com o item aberto: fecha e fica na tela */
+  let r;ITEM_SILENCIO=true;try{r=rotaOrig.call(this,route)}finally{ITEM_SILENCIO=false}   /* show() fecha o painel ao trocar de tela: isso não mexe no endereço */
+  if(it){const abrir=async()=>{if(it.tela==='inscricoes'){for(let i=0;i<50&&!(typeof INS_ITENS!=='undefined'&&INS_ITENS.some(x=>x.id===it.id));i++)await new Promise(z=>setTimeout(z,100))}ITEM_REABRINDO=true;try{await ITEM_ABRE[it.tela](it.id)}catch(_){}finally{ITEM_REABRINDO=false}};setTimeout(abrir,0)}
+  return r}}
 /* CAMP-UX (26/11/2026): "Situação do projeto" acompanha a rolagem (sticky) só quando cabe inteira na área visível do .main; senão segue o
    fluxo normal da página e todo o conteúdo dela é alcançado rolando a tela (nada de rolagem interna escondendo o fim). */
 function pjLadoAjustar(){const l=document.querySelector('.pj-vg[data-pj-vista="itens"]>.pj-vg-lado');if(!l||l.hidden)return;const sc=l.closest('.main');const disp=(sc?sc.clientHeight:innerHeight)-24;l.classList.toggle('pj-lado-fixa',l.scrollHeight<=disp)}
