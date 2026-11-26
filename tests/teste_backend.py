@@ -82,6 +82,7 @@ MODOS_RAPIDOS |= {"estante_tubos_tb001"}   # CAMP-ESTANTE 25/11/2026: tubos no p
 MODOS_RAPIDOS |= {"projeto_ordem_pdf_tubos"}   # CAMP-PROJETO/ESTANTE 25/11/2026: ordem pelo nome, PDF sem perda dos TIFF, .zip por categoria, tubos (guardar em, mover, faltam guardar)
 MODOS_RAPIDOS |= {"entrega_original_cobranca"}   # CAMP-ENTREGA 25/11/2026: arquivos originais no projeto (TIFF/JPG, .zip, histórico) e envio com cobrança ou não + justificativa
 MODOS_RAPIDOS |= {"ux_publico"}   # CAMP-UX 26/11/2026: Amigo sem situação virava "Pago" ao salvar; "Todos" deixava de fora quem não tem situação (navegador: tests/navegador_ux_publico.js)
+MODOS_RAPIDOS |= {"busca_no_projeto"}   # CAMP-PROJETO 26/11/2026: "Buscar nas folhas" — o /detalhe traz busca_extra (carimbo bruto, lugar/tubo, retenção, o que o CAMP Vision leu) e lugar (navegador: tests/navegador_busca_projeto.js)
 MODOS_RAPIDOS |= {"autorizados_entrega"}   # CAMP-ENTREGA 26/11/2026 (quiz do Rafael): reenvio com valor novo cancela a cobrança anterior; layout próprio no Sender
 MODOS_RAPIDOS |= {"financeiro_botao_sincronizar"}   # CAMP-FIN 24/11/2026: "Sincronizar com o Mercado Pago" sem ação; botões das saídas desalinhados (navegador: tests/navegador_financeiro_sincronizar.js)
 MODOS_RAPIDOS |= {"parceiros_lote_disciplina"}   # CAMP-FICHA 25/11/2026: escritório em várias folhas; separação por disciplina (painel e site, contrato 1.38)
@@ -19719,6 +19720,47 @@ def filho(modo):
         ver("projeto sem folha no site: a ordem fica só no painel, sem pendência", r.status_code == 200 and r.json().get("vai_ao_site") is False and pend() is None, r.text[:200])
         for l in res: print(l)
 
+    elif modo == "busca_no_projeto":
+        # CAMP-PROJETO (26/11/2026). Rafael: "dentro do projeto seria bom ter uma busca também.. tem projeto com 300 pranchas.. e procurar por qualquer
+        # dado". A busca roda no navegador sobre o /detalhe; o que ele ainda não trazia (carimbo bruto, suporte, dimensões, motivo da retenção, o
+        # lugar/tubo e o texto lido pelo CAMP Vision) vem em busca_extra (campo novo, opcional), numa só consulta, sem tocar no QNAP.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        import json as _j, time as _t
+        from fastapi.testclient import TestClient
+        from app import auth, rotas_projetos as rp
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES ('F026-P0002','F026',2,'Edifício Paulista',1970,'São Paulo')")
+        for s_ in range(1, 301):
+            c.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,ano_folha,origem,escritorio_carimbo,lido_json,retida,retida_motivo,suporte)
+                         VALUES (?,?,?,?,?,?,1970,'campvision',?,?,?,?,?)""",
+                      (f"F026-P0002-1970-S01-D{s_:05d}", "F026-P0002", "S01", s_, f"Prancha {s_}", f"{s_:02d}",
+                       "DAPA LIMA OTERO ENGENHARIA" if s_ == 44 else None,
+                       _j.dumps({"campos": {"titulo": "Detalhe da escada", "escala": "1:28", "_interno": "não aparece"}}) if s_ == 44 else None,
+                       1 if s_ == 45 else 0, "mancha de umidade" if s_ == 45 else None, "papel vegetal" if s_ == 46 else None))
+        lid = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F026','tubo','TB001-01')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES ('F026-P0002-1970-S01-D00043',?)", (lid,))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        t0 = _t.time(); r = x.get("/api/projetos/F026-P0002/detalhe"); dt = _t.time() - t0
+        d = r.json() if r.status_code == 200 else {}
+        por = {i["codigo"].split("-")[-1]: i for i in d.get("itens", [])}
+        ver("o /detalhe responde com as 300 folhas", r.status_code == 200 and len(por) == 300, (r.status_code, len(por)))
+        i43, i44, i45, i46 = (por.get(k, {}) for k in ("D00043", "D00044", "D00045", "D00046"))
+        ver("lugar/tubo: busca_extra e lugar trazem 'tubo TB001-01'", "TB001-01" in (i43.get("busca_extra") or "") and i43.get("lugar") == "tubo TB001-01", (i43.get("busca_extra"), i43.get("lugar")))
+        ver("carimbo bruto (escritório) e o que o CAMP Vision leu entram na busca", "DAPA LIMA OTERO" in (i44.get("busca_extra") or "") and "Detalhe da escada" in (i44.get("busca_extra") or ""), i44.get("busca_extra"))
+        ver("chave interna do CAMP Vision (_…) fica de fora", "não aparece" not in (i44.get("busca_extra") or ""), i44.get("busca_extra"))
+        ver("motivo da retenção e suporte entram na busca", "umidade" in (i45.get("busca_extra") or "") and "papel vegetal" in (i46.get("busca_extra") or ""), (i45.get("busca_extra"), i46.get("busca_extra")))
+        ver("folha sem nada a mais não ganha o campo (resposta enxuta)", "busca_extra" not in por.get("D00001", {}), sorted(por.get("D00001", {}).keys())[:5])
+        tam = len(_j.dumps(d.get("itens", []), ensure_ascii=False))
+        ver("300 folhas: resposta em menos de 3 s e o texto extra limitado", dt < 3 and all(len(i.get("busca_extra") or "") <= 1200 for i in d.get("itens", [])), (round(dt, 2), tam))
+        ver("_lido_texto: só os valores, sem as chaves, limitado", rp._lido_texto(_j.dumps({"a": {"b": "x" * 2000}}))[:5] == "xxxxx" and len(rp._lido_texto(_j.dumps({"a": "x" * 2000}))) <= 800 and rp._lido_texto("não é json") == "", "")
+        for l in res: print(l)
+
     elif modo == "ux_publico":
         # CAMP-UX (26/11/2026). Rafael: "Revise a usabilidade de todo painel". Na revisão de Público e processos: (1) o formulário "Alterar" de
         # um Amigo SEM situação (pré-adesão, ainda sem cobrança) mostrava "Pago" escolhido e mandava situacao="pago" ao salvar qualquer coisa
@@ -26537,6 +26579,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX · Público: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 7, "UX · Público: todas as verificações rodaram")
+
+print("Projeto · busca dentro do projeto: o /detalhe traz o que a busca precisa (carimbo bruto, tubo, retenção, leitura do CAMP Vision)")
+rc, out = rodar("busca_no_projeto", f"{tmp}/busca_no_projeto.db")
+if rc != 0: ok(False, f"teste busca_no_projeto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projeto · busca: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 8, "Projeto · busca: todas as verificações rodaram")
 
 print("Entrega · itens autorizados (26/11): cobrança anterior cancelada no reenvio; layout próprio no Sender")
 rc, out = rodar("autorizados_entrega", f"{tmp}/autorizados_entrega.db")

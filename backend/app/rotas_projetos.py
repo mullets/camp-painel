@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 import re
 import unicodedata
@@ -508,6 +509,61 @@ def enviar_alteracoes_ao_site(codigo: str, u: dict = Depends(auth.exige("admin")
     return r
 
 
+def _lido_texto(bruto, limite: int = 800) -> str:
+    """O que o CAMP Vision leu (item.lido_json), em texto corrido, só os valores (para a busca dentro do projeto)."""
+    try:
+        v = json.loads(bruto) if isinstance(bruto, str) else bruto
+    except ValueError:
+        return ""
+    partes: list[str] = []
+
+    def andar(x):
+        if len(" ".join(partes)) > limite:
+            return
+        if isinstance(x, dict):
+            for k, y in x.items():
+                if not str(k).startswith("_"):
+                    andar(y)
+        elif isinstance(x, list):
+            for y in x:
+                andar(y)
+        elif isinstance(x, (str, int, float)) and not isinstance(x, bool):
+            t = str(x).strip()
+            if t and t.lower() not in ("null", "none"):
+                partes.append(t)
+    andar(v)
+    return " ".join(partes)[:limite]
+
+
+def _busca_extra_folhas(con, projeto: str) -> dict:
+    """CAMP-PROJETO (26/11/2026; Rafael: "tem projeto com 300 pranchas… procurar por qualquer dado"): numa só consulta, o que a página do projeto
+    ainda não recebia e a busca precisa: leituras brutas do carimbo (projeto, escritório, autor), suporte, dimensões, motivo da retenção, o lugar
+    (tubo/caixa) e o texto lido pelo CAMP Vision. Só o banco: nunca o QNAP."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(item)")}
+    extra = [c for c in ("projeto_carimbo", "escritorio_carimbo", "autor_carimbo", "suporte", "dimensoes", "retida_motivo", "codigo_anterior", "lido_json") if c in cols]
+    sel = ", ".join(f"i.{c}" for c in extra) if extra else "NULL AS nada"
+    try:
+        linhas = con.execute(f"""SELECT i.codigo, {sel}, lf.identificador AS lugar_id, lf.tipo AS lugar_tipo
+                                   FROM item i LEFT JOIN item_localizacao il ON il.item_codigo=i.codigo
+                                   LEFT JOIN localizacao_fisica lf ON lf.id=il.localizacao_id
+                                  WHERE i.projeto_codigo=?""", (projeto,)).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    r: dict = {}
+    for l in linhas:
+        l = dict(l)
+        pt = [str(l.get(c)).strip() for c in extra if c != "lido_json" and l.get(c)]
+        if l.get("lido_json"):
+            pt.append(_lido_texto(l["lido_json"]))
+        lugar = (f"{l['lugar_tipo']} {l['lugar_id']}" if l.get("lugar_tipo") else l.get("lugar_id")) or None
+        if lugar:
+            pt.append(lugar)
+        txt = " ".join(x for x in pt if x)
+        if txt or lugar:
+            r[l["codigo"]] = {"texto": txt[:1200], "lugar": lugar}
+    return r
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -617,7 +673,13 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         raiz_prontos = None
     from .parceiros import ler as _ler_parc, disciplina_grupo as _disc_grupo
     from .folhas_repetidas import ROTULO_FORMATO, rank_formato
+    busca_extra = _busca_extra_folhas(con, codigo)   # CAMP-PROJETO 26/11 (campo novo, opcional): "Buscar nas folhas" acha também o carimbo bruto, o lugar e o que o CAMP Vision leu
     for d in itens:
+        bx = busca_extra.get(d.get("codigo"))
+        if bx:
+            d["busca_extra"] = bx["texto"]
+            if bx.get("lugar"):
+                d.setdefault("lugar", bx["lugar"])
         if "parceiros" in d:                            # CAMP-127: os parceiros de cada folha (lista), para a ação em lote "Confirmar: X, parceiro"
             d["parceiros"] = _ler_parc(d.get("parceiros"))
         # 25/11 (campos novos, opcionais): a disciplina para agrupar os desenhos (escritório parceiro → tipo → Arquitetura) e o escritório
