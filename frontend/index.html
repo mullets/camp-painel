@@ -2173,6 +2173,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 #em-p-modelos .es-nome b{display:block}#em-p-modelos .es-nome small,#em-p-modelos .es-sit small,#em-p-modelos .es-env small{display:block;color:var(--muted);max-width:340px}
 #em-p-modelos .es-vars code{display:inline-block;margin:0 4px 4px 0;font-size:var(--fs-sm);overflow-wrap:anywhere}#em-p-modelos .es-vars{max-width:300px}
 #em-p-modelos .es-id{display:flex;gap:6px;align-items:center}#em-p-modelos .es-id input{width:9.5em;font-family:var(--mono,monospace)}
+#em-p-modelos .es-painel-cob{margin-top:16px}#em-p-modelos .es-painel-cob .es-id{align-items:flex-end}#em-p-modelos .es-painel-cob .es-id input{width:16em}#em-p-modelos .es-painel-cob .es-vars{max-width:none}
 #em-p-modelos .es-acoes{white-space:nowrap}#em-p-modelos #es-q{flex:1 1 240px;min-width:160px}#em-p-modelos .es-para{display:flex;gap:6px;align-items:center;font-size:var(--fs-sm)}#em-p-modelos .es-para input{width:16em}
 @media (max-width:900px){#em-p-modelos .es-vars,#em-p-modelos .es-env{display:none}#em-p-modelos .es-id input{width:7em}}
 .am-hist{list-style:none;margin:0;padding:0;display:grid;gap:6px}.am-hist li{font-size:var(--fs-sm);border-left:2px solid var(--line);padding-left:8px}
@@ -3428,6 +3429,9 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
       <thead><tr><th>Modelo</th><th class="es-vars">Variáveis</th><th>ID no Sender</th><th>Situação</th><th class="es-env">Último envio</th><th></th></tr></thead>
       <tbody id="es-lista"><tr><td class="empty">Carregando…</td></tr></tbody>
       </table></div></div>
+    <div class="panel es-painel-cob" id="es-cob"><div class="ph"><div class="ph-txt"><h2>Entrega com cobrança (modelo do painel)</h2><p class="ph-resumo">E-mail do pedido de alta resolução quando o envio tem cobrança. Sem ID, sai pelo TR09, com a cobrança dentro de {{mensagem}}.</p></div></div>
+      <div class="pb"><div class="es-id"><label class="field">ID no Sender<input id="es-cob-id" type="text" autocomplete="off" maxlength="64" spellcheck="false"></label><button type="button" class="btn" id="es-cob-salvar" data-trabalhando="Salvando…">Salvar</button></div>
+      <p class="help">No Sender, crie o e-mail transacional com estas variáveis (cole como estão):</p><p class="es-vars" id="es-cob-vars"></p><p class="help" id="es-cob-res" aria-live="polite"></p></div></div>
   </div>
   <div class="em-painel" id="em-p-aceite" role="tabpanel" aria-labelledby="em-tab-aceite" tabindex="0" hidden>
     <div class="hdr em-parte"><p class="sub">Quem marcou "Quero receber e-mails da CAMP" num formulário do site. O site põe cada pessoa sozinho no grupo do Sender; aqui você vê de onde veio, quando aceitou e a situação no Sender.</p>
@@ -11842,7 +11846,10 @@ function esDesenhar(){const d=ES.d;if(!d)return;const q=cfgNorm(ES.q),tb=documen
   const areas=[...d.areas,...new Set(d.modelos.map(m=>m.area).filter(a=>!d.areas.includes(a)))];
   const h=areas.map(a=>{const ms=d.modelos.filter(m=>m.area===a&&ok(m));return ms.length?`<tr class="es-area"><th colspan="6">${escHtml(a)}</th></tr>`+ms.map(m=>esLinha(m,d.teste&&d.site==='ok')).join(''):''}).join('');
   tb.innerHTML=h||'<tr><td class="empty" colspan="6">Nenhum modelo com essa busca.</td></tr>'}
-async function carregarEmailSite(){const tb=document.getElementById('es-lista');if(!tb)return;
+/* CAMP-ENTREGA (Rafael, 26/11/2026: "Layout próprio no Sender"): o ID do modelo do painel para a entrega com cobrança e as variáveis para colar */
+async function esCobCarregar(){const v=document.getElementById('es-cob-vars');if(!v)return;try{const d=await API('/api/emails-site/painel/entrega-cobranca');document.getElementById('es-cob-id').value=d.id||'';v.innerHTML=d.variaveis.map(x=>`<code>{{${escHtml(x)}}}</code>`).join('');document.getElementById('es-cob-res').textContent=d.id?'Configurado: o e-mail com cobrança sai por este modelo.':'Sem ID: o e-mail com cobrança sai pelo TR09.'}catch(e){document.getElementById('es-cob-res').textContent=e.message}}
+document.addEventListener('click',async e=>{if(!e.target.closest('#es-cob-salvar'))return;const id=document.getElementById('es-cob-id').value.trim();try{await API('/api/emails-site/painel/entrega-cobranca',{method:'PUT',body:JSON.stringify({id})});toast(id?'ID salvo: o e-mail com cobrança sai por este modelo':'ID apagado: o e-mail com cobrança volta a sair pelo TR09');esCobCarregar()}catch(err){toast(err.message)}});
+async function carregarEmailSite(){const tb=document.getElementById('es-lista');if(!tb)return;esCobCarregar();
   try{const d=await API('/api/emails-site');ES.d=d;const n=d.numeros||{},tk=d.token||{};
     const para=document.getElementById('es-para');if(para&&!para.value)para.value=d.eu||'';
     const orig={site:'a do site (enviada pelo painel)',plugin:'a do plugin do Sender no site'}[tk.origem]||'';

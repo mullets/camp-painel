@@ -140,7 +140,8 @@ def validar_cobranca(con, c: dict | None, n_folhas: int) -> dict:
         if valor < 1 or valor > 1_000_000:
             raise HTTPException(400, "Valor da cobrança entre R$ 1,00 e R$ 1.000.000,00.")
         liberar = bool(c.get("liberar_apos_pagamento", True))
-    return {"modo": modo, "motivo": motivo, "rotulo": rot, "texto": texto, "justificativa": just.rstrip("."), "valor": valor, "liberar": liberar}
+    curto = "uso comercial" if (modo, motivo) == ("com", "comercial") else (texto[:80] if motivo == "outro" else rot.split(" (")[0].lower())
+    return {"modo": modo, "motivo": motivo, "rotulo": rot, "rotulo_curto": curto, "texto": texto, "justificativa": just.rstrip("."), "valor": valor, "liberar": liberar}
 
 
 def texto_cobranca(d: dict, link_pagamento: str = "") -> str:
@@ -473,7 +474,7 @@ def link_base(con) -> str:
 
 
 def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str, cobranca: str = "",
-           uso_comercial: bool = False, link_pagamento: str = "", justificativa: str = "") -> dict:
+           uso_comercial: bool = False, link_pagamento: str = "", justificativa: str = "", cob: dict | None = None) -> dict:
     """`link` (o principal, 01/11 Rafael: "o ideal é o link de download ser um zip de todo aquele projeto") baixa tudo num .zip;
     `link_pagina` abre a página com os arquivos um a um."""
     link = link_pagina                      # 02/11: o link abre o termo de uso; aceito, a página libera o .zip e os arquivos
@@ -506,7 +507,22 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
                  # CAMP-ENTREGA: o TR09 já mostra {{mensagem}}; a cobrança e a justificativa vão nele (e também à parte, para um layout novo)
                  "mensagem": "\n\n".join(x for x in (mensagem or "", cobranca or "") if x),
                  "cobranca": cobranca or "", "link_pagamento": link_pagamento or "", "justificativa": justificativa or ""}
-    return {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
+    t = {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
+    # CAMP-ENTREGA (Rafael, quiz de 26/11/2026: "Layout próprio no Sender"): com cobrança e sender.campanha_entrega_cobranca preenchido, o
+    # e-mail sai por esse modelo, com a cobrança em variáveis próprias; {{mensagem}} fica só com o recado da equipe. Vazio: como antes (TR09).
+    if cob and cob.get("modo") == "com" and _cfg(con, CAMPANHA_COBRANCA):
+        variaveis.update({"cobranca": f"R$ {_brl(cob['valor'])} — {cob.get('rotulo_curto') or cob['rotulo']}", "valor": f"R$ {_brl(cob['valor'])}",
+                          "justificativa": cob["justificativa"], "link_pagamento": link_pagamento or "",
+                          "liberacao": ("o download é liberado após o pagamento" if cob.get("liberar") else "já disponível"),
+                          "mensagem": mensagem or ""})
+        t["chave_campanha"] = CAMPANHA_COBRANCA
+    return t
+
+
+CAMPANHA_COBRANCA = "sender.campanha_entrega_cobranca"
+# As variáveis do modelo próprio de entrega com cobrança (a tela E-mails → Modelos do Sender mostra esta lista para colar no Sender)
+VARIAVEIS_COBRANCA = ("nome", "link", "link_pagina", "validade", "material", "protocolo", "quantidade", "cobranca", "valor", "link_pagamento",
+                      "justificativa", "liberacao", "mensagem")
 
 
 # ---------------------------------------------------------------- envio
@@ -550,7 +566,7 @@ def _enviar_site(con, para: str, nome: str, assunto: str, texto: str, responder:
 
 def enviar(con, canal: str, para: str, nome: str, t: dict, responder: str, pedido_site_id: int | None) -> str:
     if canal == "sender":
-        return _enviar_sender(con, para, nome, t["variaveis"])
+        return _enviar_sender(con, para, nome, t["variaveis"], t.get("chave_campanha") or "sender.campanha_entrega")
     if canal == "site":
         return _enviar_site(con, para, nome, t["assunto"], t["texto"], responder, pedido_site_id)
     raise EnvioErro("Nenhum canal de e-mail configurado: preencha o Sender.net ou a senha do site em Configurações")
@@ -639,7 +655,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         con.commit()
         link = f"{link_base(con)}/entrega/{token}"
         t = textos(con, s, arquivos, link, expira, mensagem, texto_cobranca(cob, link_pag) if cob else "",
-                   bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial"), link_pag, cob["justificativa"] if cob else "")
+                   bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial"), link_pag, cob["justificativa"] if cob else "", cob)
         responder = _cfg(con, "entrega.responder_para")
         envio_id = enviar(con, canal, para, s["solicitante"] or "", t, responder, None if teste else _pedido_site_id(con, sid))
     except (EnvioErro, OSError) as e:

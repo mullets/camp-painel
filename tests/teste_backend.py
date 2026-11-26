@@ -14611,6 +14611,35 @@ def filho(modo):
             and um("SELECT 1 FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='cobranca_anterior_nao_cancelada'", str(S1)), r5.text[:300])
         FALHA_CANCELAR[0] = False
         ver("[3] Cancelar à mão (Cobranças avulsas) continua igual", adm.post(f"/api/cobrancas/{c4}/cancelar").status_code == 200 and um("SELECT situacao FROM cobranca_avulsa WHERE id=?", c4)[0] == "cancelada")
+        # [4] layout próprio no Sender para a entrega com cobrança (sender.campanha_entrega_cobranca)
+        S2 = pedido("Bruno Souza", "bruno@revista.exemplo")
+        adm.post(f"/api/solicitacoes/{S2}/enviar", json={**_com(300), "mensagem": "Citar Acervo CAMP."})
+        e0 = ENV[-1]
+        ver("[4] sem o ID: o e-mail com cobrança sai pelo TR09, com a cobrança no {{mensagem}} (como antes)", e0["campanha"] == "sender.campanha_entrega"
+            and "Cobrança: R$ 300,00" in e0["v"]["mensagem"] and "Citar Acervo CAMP." in e0["v"]["mensagem"], str(e0)[:300])
+        g = adm.get("/api/emails-site/painel/entrega-cobranca").json()
+        ver("[4] tela Modelos do Sender: o ID (vazio) e a lista de variáveis para colar", g.get("id") == "" and g.get("variaveis") == ["nome", "link", "link_pagina", "validade", "material", "protocolo",
+            "quantidade", "cobranca", "valor", "link_pagamento", "justificativa", "liberacao", "mensagem"], g)
+        ver("[4] ID inválido: 400; ID válido: salvo e no histórico", adm.put("/api/emails-site/painel/entrega-cobranca", json={"id": "x y"}).status_code == 400
+            and adm.put("/api/emails-site/painel/entrega-cobranca", json={"id": "TRcob1"}).status_code == 200
+            and um("SELECT valor FROM configuracao WHERE chave='sender.campanha_entrega_cobranca'")[0] == "TRcob1"
+            and um("SELECT 1 FROM evento WHERE entidade='config' AND codigo='sender.campanha_entrega_cobranca'"))
+        S3 = pedido("Carla Lima", "carla2@editora.exemplo")
+        adm.post(f"/api/solicitacoes/{S3}/enviar", json={**_com(450), "mensagem": "Citar Acervo CAMP."})
+        e1 = ENV[-1]; v1 = e1["v"]
+        ver("[4] com o ID e com cobrança: sai pelo modelo próprio, com cobrança, valor, link de pagamento, justificativa e liberação em variáveis",
+            e1["campanha"] == "sender.campanha_entrega_cobranca" and v1.get("cobranca") == "R$ 450,00 — uso comercial" and v1.get("valor") == "R$ 450,00"
+            and v1.get("link_pagamento", "").startswith("https://mp.exemplo/pagar/") and "livro à venda" in v1.get("justificativa", "")
+            and v1.get("liberacao") == "o download é liberado após o pagamento" and v1.get("mensagem") == "Citar Acervo CAMP."
+            and all(k in v1 for k in ("nome", "link", "link_pagina", "validade", "material", "protocolo", "quantidade")), str(e1)[:400])
+        S4 = pedido("João Pesquisador", "joao@usp.exemplo")
+        adm.post(f"/api/solicitacoes/{S4}/enviar", json={"cobranca": {"modo": "com", "motivo": "comercial", "valor": 150, "liberar_apos_pagamento": False}})
+        ver("[4] liberado já: {{liberacao}} = 'já disponível'", ENV[-1]["v"].get("liberacao") == "já disponível", ENV[-1]["v"].get("liberacao"))
+        S5 = pedido("Ana Pesquisa", "ana@usp.exemplo")
+        adm.post(f"/api/solicitacoes/{S5}/enviar", json={"cobranca": {"modo": "sem", "motivo": "pesquisa", "texto": "tese"}})
+        ver("[4] sem cobrança: continua pelo TR09 mesmo com o ID preenchido", ENV[-1]["campanha"] == "sender.campanha_entrega" and "Sem cobrança" in ENV[-1]["v"]["mensagem"])
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("[4] tela: bloco 'Entrega com cobrança (modelo do painel)' em Modelos do Sender", "Entrega com cobrança (modelo do painel)" in html and "/api/emails-site/painel/entrega-cobranca" in html)
         c.close()
         for l in res: print(l)
 
@@ -26497,7 +26526,7 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega · autorizados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
-    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 6, "Entrega · autorizados: todas as verificações rodaram")
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 13, "Entrega · autorizados: todas as verificações rodaram")
 
 print("Financeiro · botão Sincronizar com o Mercado Pago (giro, Sincronizando…) e botões das saídas alinhados")
 rc, out = rodar("financeiro_botao_sincronizar", f"{tmp}/financeiro_botao_sincronizar.db")

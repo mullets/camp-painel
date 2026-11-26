@@ -100,6 +100,15 @@ async function entrar(br, w, h) {
     chk(!pg.erros.length, '[2b] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
     await pg.close();
   }
+  if (roda('4')) {
+    const pg = await entrar(br, 1440, 900);
+    await pg.goto(BASE + '/#emails/modelos'); await pg.waitForSelector('#es-cob-vars code', { timeout: 15000 }).catch(() => {});
+    const v = await pg.evaluate(() => [...document.querySelectorAll('#es-cob-vars code')].map(x => x.textContent));
+    chk(v.includes('{{cobranca}}') && v.includes('{{link_pagamento}}') && v.includes('{{liberacao}}'), `[4] Modelos do Sender: bloco da entrega com cobrança com as variáveis (${v.length})`);
+    await pg.waitForTimeout(800); await pg.evaluate(() => document.getElementById('es-cob').scrollIntoView({ block: 'center' })); await pg.waitForTimeout(500); await pg.screenshot({ path: PRINTS + '/sender-entrega-cobranca-1440.png' });
+    chk(!pg.erros.length, '[4] nenhum erro de JS ' + pg.erros.join(' | ').slice(0, 200));
+    await pg.close();
+  }
   await br.close();
   console.log(problemas.length ? `\n${problemas.length} FALHA(S)` : '\nTUDO OK');
   process.exit(problemas.length ? 1 : 0);

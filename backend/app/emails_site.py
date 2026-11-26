@@ -360,6 +360,42 @@ def baixar_guia(u: dict = Depends(auth.exige("admin"))):
                     headers={"Content-Disposition": 'attachment; filename="guia-modelos-sender.zip"'})
 
 
+class IdPainel(BaseModel):
+    id: str = ""
+
+
+@router.get("/painel/entrega-cobranca")
+def ver_entrega_cobranca(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-ENTREGA (26/11/2026): o modelo PRÓPRIO do painel para a entrega com cobrança (não é do site): o ID e as variáveis para colar no Sender."""
+    from .entrega import CAMPANHA_COBRANCA, VARIAVEIS_COBRANCA
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (CAMPANHA_COBRANCA,)).fetchone()
+        return {"chave": CAMPANHA_COBRANCA, "id": (r[0] if r else "") or "", "variaveis": list(VARIAVEIS_COBRANCA)}
+    finally:
+        con.close()
+
+
+@router.put("/painel/entrega-cobranca")
+def salvar_entrega_cobranca(b: IdPainel, u: dict = Depends(auth.exige("admin"))) -> dict:
+    from .entrega import CAMPANHA_COBRANCA
+    novo = (b.id or "").strip()
+    if novo and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", novo):
+        raise HTTPException(400, "Isso não parece um ID do Sender.net (letras, números, - e _).")
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (CAMPANHA_COBRANCA,)).fetchone()
+        if r is None:
+            raise HTTPException(409, "Falta a migração 265 (atualize o painel).")
+        con.execute("UPDATE configuracao SET valor=?, atualizado_em=datetime('now'), atualizado_por=? WHERE chave=?", (novo, u["email"], CAMPANHA_COBRANCA))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config',?,'alterada',?,?)",
+                    (CAMPANHA_COBRANCA, u["email"], json.dumps({"antes": {"valor": r[0] or ""}, "depois": {"valor": novo}}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "id": novo}
+    finally:
+        con.close()
+
+
 @router.put("/{chave}")
 def salvar(chave: str, b: IdModelo, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
