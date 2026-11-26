@@ -219,3 +219,11 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
   O mesmo lote em vários tubos continua o grupo (TB001-01, TB001-02…); outro projeto abre o grupo seguinte (TB002-01). O padrão fica em
   `estante.padrao_tubo` (`TB{grupo:03d}-{parte:02d}`, migração 264). Os tubos criados antes no padrão TB-<projeto>.<n> só mudam de nome
   por "Renomear tubos antigos para o novo padrão" (simula antes; admin); as folhas não mudam de tubo e a etiqueta precisa ser reimpressa.
+- **Rafael, 26/11/2026 (quiz da revisão de usabilidade).** Uso comercial do material em alta: **R$ 150 por folha** (`entrega.preco_comercial_folha`,
+  editável no envio). **Amigo da CAMP não tem isenção** de cobrança (não entra na lista de motivos para não cobrar). Reenviar um pedido com
+  valor novo **cancela sozinha a cobrança anterior em aberto**. A entrega com cobrança pode ter **modelo próprio no Sender**
+  (`sender.campanha_entrega_cobranca`; vazio = TR09). PDF dos TIFF: **avisa acima de 2 GB** (`exportacao_pdf.aviso_gb`). O painel é usado
+  no computador; o celular só para ler ingresso — **sem revisão da leitura de ingresso no celular** e sem esforço de usabilidade para
+  390 px além de não quebrar. Item aberto no painel lateral fica no endereço (#tela/<id>); um só estilo de cartão de números (o do
+  Financeiro); grupo e linha de Problemas na mesma grade; "Situação do projeto" sem rolagem interna. Não autorizados (ficam como estão):
+  aviso do QNAP em três lugares, "Como funciona esta página" aberta, blocos de pontos na Home e em Problemas.

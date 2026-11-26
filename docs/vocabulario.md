@@ -896,3 +896,17 @@ parceiro" e "disciplina" (nunca "consultoria" no lugar de disciplina, nem "categ
 referência é o botão **referência no Mercado Pago** (o "?" do título é a ajuda da tela). Em Cobranças avulsas, os filtros de data dizem
 **criadas de** e **até**. Doação ou patrocínio sem data de recebimento: **sem data**. A trilha de Ingressos, Cobranças avulsas, Doações de acervo
 e Patrocínios mostra o grupo **Público e processos**; tela sem permissão: **Sem acesso** na trilha (não "Não encontrado").
+
+**Entrega com cobrança — modelo do painel** (CAMP-ENTREGA, 26/11/2026; Rafael no quiz da revisão de usabilidade: "Layout próprio no Sender"): em
+E-mails → **Modelos do Sender**, o bloco **Entrega com cobrança (modelo do painel)** com **ID no Sender** e **Salvar**; a lista de variáveis para colar
+no Sender: {{nome}}, {{link}}, {{link_pagina}}, {{validade}}, {{material}}, {{protocolo}}, {{quantidade}}, {{cobranca}} (ex.: "R$ 300,00 — uso
+comercial"), {{valor}}, {{link_pagamento}}, {{justificativa}}, {{liberacao}} ("o download é liberado após o pagamento" ou "já disponível") e
+{{mensagem}} (só o recado da equipe). Sem ID: "Sem ID: o e-mail com cobrança sai pelo TR09." (a cobrança dentro de {{mensagem}}, como antes).
+Reenviar um pedido com valor novo cancela sozinha a cobrança anterior em aberto (aviso: "A cobrança anterior em aberto foi cancelada."; se falhar:
+"O e-mail saiu com a cobrança nova, mas a anterior (nº N) não foi cancelada: … Cancele em Cobranças avulsas.").
+
+**PDF grande** (CAMP-PROJETO, 26/11/2026): antes de montar o PDF dos TIFF, se o tamanho estimado passar de `exportacao_pdf.aviso_gb` (2 GB), o
+diálogo **PDF grande** diz "O PDF deve ficar com cerca de X GB. Gerar mesmo assim?" com **Cancelar** e **Gerar mesmo assim**.
+Link de download substituído (CAMP-ENTREGA, 26/11/2026): reenviar o pedido encerra os links anteriores; a página do link antigo diz **Este link foi
+substituído** — "Este link foi substituído por um novo enviado por e-mail em dd/mm/aaaa. Use o link mais recente." (sem botão de pagar); na lista
+de links do envio, a situação **substituído**.

@@ -2173,6 +2173,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 #em-p-modelos .es-nome b{display:block}#em-p-modelos .es-nome small,#em-p-modelos .es-sit small,#em-p-modelos .es-env small{display:block;color:var(--muted);max-width:340px}
 #em-p-modelos .es-vars code{display:inline-block;margin:0 4px 4px 0;font-size:var(--fs-sm);overflow-wrap:anywhere}#em-p-modelos .es-vars{max-width:300px}
 #em-p-modelos .es-id{display:flex;gap:6px;align-items:center}#em-p-modelos .es-id input{width:9.5em;font-family:var(--mono,monospace)}
+#em-p-modelos .es-painel-cob{margin-top:16px}#em-p-modelos .es-painel-cob .es-id{align-items:flex-end}#em-p-modelos .es-painel-cob .es-id input{width:16em}#em-p-modelos .es-painel-cob .es-vars{max-width:none}
 #em-p-modelos .es-acoes{white-space:nowrap}#em-p-modelos #es-q{flex:1 1 240px;min-width:160px}#em-p-modelos .es-para{display:flex;gap:6px;align-items:center;font-size:var(--fs-sm)}#em-p-modelos .es-para input{width:16em}
 @media (max-width:900px){#em-p-modelos .es-vars,#em-p-modelos .es-env{display:none}#em-p-modelos .es-id input{width:7em}}
 .am-hist{list-style:none;margin:0;padding:0;display:grid;gap:6px}.am-hist li{font-size:var(--fs-sm);border-left:2px solid var(--line);padding-left:8px}
@@ -2220,7 +2221,8 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 @container pjpg (min-width:1020px){
   .pj-vg[data-pj-vista="itens"]{grid-template-columns:minmax(0,1fr) minmax(280px,330px);grid-template-areas:"st lado" "corpo lado"}
   .pj-vg[data-pj-vista="itens"] .pj-vg-lado .pj-cards{grid-template-columns:minmax(0,1fr)}
-  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado{position:sticky;top:12px;max-height:calc(100vh - var(--top-h,64px) - 24px);overflow:auto;overscroll-behavior:contain;padding-right:2px}
+  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado{align-self:start}
+  .pj-vg[data-pj-vista="itens"]>.pj-vg-lado.pj-lado-fixa{position:sticky;top:12px}   /* CAMP-UX (Rafael, 26/11): a coluna não rola mais por dentro (o fim, "Ver requisitos", ficava escondido); fixa ao rolar só quando cabe inteira na tela (pjLadoAjustar) */
 }
 .pj-dados-grade{margin-bottom:var(--sp-4)}
 /* conferência dentro do Próximo passo (§3.3) */
@@ -2480,7 +2482,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .cp-ativo-x:hover,.cp-ativo-x:focus-visible{background:var(--surface);outline:1px solid var(--blue)}
 .cp-visao-salvar{display:inline-flex;gap:6px;align-items:center}
 .cp-lista{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
-.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px auto;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
+.cp-linha{display:grid;grid-template-columns:16px 38px minmax(0,1fr) 140px 78px 150px;gap:12px;align-items:center;padding:10px 14px 10px 10px;border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--r-md);background:var(--surface);cursor:pointer}
 .cp-linha:hover{border-color:var(--blue)}
 .cp-linha.sel,.cp-linha.kb-atual{box-shadow:0 0 0 2px var(--blue) inset}
 .cp-linha:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -2516,7 +2518,7 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .sev-baixo .cp-sev-tag{background:var(--blue-soft);color:var(--blue)}
 .cp-rapida{color:var(--green)}
 .cp-mesma-folha{color:var(--amber);font-weight:600}
-.cp-acoes{display:flex;align-items:center;gap:8px}
+.cp-acoes{display:flex;align-items:center;justify-content:flex-end;gap:8px}   /* coluna de ações com largura fixa (150 px): grupo e linha alinhados (CAMP-UX 26/11) */
 .cp-acoes .cp-cta{min-width:84px}
 .cp-acoes .cp-cta:not(.pri){border-color:var(--blue);color:var(--blue)}
 .cp-acoes .mais-menu summary{padding:4px 10px}
@@ -2635,12 +2637,12 @@ a.cp-chip-cod:hover{border-color:var(--blue)}
 .cp-rap-busca{display:flex;flex-direction:column;gap:6px;flex:1 1 260px;min-width:0}
 .cp-rap-res{display:flex;flex-wrap:wrap;gap:6px}
 .cp-rap-res .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cp-linha.cp-grupo{cursor:default;grid-template-columns:16px 38px minmax(0,1fr) auto;grid-template-areas:"sel ic corpo sev" "sel ic acoes acoes"}
+.cp-linha.cp-grupo{cursor:default}   /* CAMP-UX (Rafael, 26/11): o grupo usa a MESMA grade da linha de um problema: etiqueta de prioridade e o botão principal no mesmo lugar; as decisões para todas numa faixa abaixo */
+.cp-g-decide{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;border-top:1px dashed var(--line);padding-top:8px;margin-top:2px;cursor:default}
 /* 23/11 (Rafael: "ao clicar pra ver uma a uma quebra a página"): só os filhos DIRETOS do grupo; com seletor de descendente as regras
    do grupo pegavam também as linhas de dentro de "Ver uma a uma" e desmontavam a grade delas */
-.cp-linha.cp-grupo>.cp-sel{grid-area:sel}.cp-linha.cp-grupo>.cp-sev-ic{grid-area:ic}.cp-linha.cp-grupo>.cp-corpo{grid-area:corpo}.cp-linha.cp-grupo>.cp-sev-tag{grid-area:sev;align-self:start}
-.cp-linha.cp-grupo>.cp-acoes{grid-area:acoes;flex-wrap:wrap}.cp-linha.cp-grupo>.cp-corpo>.cp-meta{flex-wrap:wrap}
-@container (max-width:560px){.cp-linha.cp-grupo{grid-template-columns:22px minmax(0,1fr);grid-template-areas:"ic corpo" "sev sev" "acoes acoes"}.cp-linha.cp-grupo>.cp-sel{display:none}.cp-linha.cp-grupo>.cp-sev-tag{justify-self:start}}
+.cp-linha.cp-grupo>.cp-corpo>.cp-meta{flex-wrap:wrap}
+
 .cp-grupo>.cp-corpo .cp-tit b{overflow-wrap:anywhere}
 .cp-g-membros>.cp-linha{cursor:pointer}
 .cp-g-thumbs{display:flex;gap:6px;overflow:hidden;margin-top:4px}
@@ -2729,6 +2731,11 @@ button.fin-kpi{cursor:pointer}button.fin-kpi:hover{border-color:var(--amber)}but
 .fin-kpi .ico{width:22px;height:22px;stroke:var(--ink2);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .fin-kpi .v{font:600 var(--fs-xl)/1.15 var(--sans);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fin-kpi .l{font-weight:600;font-size:var(--fs-base)}.fin-kpi .d{font-size:var(--fs-xs);color:var(--ink3)}
+/* CAMP-UX (Rafael, 26/11/2026): um só estilo de cartão de números em todo o painel — o do Financeiro (antes três: Pedidos, Amigos/Cobranças/Ingressos, Doações/Patrocínios) */
+.hoje-kpi,#v-ingressos .ig-kpi,.sol-stats .stat{background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--fin-sombra);padding:14px 16px;display:grid;gap:4px;align-content:start;min-width:0}
+.hoje-kpi .v,#v-ingressos .ig-kpi .v,.sol-stats .stat .v{font:600 var(--fs-xl)/1.15 var(--sans);font-variant-numeric:tabular-nums;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hoje-kpi .l,#v-ingressos .ig-kpi .l,.sol-stats .stat .l{font-weight:600;font-size:var(--fs-base);color:var(--ink);margin:0}
+.hoje-kpi .d,#v-ingressos .ig-kpi .d,.sol-stats .stat .d{font-size:var(--fs-xs);color:var(--ink3);margin:0}
 .fin-kpi.sup .v{color:var(--green)}.fin-kpi.def .v{color:var(--red)}.fin-kpi.atn{border-color:var(--amber);background:var(--amber-soft)}.fin-kpi.atn .v{color:var(--amber)}
 .fin-abas{margin-bottom:14px}
 .fin-grade{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start}.fin-sub{margin:6px 0 0;padding-left:16px;display:grid;gap:6px}
@@ -3422,6 +3429,9 @@ button.fin-cf-cel{cursor:pointer}button.fin-cf-cel:focus-visible,.fin-cf-nome:fo
       <thead><tr><th>Modelo</th><th class="es-vars">Variáveis</th><th>ID no Sender</th><th>Situação</th><th class="es-env">Último envio</th><th></th></tr></thead>
       <tbody id="es-lista"><tr><td class="empty">Carregando…</td></tr></tbody>
       </table></div></div>
+    <div class="panel es-painel-cob" id="es-cob"><div class="ph"><div class="ph-txt"><h2>Entrega com cobrança (modelo do painel)</h2><p class="ph-resumo">E-mail do pedido de alta resolução quando o envio tem cobrança. Sem ID, sai pelo TR09, com a cobrança dentro de {{mensagem}}.</p></div></div>
+      <div class="pb"><div class="es-id"><label class="field">ID no Sender<input id="es-cob-id" type="text" autocomplete="off" maxlength="64" spellcheck="false"></label><button type="button" class="btn" id="es-cob-salvar" data-trabalhando="Salvando…">Salvar</button></div>
+      <p class="help">No Sender, crie o e-mail transacional com estas variáveis (cole como estão):</p><p class="es-vars" id="es-cob-vars"></p><p class="help" id="es-cob-res" aria-live="polite"></p></div></div>
   </div>
   <div class="em-painel" id="em-p-aceite" role="tabpanel" aria-labelledby="em-tab-aceite" tabindex="0" hidden>
     <div class="hdr em-parte"><p class="sub">Quem marcou "Quero receber e-mails da CAMP" num formulário do site. O site põe cada pessoa sozinho no grupo do Sender; aqui você vê de onde veio, quando aceitou e a situação no Sender.</p>
@@ -8290,11 +8300,16 @@ async function pjExportar(folhas){const code=window.PROJETO_PJ;if(!code)return;f
     ov.addEventListener('change',prev);prev()},0);
   const ok=await confirmar({titulo:'Exportar',alvo:code,html,botao:'Exportar',acao:async()=>{const x=pexCorpo(folhas);if(x.corpo.categoria===null&&!x.corpo.todas&&!x.corpo.folhas.length)throw new Error('Escolha o que exportar.');return x}});if(!ok||!ok.resultado)return;
   const b=ok.resultado;
+  if(b.formato==='pdf'&&!await pexConfirmarGrande(code,b.corpo))return;   /* CAMP-PROJETO (26/11): acima do limite (exportacao_pdf.aviso_gb), confirma com o tamanho */
   if(b.formato==='zip'){const q=b.corpo.folhas.length?`folhas=${encodeURIComponent(b.corpo.folhas.join(','))}`:b.corpo.categoria?`categoria=${encodeURIComponent(b.corpo.categoria)}`:'todas=1';
     const a=document.createElement('a');a.href=`/api/projetos/${encodeURIComponent(code)}/originais.zip?formato=tif&${q}`;a.download='';document.body.appendChild(a);a.click();a.remove();toast('Preparando o .zip com os TIFF: o download começa em instantes');return}
   const antes=document.querySelector('#pd .folhas-bar')||document.querySelector('#pj-originais');
   rodarTarefa(`/api/projetos/${encodeURIComponent(code)}/exportar-pdf`,{body:JSON.stringify(b.corpo)},{titulo:'Montando o PDF a partir dos TIFF',antes,id:'pex-'+code,
     fim:t=>{const r=t.resultado||{};pjExportacoes(code);return r.arquivo?` <a class="btn sm pri" href="${escHtml(r.arquivo)}" download>Baixar o PDF</a>${(r.notas||[]).length?`<small class="help pex-notas">${escHtml(r.notas.slice(0,3).join('; '))}</small>`:''}`:''}})}
+function pexGB(n){return (n/1024**3).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' GB'}
+async function pexConfirmarGrande(code,corpo){let r;try{r=await API(`/api/projetos/${encodeURIComponent(code)}/exportar-pdf/estimar`,{method:'POST',body:JSON.stringify(corpo)})}catch(_){return true}
+  if(!r.aviso_bytes||!(r.bytes_estimados>r.aviso_bytes))return true;
+  return !!await confirmar({titulo:'PDF grande',alvo:code,texto:`O PDF deve ficar com cerca de ${r.bytes_estimados>=1024**3?pexGB(r.bytes_estimados):pexTam(r.bytes_estimados)}. Gerar mesmo assim?`,botao:'Gerar mesmo assim'})}
 async function pjExportacoes(code){const el=document.getElementById('pex-lista');if(!el)return;let d;try{d=await API(`/api/projetos/${encodeURIComponent(code)}/exportacoes`)}catch(e){el.textContent=e.message;return}
   const L=d.exportacoes||[];el.innerHTML=L.length?`<ul class="hist">${L.map(x=>`<li><time>${fmtDataHora(x.criado_em)}</time><span>${escHtml(x.rotulo||'')} · ${escHtml(qtd(x.paginas,'página','páginas'))} · ${escHtml(pexTam(x.bytes))}${x.puladas?` · ${escHtml(qtd(x.puladas,'folha ficou','folhas ficaram'))} de fora`:''} · até ${escHtml(fmtDataHora(x.expira_em))} <a class="lnk" href="${escHtml(x.arquivo)}" download>Baixar</a></span></li>`).join('')}</ul>`:'<p class="help">Nenhum PDF guardado.</p>'}
 function pexPainelHTML(code){return `<div class="panel" id="pj-exportar"><div class="ph"><div class="ph-txt"><h2>Exportar em lote</h2><p class="ph-resumo">PDF sem perda montado a partir dos TIFF, ou .zip só com os TIFF: as folhas escolhidas, uma categoria (arquitetura, estrutura, fotografias…) ou o projeto inteiro.</p></div><button type="button" class="btn pri" data-pj-exportar>Exportar…</button></div><div class="pb"><h3 class="po-h">PDFs guardados</h3><div id="pex-lista" class="help">Carregando…</div></div></div>`}
@@ -11836,7 +11851,10 @@ function esDesenhar(){const d=ES.d;if(!d)return;const q=cfgNorm(ES.q),tb=documen
   const areas=[...d.areas,...new Set(d.modelos.map(m=>m.area).filter(a=>!d.areas.includes(a)))];
   const h=areas.map(a=>{const ms=d.modelos.filter(m=>m.area===a&&ok(m));return ms.length?`<tr class="es-area"><th colspan="6">${escHtml(a)}</th></tr>`+ms.map(m=>esLinha(m,d.teste&&d.site==='ok')).join(''):''}).join('');
   tb.innerHTML=h||'<tr><td class="empty" colspan="6">Nenhum modelo com essa busca.</td></tr>'}
-async function carregarEmailSite(){const tb=document.getElementById('es-lista');if(!tb)return;
+/* CAMP-ENTREGA (Rafael, 26/11/2026: "Layout próprio no Sender"): o ID do modelo do painel para a entrega com cobrança e as variáveis para colar */
+async function esCobCarregar(){const v=document.getElementById('es-cob-vars');if(!v)return;try{const d=await API('/api/emails-site/painel/entrega-cobranca');document.getElementById('es-cob-id').value=d.id||'';v.innerHTML=d.variaveis.map(x=>`<code>{{${escHtml(x)}}}</code>`).join('');document.getElementById('es-cob-res').textContent=d.id?'Configurado: o e-mail com cobrança sai por este modelo.':'Sem ID: o e-mail com cobrança sai pelo TR09.'}catch(e){document.getElementById('es-cob-res').textContent=e.message}}
+document.addEventListener('click',async e=>{if(!e.target.closest('#es-cob-salvar'))return;const id=document.getElementById('es-cob-id').value.trim();try{await API('/api/emails-site/painel/entrega-cobranca',{method:'PUT',body:JSON.stringify({id})});toast(id?'ID salvo: o e-mail com cobrança sai por este modelo':'ID apagado: o e-mail com cobrança volta a sair pelo TR09');esCobCarregar()}catch(err){toast(err.message)}});
+async function carregarEmailSite(){const tb=document.getElementById('es-lista');if(!tb)return;esCobCarregar();
   try{const d=await API('/api/emails-site');ES.d=d;const n=d.numeros||{},tk=d.token||{};
     const para=document.getElementById('es-para');if(para&&!para.value)para.value=d.eu||'';
     const orig={site:'a do site (enviada pelo painel)',plugin:'a do plugin do Sender no site'}[tk.origem]||'';
@@ -12013,7 +12031,7 @@ async function enviarPedido(id,teste){const er=document.getElementById('se-err')
   document.querySelectorAll('[data-se-enviar],[data-se-teste]').forEach(b=>b.disabled=true);
   try{const r=await API(`/api/solicitacoes/${id}/enviar`,{method:'POST',body:JSON.stringify(corpo)});
     if(teste){toast(`Teste enviado para ${r.para}`);abrirEnvio(id);return}
-    toast(`Pedido #${id} enviado para ${r.para}`);closeDrawer(true);carregarSolicitacoes();carregarPainel()}
+    toast(`Pedido #${id} enviado para ${r.para}`+(r.aviso_cobranca?`. ${r.aviso_cobranca}`:(r.cobranca&&r.cobranca.anterior_cancelada?'. A cobrança anterior em aberto foi cancelada.':'')));closeDrawer(true);carregarSolicitacoes();carregarPainel()}
   catch(e){if(er)er.textContent=e.message;document.querySelectorAll('[data-se-enviar],[data-se-teste]').forEach(b=>b.disabled=false)}}
 document.addEventListener('click',async e=>{let b=e.target.closest('[data-sol-envio]');if(b){abrirEnvio(+b.dataset.solEnvio);return}
   b=e.target.closest('[data-se-enviar]');if(b){enviarPedido(+b.dataset.seEnviar,false);return}
@@ -12301,10 +12319,12 @@ function cpGrupoHTML(g){const sev=g.severidade||'medio',r=g.rapido||{},adm=cpAdm
   return `<div class="cp-linha cp-grupo sev-${sev}" role="listitem" data-cp-grupo="${id}">
     <span class="cp-sel"></span><span class="cp-sev-ic" aria-hidden="true">${CP_SEV_IC[sev]}</span>
     <div class="cp-corpo"><div class="cp-tit"><b>${escHtml(cpProjNome(g))} · <span data-cp-gtit>${escHtml(tit)}</span></b></div>
-      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}<span>${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span>${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
+      <div class="cp-meta"><a class="cp-chip-cod code" href="#projeto/${escHtml(g.projeto_codigo)}" data-err-sair>${escHtml(String(g.projeto_codigo).replace('-',' · '))}</a><span class="cp-chip-tipo">${escHtml(g.tipo_rotulo||'')}</span>${g.criticos?`<span>${escHtml(qtd(g.criticos,'crítico','críticos'))}</span>`:''}${r.sugestao?`<span title="${escHtml(r.sugestao.codigo)}">o carimbo combina com ${escHtml(tituloExibicao(r.sugestao.titulo||'')||r.sugestao.codigo)}</span>`:''}</div>
       <div class="cp-g-thumbs">${thumbs}</div>${nota?`<small class="cp-rap-nota" data-cp-gnota>${escHtml(nota)}</small>`:''}</div>
+    <div class="cp-quando"><span>${cpIc('cal')}${escHtml('o mais antigo '+cpDias(g.idade_dias))}</span><span>${escHtml(qtd(g.n,'folha','folhas'))}</span></div>
     <span class="cp-sev-tag"${pr.razao?` title="${escHtml(pr.razao)}"`:''}>${escHtml(g.severidade_rotulo||'')}</span>
-    <div class="cp-acoes">${bts}${mov}<button type="button" class="btn sm lnk" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
+    <div class="cp-acoes"><button type="button" class="btn sm cp-cta" data-cp-g="ver" data-cp-gid="${id}" aria-expanded="false">Ver uma a uma</button></div>
+    ${bts||mov?`<div class="cp-g-decide" data-no-nav role="group" aria-label="Decidir para todas">${bts}${mov}</div>`:''}
     <div class="cp-rap-conf" hidden data-no-nav role="group" aria-label="Confirmar"></div>
     <div class="cp-g-membros" hidden>${g.membros.map(cpLinhaHTML).join('')}</div></div>`}
 let CP_LINHAS=[];   /* as linhas desenhadas (problema solto ou grupo); ERR_LISTA continua sendo a lista de problemas (os do grupo, um a um) */
@@ -13594,6 +13614,33 @@ function garantirAjudaNoTitulo(){const h=document.querySelector('.content.on:not
 renderFundos();renderLabel();instalarExportacoes();route_to(rotaAtual());checarSessao();
 
 // A janela lateral começa logo ABAIXO da barra fixa do topo (que inclui a faixa de saúde do sistema); antes o cabeçalho e o botão de fechar ficavam escondidos atrás dela
+/* CAMP-UX (Rafael, quiz de 26/11/2026: "Item aberto no endereço"): nas telas com painel lateral de um item, o item aberto mora no
+   endereço (#tela/<id>, só o id numérico interno; nenhum dado de pessoa), como no Financeiro: abrir EMPILHA a entrada; Voltar fecha o
+   painel e fica na tela; fechar (×, Esc) volta a entrada sem duplicar; recarregar ou abrir o link reabre o mesmo item; trocar de item
+   na mesma tela só substitui o endereço. Aberto a partir de outra tela (Home, busca), o endereço não muda. */
+const ITEM_URL={solicitacoes:'abrirSolicitacao',inscricoes:'abrirInscricao',amigos:'abrirAmigo',ingressos:'igDetalhe',cobrancas:'cobAbrir',doacoes:'doaAbrir',patrocinios:'patAbrir',decisoes:'abrirDecisao'};
+const ITEM_ABRE={};let ITEM_SILENCIO=false,ITEM_REABRINDO=false;
+function itemRota(r){const m=/^([a-z_]+)\/(\d+)$/.exec(r||'');return m&&ITEM_URL[m[1]]?{tela:m[1],id:+m[2]}:null}
+function itemUrlMarcar(tela,id){if(ITEM_REABRINDO)return;const r=rotaAtual(),base=r.split('/')[0];if(base!==tela||!/^\d+$/.test(String(id)))return;const alvo=tela+'/'+(+id);if(r===alvo)return;
+  if(itemRota(r)){history.replaceState({...(history.state||{}),campRoute:alvo},'','#'+alvo);return}
+  salvarContextoNavegacao();NAV_INDEX+=1;history.pushState({camp:true,campIndex:NAV_INDEX,campRoute:alvo,campScroll:mainEl.scrollTop||0,campItem:true},'','#'+alvo)}
+function itemUrlFechou(){if(ITEM_SILENCIO)return;const it=itemRota(rotaAtual());if(!it)return;
+  if(history.state&&history.state.campItem&&NAV_INDEX>0){ITEM_SILENCIO=true;POP_ITEM=true;history.back()}else history.replaceState({...(history.state||{}),campRoute:it.tela,campItem:false},'','#'+it.tela)}
+let POP_ITEM=false;
+Object.entries(ITEM_URL).forEach(([tela,fn])=>{const orig=window[fn];if(typeof orig!=='function')return;ITEM_ABRE[tela]=orig;
+  window[fn]=function(id,...resto){const ab=orig.call(this,id,...resto);const marca=()=>{if(mainEl.classList.contains('with-drawer'))itemUrlMarcar(tela,id)};if(ab&&typeof ab.then==='function')ab.then(marca,()=>{});else marca();return ab}});
+{const fecharOrig=closeDrawer;window.closeDrawer=closeDrawer=function(...a){const ok=fecharOrig.apply(this,a);if(ok)itemUrlFechou();return ok}}
+{const rotaOrig=route_to;window.route_to=route_to=function(route){if(POP_ITEM){POP_ITEM=false;ITEM_SILENCIO=false;return}   /* o Voltar que o próprio fechar pediu: a tela já está certa */
+  const it=itemRota(route);const base=(route||'').split('/')[0];
+  if(!it&&ITEM_URL[base]&&mainEl.classList.contains('with-drawer')&&!document.getElementById('drawer').querySelector('.rev-cheia')){ITEM_SILENCIO=true;try{closeDrawer(true)}finally{ITEM_SILENCIO=false}}   /* Voltar do navegador com o item aberto: fecha e fica na tela */
+  let r;ITEM_SILENCIO=true;try{r=rotaOrig.call(this,route)}finally{ITEM_SILENCIO=false}   /* show() fecha o painel ao trocar de tela: isso não mexe no endereço */
+  if(it){const abrir=async()=>{if(it.tela==='inscricoes'){for(let i=0;i<50&&!(typeof INS_ITENS!=='undefined'&&INS_ITENS.some(x=>x.id===it.id));i++)await new Promise(z=>setTimeout(z,100))}ITEM_REABRINDO=true;try{await ITEM_ABRE[it.tela](it.id)}catch(_){}finally{ITEM_REABRINDO=false}};setTimeout(abrir,0)}
+  return r}}
+/* CAMP-UX (26/11/2026): "Situação do projeto" acompanha a rolagem (sticky) só quando cabe inteira na área visível do .main; senão segue o
+   fluxo normal da página e todo o conteúdo dela é alcançado rolando a tela (nada de rolagem interna escondendo o fim). */
+function pjLadoAjustar(){const l=document.querySelector('.pj-vg[data-pj-vista="itens"]>.pj-vg-lado');if(!l||l.hidden)return;const sc=l.closest('.main');const disp=(sc?sc.clientHeight:innerHeight)-24;l.classList.toggle('pj-lado-fixa',l.scrollHeight<=disp)}
+(function(){let ro=null,obs=null;const ligar=()=>{const l=document.querySelector('.pj-vg[data-pj-vista="itens"]>.pj-vg-lado');if(window.ResizeObserver){if(!ro)ro=new ResizeObserver(()=>pjLadoAjustar());ro.disconnect();if(l)ro.observe(l)}pjLadoAjustar()};
+  window.addEventListener('resize',pjLadoAjustar);const pd=document.getElementById('pd');if(pd&&window.MutationObserver){obs=new MutationObserver(ligar);obs.observe(pd,{childList:true,subtree:false})}})();
 (function(){const t=document.querySelector('.top');if(!t)return;const set=()=>document.documentElement.style.setProperty('--top-h',t.offsetHeight+'px');set();if(window.ResizeObserver)new ResizeObserver(set).observe(t);window.addEventListener('resize',set)})();
 
 (function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();marcarTermosTela();normalizarPlurais(document.body);a11yPreparar();a11yLinhas()},80)}).observe(document.body,{childList:true,subtree:true})})();

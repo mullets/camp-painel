@@ -140,7 +140,8 @@ def validar_cobranca(con, c: dict | None, n_folhas: int) -> dict:
         if valor < 1 or valor > 1_000_000:
             raise HTTPException(400, "Valor da cobrança entre R$ 1,00 e R$ 1.000.000,00.")
         liberar = bool(c.get("liberar_apos_pagamento", True))
-    return {"modo": modo, "motivo": motivo, "rotulo": rot, "texto": texto, "justificativa": just.rstrip("."), "valor": valor, "liberar": liberar}
+    curto = "uso comercial" if (modo, motivo) == ("com", "comercial") else (texto[:80] if motivo == "outro" else rot.split(" (")[0].lower())
+    return {"modo": modo, "motivo": motivo, "rotulo": rot, "rotulo_curto": curto, "texto": texto, "justificativa": just.rstrip("."), "valor": valor, "liberar": liberar}
 
 
 def texto_cobranca(d: dict, link_pagamento: str = "") -> str:
@@ -173,9 +174,9 @@ def cobranca_opcoes(con, sid: int, ator: dict, n_folhas: int) -> dict:
             "justificativa": (s["cobranca_justificativa"] if "cobranca_justificativa" in k else None), "cobranca": ult}
 
 
-def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: dict) -> tuple[int, str]:
+def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: dict) -> tuple[int, str, int | None]:
     """Cria (ou refaz, se o pedido já tem uma sem pagamento) a cobrança do Mercado Pago pelo módulo de cobranças avulsas.
-    (id, link). Sem link: HTTPException 502 e nada é enviado."""
+    (id, link, id da cobrança ANTERIOR ainda aberta que ficou substituída — valor mudou — ou None). Sem link: HTTPException 502 e nada é enviado."""
     from . import cobrancas
     projetos = sorted({c[:10] for c in codigos if re.match(r"^F\d{3}-P\d{4}", c)})
     vin = projetos[0] if len(projetos) == 1 and con.execute("SELECT 1 FROM projeto WHERE codigo=?", (projetos[0],)).fetchone() else None
@@ -183,7 +184,8 @@ def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: di
     cid = s["cobranca_id"] if "cobranca_id" in s.keys() else None
     r = con.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() if cid else None
     if r and r["situacao"] in ("sem_link", "aberta") and abs((r["valor"] or 0) - d["valor"]) < 0.005 and r["link"]:
-        return r["id"], r["link"]
+        return r["id"], r["link"], None
+    antiga = r["id"] if r and cobrancas.situacao_efetiva(r) == "aberta" else None   # Rafael (26/11): valor novo → a anterior em aberto é cancelada depois do envio
     if not r or r["situacao"] not in ("sem_link",):
         cur = con.execute("""INSERT INTO cobranca_avulsa (nome, email, valor, finalidade, descricao, vinculo_tipo, vinculo_codigo, situacao,
                              statement_descriptor, criado_por, criado_por_nome, solicitacao_id) VALUES (?,?,?,?,?,?,?,'sem_link',?,?,?,?)""",
@@ -203,7 +205,7 @@ def _criar_cobranca(con, s, d: dict, n_folhas: int, codigos: list[str], ator: di
     link = (con.execute("SELECT link FROM cobranca_avulsa WHERE id=?", (cid,)).fetchone() or [""])[0] or ""
     if erro or not link:
         raise HTTPException(502, f"A cobrança não foi criada no Mercado Pago: {erro or 'o site não devolveu o link'}. Nada foi enviado e o pedido não mudou.")
-    return cid, link
+    return cid, link, (antiga if antiga and antiga != cid else None)
 
 
 def pago(con, r) -> bool:
@@ -472,7 +474,7 @@ def link_base(con) -> str:
 
 
 def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str, cobranca: str = "",
-           uso_comercial: bool = False, link_pagamento: str = "", justificativa: str = "") -> dict:
+           uso_comercial: bool = False, link_pagamento: str = "", justificativa: str = "", cob: dict | None = None) -> dict:
     """`link` (o principal, 01/11 Rafael: "o ideal é o link de download ser um zip de todo aquele projeto") baixa tudo num .zip;
     `link_pagina` abre a página com os arquivos um a um."""
     link = link_pagina                      # 02/11: o link abre o termo de uso; aceito, a página libera o .zip e os arquivos
@@ -505,7 +507,22 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
                  # CAMP-ENTREGA: o TR09 já mostra {{mensagem}}; a cobrança e a justificativa vão nele (e também à parte, para um layout novo)
                  "mensagem": "\n\n".join(x for x in (mensagem or "", cobranca or "") if x),
                  "cobranca": cobranca or "", "link_pagamento": link_pagamento or "", "justificativa": justificativa or ""}
-    return {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
+    t = {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
+    # CAMP-ENTREGA (Rafael, quiz de 26/11/2026: "Layout próprio no Sender"): com cobrança e sender.campanha_entrega_cobranca preenchido, o
+    # e-mail sai por esse modelo, com a cobrança em variáveis próprias; {{mensagem}} fica só com o recado da equipe. Vazio: como antes (TR09).
+    if cob and cob.get("modo") == "com" and _cfg(con, CAMPANHA_COBRANCA):
+        variaveis.update({"cobranca": f"R$ {_brl(cob['valor'])} — {cob.get('rotulo_curto') or cob['rotulo']}", "valor": f"R$ {_brl(cob['valor'])}",
+                          "justificativa": cob["justificativa"], "link_pagamento": link_pagamento or "",
+                          "liberacao": ("o download é liberado após o pagamento" if cob.get("liberar") else "já disponível"),
+                          "mensagem": mensagem or ""})
+        t["chave_campanha"] = CAMPANHA_COBRANCA
+    return t
+
+
+CAMPANHA_COBRANCA = "sender.campanha_entrega_cobranca"
+# As variáveis do modelo próprio de entrega com cobrança (a tela E-mails → Modelos do Sender mostra esta lista para colar no Sender)
+VARIAVEIS_COBRANCA = ("nome", "link", "link_pagina", "validade", "material", "protocolo", "quantidade", "cobranca", "valor", "link_pagamento",
+                      "justificativa", "liberacao", "mensagem")
 
 
 # ---------------------------------------------------------------- envio
@@ -549,7 +566,7 @@ def _enviar_site(con, para: str, nome: str, assunto: str, texto: str, responder:
 
 def enviar(con, canal: str, para: str, nome: str, t: dict, responder: str, pedido_site_id: int | None) -> str:
     if canal == "sender":
-        return _enviar_sender(con, para, nome, t["variaveis"])
+        return _enviar_sender(con, para, nome, t["variaveis"], t.get("chave_campanha") or "sender.campanha_entrega")
     if canal == "site":
         return _enviar_site(con, para, nome, t["assunto"], t["texto"], responder, pedido_site_id)
     raise EnvioErro("Nenhum canal de e-mail configurado: preencha o Sender.net ou a senha do site em Configurações")
@@ -606,13 +623,13 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     if not m["arquivos"]:
         raise HTTPException(409, "Nenhum arquivo deste pedido foi achado no QNAP. Veja o que ficou de fora no pacote.")
     # CAMP-ENTREGA: com ou sem cobrança, sempre com a justificativa (o teste para quem aprova não cobra nem justifica)
-    cob, cob_id, link_pag = None, None, ""
+    cob, cob_id, link_pag, cob_antiga = None, None, "", None
     if not teste:
         cob = validar_cobranca(con, cobranca, len(m["arquivos"]))
         if cob["modo"] == "com":
             if ator.get("papel") not in ("admin", "master"):
                 raise HTTPException(403, "Só admin cria cobrança (dados de pagamento). Peça a um admin para enviar este pedido com cobrança.")
-            cob_id, link_pag = _criar_cobranca(con, s, cob, len(m["arquivos"]), [a["codigo"] for a in m["arquivos"]], ator)
+            cob_id, link_pag, cob_antiga = _criar_cobranca(con, s, cob, len(m["arquivos"]), [a["codigo"] for a in m["arquivos"]], ator)
     token = secrets.token_urlsafe(32)
     dias = 1 if teste else validade_dias(con)
     expira = calcular_expira_em(dias)
@@ -638,7 +655,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         con.commit()
         link = f"{link_base(con)}/entrega/{token}"
         t = textos(con, s, arquivos, link, expira, mensagem, texto_cobranca(cob, link_pag) if cob else "",
-                   bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial"), link_pag, cob["justificativa"] if cob else "")
+                   bool(cob and cob["modo"] == "com" and cob["motivo"] == "comercial"), link_pag, cob["justificativa"] if cob else "", cob)
         responder = _cfg(con, "entrega.responder_para")
         envio_id = enviar(con, canal, para, s["solicitante"] or "", t, responder, None if teste else _pedido_site_id(con, sid))
     except (EnvioErro, OSError) as e:
@@ -653,6 +670,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
     if cob:
         resumo += (" · sem cobrança" if cob["modo"] == "sem" else f" · cobrança R$ {_brl(cob['valor'])}" + (" (download após o pagamento)" if cob["liberar"] else ""))
     if not teste:
+        substituir_links(con, sid, lid, ator)   # o link novo vale; os anteriores do pedido dizem que foram substituídos
         con.execute("UPDATE solicitacao SET situacao='entregue', entregue_em=datetime('now'), entrega=? WHERE id=?", (resumo, sid))
         con.execute("""UPDATE solicitacao SET cobranca_modo=?, cobranca_motivo=?, cobranca_justificativa=?, cobranca_id=?,
                        valor=COALESCE(?, valor) WHERE id=?""", (cob["modo"], cob["motivo"], cob["justificativa"], cob_id, cob["valor"], sid))
@@ -667,9 +685,23 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
                              **({"cobranca": cob["modo"], "motivo": cob["motivo"], "justificativa": cob["justificativa"], "valor": cob["valor"],
                                  "cobranca_id": cob_id, "liberar_apos_pagamento": cob["liberar"]} if cob else {})}, ensure_ascii=False)))
     con.commit()
-    return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"],
+    aviso_cob = None
+    if cob_antiga:   # CAMP-ENTREGA (Rafael, 26/11/2026): o e-mail com o link novo saiu → a cobrança anterior, ainda em aberto, é cancelada
+        from . import cobrancas
+        try:
+            aviso_cob = cobrancas.cancelar_cobranca(con, cob_antiga, ator.get("email") or "", {"motivo": "substituída pela cobrança nº %d (valor novo) no pedido #%d" % (cob_id, sid)})
+            ev, det = "cobranca_anterior_cancelada", {"cobranca_id": cob_antiga, "nova": cob_id, "aviso": aviso_cob}
+        except Exception as e:  # noqa: BLE001 — falhar o cancelamento não desfaz o envio: avisa e guarda
+            msg = e.detail if isinstance(e, HTTPException) else type(e).__name__
+            aviso_cob = f"O e-mail saiu com a cobrança nova, mas a anterior (nº {cob_antiga}) não foi cancelada: {msg}. Cancele em Cobranças avulsas."
+            ev, det = "cobranca_anterior_nao_cancelada", {"cobranca_id": cob_antiga, "nova": cob_id, "erro": str(msg)[:300]}
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,?,?,?)",
+                    (str(sid), ev, ator.get("email"), json.dumps(det, ensure_ascii=False)))
+        con.commit()
+    return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"], "aviso_cobranca": aviso_cob,
             "validade": _data_br(expira), "entrega": resumo, "link": t["variaveis"]["link"],
-            "cobranca": ({"modo": cob["modo"], "justificativa": cob["justificativa"], "valor": cob["valor"], "id": cob_id, "link": link_pag} if cob else None)}
+            "cobranca": ({"modo": cob["modo"], "justificativa": cob["justificativa"], "valor": cob["valor"], "id": cob_id, "link": link_pag,
+                          "anterior_cancelada": cob_antiga if cob_antiga and not aviso_cob else None} if cob else None)}
 
 
 def links(con, sid: int) -> list[dict]:
@@ -679,8 +711,28 @@ def links(con, sid: int) -> list[dict]:
         out.append({"id": r["id"], "para": r["para"], "canal": r["canal"], "teste": bool(r["teste"]), "criado_em": r["criado_em"],
                     "criado_por": r["criado_por"], "expira_em": r["expira_em"], "downloads": r["downloads"], "ultimo_download_em": r["ultimo_download_em"],
                     "aceite_em": r["aceite_em"], "aceite_nome": r["aceite_nome"],
-                    "situacao": "cancelado" if r["revogado_em"] else "vencido" if venceu else "aguardando pagamento" if not pago(con, r) else "ativo"})
+                    "situacao": ("substituído" if "substituido_em" in r.keys() and r["substituido_em"] else "cancelado") if r["revogado_em"] else "vencido" if venceu else "aguardando pagamento" if not pago(con, r) else "ativo"})
     return out
+
+
+def texto_encerrado(r, motivo: str) -> tuple[str, str]:
+    """(título, parágrafo) da página de um link que não vale mais. Substituído: diz quando o novo saiu; nunca mostra botão de pagar."""
+    if motivo == "substituido":
+        return ("Este link foi substituído",
+                f"Este link foi substituído por um novo enviado por e-mail em {_data_br(r['substituido_em'])}. Use o link mais recente.")
+    quando = "venceu" if motivo == "vencido" else "foi cancelado"
+    return f"Este link {quando}", "Responda o e-mail da CAMP que a equipe manda um link novo."
+
+
+def substituir_links(con, sid: int, novo: int, ator: dict) -> int:
+    """CAMP-ENTREGA (26/11/2026): o reenvio do pedido encerra os links anteriores (os de teste ficam): o link antigo não mostra mais
+    "Aguardando pagamento" com uma cobrança que pode ter sido cancelada; a página diz que foi substituído e por quando."""
+    n = con.execute("""UPDATE entrega_link SET revogado_em=datetime('now'), substituido_em=datetime('now'), substituido_por=?
+                       WHERE solicitacao_id=? AND id<>? AND teste=0 AND revogado_em IS NULL""", (novo, sid, novo)).rowcount
+    if n:
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'link_substituido',?,?)",
+                    (str(sid), ator.get("email"), json.dumps({"links": n, "novo": novo})))
+    return n
 
 
 def cancelar_links(con, sid: int, ator: dict) -> int:
@@ -694,14 +746,14 @@ def cancelar_links(con, sid: int, ator: dict) -> int:
 
 # ---------------------------------------------------------------- download público
 def achar(con, token: str):
-    """(link, motivo). Motivo: '' (vale), 'inexistente', 'cancelado' ou 'vencido'."""
+    """(link, motivo). Motivo: '' (vale), 'inexistente', 'cancelado', 'substituido' (um reenvio mandou um link novo) ou 'vencido'."""
     if not _TOKEN.match(token or ""):
         return None, "inexistente"
     r = con.execute("SELECT * FROM entrega_link WHERE token_hash=?", (_hash(token),)).fetchone()
     if not r:
         return None, "inexistente"
     if r["revogado_em"]:
-        return r, "cancelado"
+        return r, ("substituido" if "substituido_em" in r.keys() and r["substituido_em"] else "cancelado")
     if r["expira_em"] < datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"):
         return r, "vencido"
     return r, ""
@@ -710,7 +762,7 @@ def achar(con, token: str):
 def arquivo(con, token: str, n: int) -> tuple[Path, str]:
     r, motivo = achar(con, token)
     if motivo:
-        raise HTTPException(410 if motivo in ("cancelado", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
+        raise HTTPException(410 if motivo in ("cancelado", "substituido", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
     if not pago(con, r):
         raise HTTPException(402, "O download é liberado depois da confirmação do pagamento.")
     if not r["aceite_em"]:

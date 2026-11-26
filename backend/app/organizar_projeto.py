@@ -260,7 +260,20 @@ def estimar_pdf(codigo: str, d: PedidoPDF, u: dict = Depends(auth.exige("operado
         con.close()
     est = int(total_b / medidos * len(com)) if medidos else 0
     return {"projeto": p["codigo"], "rotulo": rotulo, "paginas": len(com) + (1 if d.capa and com else 0), "folhas": com, "puladas": sem,
-            "bytes_estimados": est, "parcial": parcial, "max": MAX_PDF}
+            "bytes_estimados": est, "parcial": parcial, "max": MAX_PDF, "aviso_bytes": aviso_bytes()}
+
+
+def aviso_bytes() -> int:
+    """CAMP-PROJETO (Rafael, 26/11/2026: "Avisar acima de 2 GB"): acima disto (exportacao_pdf.aviso_gb, padrão 2), a tela pede confirmação."""
+    from .entrega import _cfg
+    con = connect()
+    try:
+        gb = float(str(_cfg(con, "exportacao_pdf.aviso_gb", "2") or "2").replace(",", "."))
+    except ValueError:
+        gb = 2.0
+    finally:
+        con.close()
+    return int(max(1e-9, gb) * 1024 ** 3)
 
 
 def montar_pdf(projeto: str, cods: list[str], rotulo: str, capa: bool, usar_jpg: bool, ator: str, progresso=None) -> dict:
