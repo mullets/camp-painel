@@ -8,7 +8,8 @@
 //  [5] DRE: "Imprimir ou salvar PDF" na mesma linha de "Ver mês a mês", XLSX e CSV;
 //  [6] botões lado a lado não ficam colados (Projeto incentivado, Máquinas, Visão geral do Financeiro);
 //  [7] aba de Máquinas no endereço (F5 volta nela);
-//  [8] trilha "Administração / Projetos da CAMP" (e as telas de Público e processos que faltavam).
+//  [8] trilha "Administração / Projetos da CAMP";
+//  [9] Sem acesso: "Busca" e "Mais" não ficam acesos no menu.
 // Uso (servidor PRÓPRIO, portas 9170–9179; banco: tests/semear_banco_teste.py + tests/semente_financeiro.py + tests/semente_rouanet.py
 //      + tests/semente_projetos_camp.py):  TMPDIR=/dev/shm CAMP_BASE=http://127.0.0.1:9171 node tests/navegador_ux_admin.js
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
@@ -96,6 +97,11 @@ const finPronto = pg => pg.waitForFunction(() => document.getElementById('v-fina
     await pg.goto(BASE + '/#cobrancas'); await pg.waitForTimeout(1200);
     chk(/Público e processos/.test(await pg.locator('#gcrumb').innerText()), '[8] trilha de Cobranças avulsas com "Público e processos"');
     await pg.close(); }
+  // [9] Sem acesso (operador em Configurações): nenhum item do menu aceso ("Busca" e "Mais" acendiam juntos)
+  { const op = await entrar(br, 1440, 900, 'operador@camp.arq.br', 'senha-operador-123');
+    await op.goto(BASE + '/#config'); await op.waitForTimeout(1500);
+    const acesos = await op.evaluate(() => [...document.querySelectorAll('#nav button.on')].map(b => b.dataset.v || b.id));
+    chk(acesos.length === 0, `[9] Sem acesso: nenhum item do menu aceso (${acesos.join(', ')})`); await op.close(); }
   await br.close();
   console.log(problemas.length ? `\n${problemas.length} FALHA(S)` : '\nTUDO OK');
   process.exit(problemas.length ? 1 : 0);
